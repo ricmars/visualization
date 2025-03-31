@@ -11,15 +11,14 @@
   --stage-min-width: 200px;
   --animation-duration: 500ms;
   
-  /* Stage Colors */
-  --stage-intake: #0D47A1;
-  --stage-compliance: #1976D2;
-  --stage-risk: #1E88E5;
-  --stage-investigation: #2196F3;
-  --stage-closure: #2E7D32;
-}
+  /* Stage Colors - Updated for better contrast */
+  --stage-intake: #0A4B9F;      /* Darker blue for better contrast */
+  --stage-compliance: #0D5AB9;   /* Adjusted blue */
+  --stage-risk: #0967D2;        /* Brighter blue */
+  --stage-investigation: #0B5ED7; /* Vivid blue */
+  --stage-closure: #166534;      /* Darker green for better contrast */
 
-@theme inline {
+  /* Theme variables */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -211,25 +210,7 @@ body {
   background: linear-gradient(to bottom, rgba(17, 24, 39, 0.8), rgba(17, 24, 39, 0.4));
 }
 
-.resize-handle {
-  width: 4px;
-  background: transparent;
-  cursor: col-resize;
-  transition: background-color 0.2s;
-  margin: 0 -2px;
-  z-index: 10;
-}
-
-.resize-handle:hover,
-.resize-handle.resizing {
-  background: rgba(59, 130, 246, 0.5);
-}
-
-.resize-handle::before {
-  content: '';
-  position: absolute;
-  left: -4px;
-  width: 12px;
-  height: 100%;
-  cursor: col-resize;
+/* Text shadow for better contrast on colored backgrounds */
+.text-shadow {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }

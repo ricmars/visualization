@@ -10,12 +10,7 @@ export interface Step {
   id: string;
   name: string;
   status: 'pending' | 'active' | 'completed';
-  fields: Array<{
-    id: string;
-    label: string;
-    type: string;
-    options?: string[];
-  }>;
+  fields: Array<Field>;
 }
 
 export interface Stage {

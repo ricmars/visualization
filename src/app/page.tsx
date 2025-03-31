@@ -560,18 +560,20 @@ export default function Home() {
       const systemMessage = {
         role: 'system' as ChatRole,
         content: JSON.stringify({
-          instruction: `You are a workflow management assistant. Please update the workflow based on the user's request.
+          instruction: `You are a workflow management assistant. Help update the workflow based on the user's request.
           Rules:
-          1. Maintain the same structure as the current workflow model
-          2. Add 'isNew' flag for new stages/steps
-          3. Add 'isDeleting' flag for removed stages/steps
-          4. Add 'isMoving' and 'moveDirection' flags for reordered items
-          5. Generate unique IDs for new items
-          6. Preserve existing IDs and properties when possible
-          7. Return only the updated workflow model as JSON
-          8. Follow the schema:
-          ${JSON.stringify(workflowSchema, null, 2)}
-          `,
+          1. Return ONLY a valid JSON array of stages that matches the current workflow structure
+          2. Each stage should have: id, name, status, and steps array
+          3. Each step should have: id, name, status, and fields array
+          4. Use 'isNew' flag for new stages/steps
+          5. Use 'isDeleting' flag for removed stages/steps
+          6. Use 'isMoving' and 'moveDirection' flags for reordered items
+          7. Generate unique IDs for new items
+          8. Preserve existing IDs when modifying existing items
+          9. DO NOT return schema definitions or explanations - only the actual workflow data
+          
+          Current workflow structure for reference:
+          ${JSON.stringify(stages, null, 2)}`,
           currentWorkflow: stages
         })
       };
@@ -589,45 +591,46 @@ export default function Home() {
       const responseContent = typeof response === 'string' ? response : (response as OllamaResponse).content;
       
       try {
-        // Clean up the response content by removing comments and normalizing JSON
-        const cleanedContent = responseContent
-          .replace(/\/\/.*$/gm, '') // Remove single line comments
-          .replace(/\/\*[\s\S]*?\*\//gm, '') // Remove multi-line comments
-          .replace(/\n\s*\n/g, '\n') // Remove empty lines
-          .replace(/^\s*[\r\n]/gm, '') // Remove empty lines with whitespace
-          .replace(/```json\s*|\s*```/g, '') // Remove markdown code block markers
-          .trim();
+        // Extract JSON from the response
+        const jsonMatch = responseContent.match(/```json\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/) || 
+                         responseContent.match(/\[[\s\S]*?\]|\{[\s\S]*?\}/);
+        
+        if (!jsonMatch) {
+          throw new Error('No valid JSON found in response');
+        }
 
-        // Parse and validate the response
-        const parsedResponse = JSON.parse(cleanedContent);
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsedResponse = JSON.parse(jsonStr);
         
         // Handle both array and object formats
         const updatedWorkflow = Array.isArray(parsedResponse) 
-          ? { stages: parsedResponse }
-          : parsedResponse as WorkflowResponse;
+          ? parsedResponse
+          : parsedResponse.stages || parsedResponse;
         
-        // Validate that we have stages
-        if (!updatedWorkflow.stages || !Array.isArray(updatedWorkflow.stages)) {
-          throw new Error('Invalid workflow format: missing stages array');
+        // Validate the workflow structure
+        if (!Array.isArray(updatedWorkflow)) {
+          throw new Error('Invalid workflow format: not an array');
         }
-        
-        // Update the workflow with proper type casting and validation
-        const typedStages = updatedWorkflow.stages.map(stage => {
-          // Remove any non-standard properties
-          const {
-            id,
-            name,
-            status,
-            steps,
-            isNew,
-            isMoving,
-            isDeleting,
-            moveDirection,
-            ...rest
-          } = stage;
 
-          // Ensure steps are properly formatted
-          const typedSteps = steps.map((step: any) => ({
+        // Validate each stage has required properties
+        updatedWorkflow.forEach((stage, index) => {
+          if (!stage.id || !stage.name || !stage.status || !Array.isArray(stage.steps)) {
+            throw new Error(`Invalid stage format at index ${index}`);
+          }
+          
+          stage.steps.forEach((step: any, stepIndex: number) => {
+            if (!step.id || !step.name || !step.status || !Array.isArray(step.fields)) {
+              throw new Error(`Invalid step format at stage ${index}, step ${stepIndex}`);
+            }
+          });
+        });
+        
+        // Update the workflow with proper type casting
+        const typedStages = updatedWorkflow.map(stage => ({
+          id: stage.id,
+          name: stage.name,
+          status: stage.status as 'pending' | 'active' | 'completed',
+          steps: stage.steps.map((step: any) => ({
             id: step.id,
             name: step.name,
             status: step.status as 'pending' | 'active' | 'completed',
@@ -636,28 +639,16 @@ export default function Home() {
               label: field.label,
               type: field.type as 'number' | 'text' | 'select' | 'checkbox',
               options: field.options
-            })) : []
-          }));
+            })) : [],
+            ...(step.isNew && { isNew: true })
+          })),
+          ...(stage.isNew && { isNew: true }),
+          ...(stage.isMoving && { isMoving: true }),
+          ...(stage.isDeleting && { isDeleting: true }),
+          ...(stage.moveDirection && { moveDirection: stage.moveDirection as 'up' | 'down' })
+        }));
 
-          // Construct a properly typed stage
-          const typedStage: Stage = {
-            id,
-            name,
-            status: status as 'pending' | 'active' | 'completed',
-            steps: typedSteps,
-            ...(isNew && { isNew: true }),
-            ...(isMoving && { isMoving: true }),
-            ...(isDeleting && { isDeleting: true }),
-            ...(moveDirection && { moveDirection: moveDirection === 'up' ? 'up' : 'down' })
-          };
-
-          return typedStage;
-        });
-
-        // Ensure the entire array is properly typed
-        const validatedStages: Stage[] = typedStages;
-        
-        handleWorkflowUpdate(validatedStages);
+        handleWorkflowUpdate(typedStages);
         
         // Add success message
         const responseMessage: Message = {
@@ -668,19 +659,19 @@ export default function Home() {
             action: {
               type: 'Workflow Updated',
               timestamp: new Date().toISOString(),
-              changes: generateDelta(stages, validatedStages)
+              changes: generateDelta(stages, typedStages)
             },
             model: {
               before: stages,
-              after: validatedStages
+              after: typedStages
             },
             visualization: {
-              totalStages: validatedStages.length,
-              stageBreakdown: validatedStages.map((stage: Stage) => ({
+              totalStages: typedStages.length,
+              stageBreakdown: typedStages.map(stage => ({
                 name: stage.name,
                 status: stage.status,
                 stepCount: stage.steps.length,
-                steps: stage.steps.map((step: Step) => ({
+                steps: stage.steps.map((step: { name: string; status: string }) => ({
                   name: step.name,
                   status: step.status
                 }))
@@ -690,18 +681,26 @@ export default function Home() {
           sender: 'ai'
         };
         addMessage(responseMessage);
-      } catch (error) {
+      } catch (error: any) {
+        console.error('Error parsing LLM response:', error);
         // Add error message if response parsing fails
         const errorMessage: Message = {
           id: Date.now().toString(),
           type: 'text',
-          content: 'Sorry, I was unable to update the workflow. Please try rephrasing your request.',
+          content: `Sorry, I was unable to update the workflow. The response was not in the expected format. Error: ${error.message}`,
           sender: 'ai'
         };
         addMessage(errorMessage);
       }
     } catch (error) {
       console.error('Error handling chat message:', error);
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        type: 'text',
+        content: 'Sorry, there was an error processing your request. Please try again.',
+        sender: 'ai'
+      };
+      addMessage(errorMessage);
     }
   };
 
@@ -714,30 +713,31 @@ export default function Home() {
     }));
   };
 
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing) return;
+    const delta = e.pageX - startX.current;
+    const newWidth = Math.max(300, Math.min(800, startWidth.current - delta));
+    setChatPanelWidth(newWidth);
+  }, [isResizing]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
     setIsResizing(true);
     startX.current = e.pageX;
     startWidth.current = chatPanelWidth;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, [chatPanelWidth]);
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    const delta = startX.current - e.pageX;
-    const newWidth = Math.max(500, startWidth.current + delta);
-    setChatPanelWidth(newWidth);
-  }, [isResizing]);
-
   const handleMouseUp = useCallback(() => {
     setIsResizing(false);
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', handleMouseUp);
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
-  }, []);
+  }, [handleMouseMove]);
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
@@ -765,16 +765,26 @@ export default function Home() {
 
       {/* Resize Handle */}
       <div
-        className={`resize-handle ${isResizing ? 'resizing' : ''}`}
+        className="relative cursor-col-resize select-none"
         onMouseDown={handleMouseDown}
-      />
+      >
+        <div 
+          className={`absolute top-0 left-[-4px] w-[8px] h-full hover:bg-blue-500/50 ${
+            isResizing ? 'bg-blue-500/50' : 'bg-transparent'
+          }`}
+        />
+      </div>
 
       {/* Chat Panel */}
       <div 
         className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden"
-        style={{ width: chatPanelWidth }}
+        style={{ 
+          width: `${chatPanelWidth}px`,
+          minWidth: '300px',
+          maxWidth: '800px'
+        }}
       >
-        <div className="p-4 border-b dark:border-gray-700">
+        <div className="p-2 border-b dark:border-gray-700">
           <h2 className="text-lg font-semibold">AI Assistant</h2>
         </div>
         <div className="flex-1 overflow-hidden">

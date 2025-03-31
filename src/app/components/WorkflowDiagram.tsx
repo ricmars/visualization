@@ -28,7 +28,7 @@ export function WorkflowDiagram({
   const [isDragging, setIsDragging] = useState(false);
 
   const getStageClass = (stage: Stage, index: number) => {
-    const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-medium transition-all duration-500';
+    const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500';
     const positionClass = `stage-${index + 1}`;
     
     let animationClass = '';
@@ -40,7 +40,7 @@ export function WorkflowDiagram({
       animationClass = stage.moveDirection === 'up' ? 'animate-move-up' : 'animate-move-down';
     }
 
-    const activeClass = activeStage === stage.id ? 'ring-2 ring-white ring-opacity-50' : '';
+    const activeClass = activeStage === stage.id ? 'ring-2 ring-white ring-opacity-70' : '';
     
     return `${baseClass} ${positionClass} ${animationClass} ${activeClass}`;
   };
@@ -166,32 +166,26 @@ export function WorkflowDiagram({
                             <div
                               ref={provided.innerRef}
                               {...provided.draggableProps}
-                              className={`transform transition-all duration-200
-                                ${snapshot.isDragging ? 'scale-105 rotate-1' : ''}
-                              `}
+                              {...provided.dragHandleProps}
+                              className={`transform transition-all duration-200 w-full flex items-center gap-3 p-3 rounded-lg border text-left cursor-grab
+                                ${snapshot.isDragging ? 'scale-105 rotate-1 shadow-lg cursor-grabbing' : ''}
+                                ${
+                                  activeStep === step.id
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
+                                }`}
+                              onClick={() => onStepSelect(stage.id, step.id)}
                             >
-                              <div
-                                {...provided.dragHandleProps}
-                                className="w-full flex items-center gap-3 p-3 rounded-lg border text-left transition-all duration-300 cursor-grab
-                                  ${snapshot.isDragging ? 'shadow-lg cursor-grabbing' : ''}
-                                  ${
-                                    activeStep === step.id
-                                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                      : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
-                                  }"
-                                onClick={() => onStepSelect(stage.id, step.id)}
+                              <span 
+                                className="text-xl" 
+                                role="img" 
+                                aria-label="step icon"
                               >
-                                <span 
-                                  className="text-xl" 
-                                  role="img" 
-                                  aria-label="step icon"
-                                >
-                                  {getStepIcon(step.name)}
-                                </span>
-                                <span className="font-medium text-gray-700 dark:text-gray-200">
-                                  {step.name}
-                                </span>
-                              </div>
+                                {getStepIcon(step.name)}
+                              </span>
+                              <span className="font-medium text-gray-700 dark:text-gray-200">
+                                {step.name}
+                              </span>
                             </div>
                           )}
                         </Draggable>
