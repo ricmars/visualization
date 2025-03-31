@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from  '@hello-pangea/dnd'
-import { Stage } from '../types';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { Stage, Step, Field } from '../types';
+import AddStepModal from './AddStepModal';
+import EditModal from './EditModal';
+import { v4 as uuidv4 } from 'uuid';
+import { FaClipboardList, FaCheckCircle, FaRobot, FaFolder, FaQuestionCircle, FaTrash, FaGripVertical, FaPencilAlt } from 'react-icons/fa';
+import { IoDocumentText } from 'react-icons/io5';
+import { RiBrainFill } from 'react-icons/ri';
+import { MdNotifications } from 'react-icons/md';
+import { BsGearFill } from 'react-icons/bs';
+import StepConfigurationModal from './StepConfigurationModal';
 
 interface WorkflowDiagramProps {
   stages: Stage[];
@@ -8,6 +17,8 @@ interface WorkflowDiagramProps {
   activeStage?: string;
   activeStep?: string;
   onStepsUpdate: (updatedStages: Stage[]) => void;
+  onDeleteStage?: (stageId: string) => void;
+  onDeleteStep?: (stageId: string, stepId: string) => void;
 }
 
 export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
@@ -15,9 +26,28 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onStepSelect,
   activeStage,
   activeStep,
-  onStepsUpdate
+  onStepsUpdate,
+  onDeleteStage,
+  onDeleteStep
 }) => {
-  const [, setIsDragging] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  const [editItem, setEditItem] = useState<{
+    type: 'stage' | 'step';
+    id: string;
+    stageId?: string;
+    name: string;
+    stepType?: string;
+  } | null>(null);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [selectedStep, setSelectedStep] = useState<{
+    stageId: string;
+    stepId: string;
+    name: string;
+    fields: Field[];
+  } | null>(null);
 
   const getStageClass = (stage: Stage, index: number) => {
     const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500';
@@ -37,22 +67,30 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     return `${baseClass} ${positionClass} ${animationClass} ${activeClass}`;
   };
 
-  const getStepIcon = (stepName: string) => {
-    // Map step names to appropriate icons
-    if (stepName.includes('Collect')) return '📋';
-    if (stepName.includes('Determine')) return '⚠️';
-    if (stepName.includes('Trigger')) return '🔄';
-    if (stepName.includes('Review')) return '📑';
-    if (stepName.includes('Identify')) return '🔍';
-    if (stepName.includes('Approve')) return '✅';
-    if (stepName.includes('Analyze')) return '📊';
-    if (stepName.includes('Investigation')) return '🔎';
-    if (stepName.includes('Assign')) return '👥';
-    if (stepName.includes('Gather')) return '📥';
-    if (stepName.includes('Notify')) return '📢';
-    if (stepName.includes('Update')) return '📝';
-    if (stepName.includes('Post-Mortem')) return '📋';
-    return '▶️';
+  const getStepIcon = (stepType: string) => {
+    // Map step types to appropriate icons
+    switch (stepType) {
+      case 'Collect information':
+        return <FaClipboardList className="text-blue-500" />;
+      case 'Approve/Reject':
+        return <FaCheckCircle className="text-green-500" />;
+      case 'Automation':
+        return <BsGearFill className="text-purple-500" />;
+      case 'Create Case':
+        return <FaFolder className="text-yellow-500" />;
+      case 'Decision':
+        return <FaQuestionCircle className="text-orange-500" />;
+      case 'Generate Document':
+        return <IoDocumentText className="text-gray-500" />;
+      case 'Generative AI':
+        return <RiBrainFill className="text-pink-500" />;
+      case 'Robotic Automation':
+        return <FaRobot className="text-indigo-500" />;
+      case 'Send Notification':
+        return <MdNotifications className="text-red-500" />;
+      default:
+        return <BsGearFill className="text-gray-400" />;
+    }
   };
 
   const handleDragStart = () => {
@@ -61,136 +99,482 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
 
   const handleDragEnd = (result: DropResult) => {
     setIsDragging(false);
-    const { source, destination } = result;
 
-    // Dropped outside a droppable area
-    if (!destination) return;
+    if (!result.destination) {
+      return;
+    }
 
-    // No movement
-    if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
-    ) return;
+    if (result.type === 'stage') {
+      // Handle stage reordering
+      const sourceIndex = result.source.index;
+      const destinationIndex = result.destination.index;
 
-    // Create a new stages array to avoid mutating state
-    const newStages = [...stages];
+      const updatedStages = Array.from(stages);
+      const [movedStage] = updatedStages.splice(sourceIndex, 1);
+      updatedStages.splice(destinationIndex, 0, movedStage);
 
-    // Find source and destination stages
-    const sourceStage = newStages.find(stage => stage.id === source.droppableId);
-    const destStage = newStages.find(stage => stage.id === destination.droppableId);
+      // Save to session storage
+      sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+      
+      onStepsUpdate(updatedStages);
+      return;
+    }
 
-    if (!sourceStage || !destStage) return;
+    // Handle step reordering within stages
+    const sourceStageId = result.source.droppableId;
+    const destinationStageId = result.destination.droppableId;
+    const sourceIndex = result.source.index;
+    const destinationIndex = result.destination.index;
 
-    // Remove step from source
-    const [movedStep] = sourceStage.steps.splice(source.index, 1);
+    const updatedStages = [...stages];
+    const sourceStage = updatedStages.find(s => s.id === sourceStageId);
+    const destinationStage = updatedStages.find(s => s.id === destinationStageId);
 
-    // Add step to destination
-    destStage.steps.splice(destination.index, 0, movedStep);
+    if (!sourceStage || !destinationStage) {
+      return;
+    }
 
-    // Update stages
-    onStepsUpdate(newStages);
+    const [movedStep] = sourceStage.steps.splice(sourceIndex, 1);
+    destinationStage.steps.splice(destinationIndex, 0, movedStep);
+
+    // Save to session storage
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+
+    onStepsUpdate(updatedStages);
+  };
+
+  const handleAddStep = (stageId: string) => {
+    setSelectedStageId(stageId);
+    setIsAddStepModalOpen(true);
+  };
+
+  const handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+    if (!selectedStageId) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStageId) {
+        return {
+          ...stage,
+          steps: [
+            ...stage.steps,
+            {
+              id: uuidv4(),
+              name: stepData.name,
+              type: stepData.type || 'Automation',
+              status: 'pending' as const,
+              fields: []
+            }
+          ]
+        };
+      }
+      return stage;
+    });
+
+    onStepsUpdate(updatedStages);
+    setIsAddStepModalOpen(false);
+    setSelectedStageId(null);
+  };
+
+  const handleEditClick = (type: 'stage' | 'step', id: string, stageId?: string) => {
+    if (type === 'stage') {
+      const stage = stages.find(s => s.id === id);
+      if (stage) {
+        setEditItem({
+          type: 'stage',
+          id: stage.id,
+          name: stage.name
+        });
+        setIsEditModalOpen(true);
+      }
+    } else {
+      const stage = stages.find(s => s.id === stageId);
+      const step = stage?.steps.find(s => s.id === id);
+      if (step) {
+        setEditItem({
+          type: 'step',
+          id: step.id,
+          stageId: stageId,
+          name: step.name,
+          stepType: step.type
+        });
+        setIsEditModalOpen(true);
+      }
+    }
+  };
+
+  const handleEditSubmit = (data: { name: string; type?: string }) => {
+    if (!editItem) return;
+
+    const updatedStages = stages.map(stage => {
+      if (editItem.type === 'stage' && stage.id === editItem.id) {
+        return {
+          ...stage,
+          name: data.name
+        };
+      } else if (editItem.type === 'step' && stage.id === editItem.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => 
+            step.id === editItem.id
+              ? { ...step, name: data.name, type: data.type || step.type || 'Automation' }
+              : step
+          )
+        };
+      }
+      return stage;
+    });
+
+    // Save to session storage
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    
+    onStepsUpdate(updatedStages);
+    setIsEditModalOpen(false);
+    setEditItem(null);
+  };
+
+  const handleStepSelect = (stageId: string, stepId: string) => {
+    const stage = stages.find(s => s.id === stageId);
+    const step = stage?.steps.find(s => s.id === stepId);
+    
+    if (step) {
+      setSelectedStep({
+        stageId,
+        stepId,
+        name: step.name,
+        fields: step.fields
+      });
+      setIsConfigModalOpen(true);
+    }
+    
+    onStepSelect(stageId, stepId);
+  };
+
+  const handleFieldChange = (fieldId: string, value: string | number | boolean) => {
+    if (!selectedStep) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStep.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => {
+            if (step.id === selectedStep.stepId) {
+              return {
+                ...step,
+                fields: step.fields.map(field => 
+                  field.id === fieldId ? { ...field, value } : field
+                )
+              };
+            }
+            return step;
+          })
+        };
+      }
+      return stage;
+    });
+
+    // Save to session storage
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    onStepsUpdate(updatedStages);
+  };
+
+  const handleAddField = () => {
+    if (!selectedStep) return;
+
+    const newField: Field = {
+      id: uuidv4(),
+      label: 'New Field',
+      type: 'text',
+      value: '',
+      required: false
+    };
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStep.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => {
+            if (step.id === selectedStep.stepId) {
+              return {
+                ...step,
+                fields: [...step.fields, newField]
+              };
+            }
+            return step;
+          })
+        };
+      }
+      return stage;
+    });
+
+    // Update the selected step's fields to trigger a re-render
+    setSelectedStep(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        fields: [...prev.fields, newField]
+      };
+    });
+
+    // Save to session storage and update the stages
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    onStepsUpdate(updatedStages);
+  };
+
+  const handleUpdateField = (fieldId: string, updates: Partial<Field>) => {
+    if (!selectedStep) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStep.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => {
+            if (step.id === selectedStep.stepId) {
+              return {
+                ...step,
+                fields: step.fields.map(field => 
+                  field.id === fieldId ? { ...field, ...updates } : field
+                )
+              };
+            }
+            return step;
+          })
+        };
+      }
+      return stage;
+    });
+
+    // Update the selected step's fields to trigger a re-render
+    setSelectedStep(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        fields: prev.fields.map(field => 
+          field.id === fieldId ? { ...field, ...updates } : field
+        )
+      };
+    });
+
+    // Save to session storage and update the stages
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    onStepsUpdate(updatedStages);
+  };
+
+  const handleDeleteField = (fieldId: string) => {
+    if (!selectedStep) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStep.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => {
+            if (step.id === selectedStep.stepId) {
+              return {
+                ...step,
+                fields: step.fields.filter(field => field.id !== fieldId)
+              };
+            }
+            return step;
+          })
+        };
+      }
+      return stage;
+    });
+
+    // Update the selected step's fields to trigger a re-render
+    setSelectedStep(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        fields: prev.fields.filter(field => field.id !== fieldId)
+      };
+    });
+
+    // Save to session storage and update the stages
+    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    onStepsUpdate(updatedStages);
   };
 
   return (
-    <div className="w-full h-full overflow-auto p-6">
-      <div className="workflow-container mb-8">
-        {/* Stages Bar */}
-        <div className="flex flex-nowrap gap-0 mb-8">
-          {stages.map((stage, index) => (
-            <div 
-              key={stage.id} 
-              className={getStageClass(stage, index)}
-              style={{
-                zIndex: stage.isNew ? stages.length : undefined
-              }}
-            >
-              <div className="flex flex-col items-center">
-                <h3 className="text-lg font-semibold">{stage.name}</h3>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Detailed Steps View */}
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto">
         <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 gap-6">
-            {stages.map((stage, index) => (
+          <Droppable droppableId="stages" type="stage" direction="vertical">
+            {(provided) => (
               <div
-                key={stage.id}
-                className={`p-6 rounded-xl border transform transition-all duration-500 ease-in-out 
-                  ${stage.isNew ? 'animate-fade-in' : ''}
-                  ${
-                    activeStage === stage.id
-                      ? 'border-blue-500/50 bg-blue-50/50 dark:bg-blue-900/10 shadow-lg'
-                      : 'border-gray-200/50 dark:border-gray-700/50'
-                  }
-                `}
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-8"
               >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-1 h-6 rounded stage-${index + 1}`} />
-                  <h3 className="font-semibold text-lg text-gray-700 dark:text-gray-200">{stage.name}</h3>
-                </div>
-                <Droppable 
-                  droppableId={stage.id} 
-                  type="STEP"
-                  mode="standard"
-                  isDropDisabled={false}
-                  isCombineEnabled={false}
-                  ignoreContainerClipping={false}
-                >
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`grid grid-cols-1 gap-3 pl-4 border-l-2 transition-colors duration-200
-                        ${snapshot.isDraggingOver 
-                          ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/10 rounded-lg p-2' 
-                          : 'border-gray-100 dark:border-gray-800'
-                        }`}
-                    >
-                      {stage.steps.map((step, stepIndex) => (
-                        <Draggable 
-                          key={step.id} 
-                          draggableId={step.id} 
-                          index={stepIndex}
-                        >
+                {stages.map((stage, index) => (
+                  <Draggable
+                    key={stage.id}
+                    draggableId={stage.id}
+                    index={index}
+                  >
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        className={`p-6 rounded-xl border transform transition-all duration-500 ease-in-out 
+                          ${stage.isNew ? 'animate-fade-in' : ''}
+                          ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-blue-500/50' : ''}
+                          ${
+                            activeStage === stage.id
+                              ? 'border-blue-500/50 bg-blue-50/50 dark:bg-blue-900/10 shadow-lg'
+                              : 'border-gray-200/50 dark:border-gray-700/50'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded">
+                              <FaGripVertical className="text-gray-400" />
+                            </div>
+                            <div className={`w-1 h-6 rounded stage-${index + 1}`} />
+                            <h3 className="font-semibold text-lg text-gray-700 dark:text-gray-200">{stage.name}</h3>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleAddStep(stage.id)}
+                              className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                            >
+                              Add Step
+                            </button>
+                            <button
+                              onClick={() => handleEditClick('stage', stage.id)}
+                              className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                              aria-label="Edit stage"
+                            >
+                              <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                            </button>
+                            {onDeleteStage && (
+                              <button
+                                onClick={() => onDeleteStage(stage.id)}
+                                className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                                aria-label="Delete stage"
+                              >
+                                <FaTrash className="w-4 h-4 text-gray-500" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <Droppable droppableId={stage.id} type="step">
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`transform transition-all duration-200 w-full flex items-center gap-3 p-3 rounded-lg border text-left cursor-grab
-                                ${snapshot.isDragging ? 'scale-105 rotate-1 shadow-lg cursor-grabbing' : ''}
-                                ${
-                                  activeStep === step.id
-                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
-                                }`}
-                              onClick={() => onStepSelect(stage.id, step.id)}
+                              {...provided.droppableProps}
+                              className={`space-y-2 ${snapshot.isDraggingOver ? 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2' : ''}`}
                             >
-                              <span 
-                                className="text-xl" 
-                                role="img" 
-                                aria-label="step icon"
-                              >
-                                {getStepIcon(step.name)}
-                              </span>
-                              <span className="font-medium text-gray-700 dark:text-gray-200">
-                                {step.name}
-                              </span>
+                              {stage.steps.map((step, stepIndex) => (
+                                <Draggable
+                                  key={step.id}
+                                  draggableId={step.id}
+                                  index={stepIndex}
+                                >
+                                  {(provided, snapshot) => (
+                                    <div
+                                      ref={provided.innerRef}
+                                      {...provided.draggableProps}
+                                      {...provided.dragHandleProps}
+                                      onClick={() => handleStepSelect(stage.id, step.id)}
+                                      className={`p-3 rounded-lg border transition-all cursor-pointer
+                                        ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500/50' : 'hover:shadow-md'}
+                                        ${
+                                          activeStep === step.id
+                                            ? 'border-blue-500/50 bg-blue-50 dark:bg-blue-900/20'
+                                            : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
+                                        }
+                                      `}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <span className="text-xl">
+                                          {getStepIcon(step.type || 'Automation')}
+                                        </span>
+                                        <span className="flex-1 font-medium text-gray-700 dark:text-gray-200">
+                                          {step.name}
+                                        </span>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleEditClick('step', step.id, stage.id);
+                                          }}
+                                          className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                                          aria-label="Edit step"
+                                        >
+                                          <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                                        </button>
+                                        {onDeleteStep && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              onDeleteStep(stage.id, step.id);
+                                            }}
+                                            className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                                            aria-label="Delete step"
+                                          >
+                                            <FaTrash className="w-4 h-4 text-gray-500" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                </Draggable>
+                              ))}
+                              {provided.placeholder}
                             </div>
                           )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
+                        </Droppable>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
               </div>
-            ))}
-          </div>
+            )}
+          </Droppable>
         </DragDropContext>
+
+        <AddStepModal
+          isOpen={isAddStepModalOpen}
+          onClose={() => setIsAddStepModalOpen(false)}
+          onAddStep={handleAddStepSubmit}
+        />
+
+        {editItem && (
+          <EditModal
+            isOpen={isEditModalOpen}
+            onClose={() => {
+              setIsEditModalOpen(false);
+              setEditItem(null);
+            }}
+            onSubmit={handleEditSubmit}
+            type={editItem.type}
+            initialData={{
+              name: editItem.name,
+              type: editItem.stepType
+            }}
+          />
+        )}
+
+        {selectedStep && (
+          <StepConfigurationModal
+            isOpen={isConfigModalOpen}
+            onClose={() => {
+              setIsConfigModalOpen(false);
+              setSelectedStep(null);
+            }}
+            fields={selectedStep.fields}
+            onFieldChange={handleFieldChange}
+            onAddField={handleAddField}
+            onUpdateField={handleUpdateField}
+            onDeleteField={handleDeleteField}
+            stepName={selectedStep.name}
+          />
+        )}
       </div>
     </div>
   );
 };
+
+export default WorkflowDiagram;

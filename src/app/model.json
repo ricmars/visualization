@@ -1,0 +1,240 @@
+{
+  "stages": [
+    {
+      "id": "stage1",
+      "name": "Incident Intake",
+      "status": "active",
+      "steps": [
+        {
+          "id": "step1",
+          "name": "Collect Incident Details",
+          "type": "Collect information",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "incidentTitle",
+              "label": "Incident Title",
+              "type": "text"
+            },
+            {
+              "id": "description",
+              "label": "Description",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step2",
+          "name": "Determine Incident Severity",
+          "type": "Decision",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "severity",
+              "label": "Severity Level",
+              "type": "select",
+              "options": ["Low", "Medium", "High", "Critical"]
+            }
+          ]
+        },
+        {
+          "id": "step3",
+          "name": "Trigger Compliance Verification",
+          "type": "Automation",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "complianceRequired",
+              "label": "Compliance Check Required",
+              "type": "checkbox"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage2",
+      "name": "Compliance Verification",
+      "status": "pending",
+      "steps": [
+        {
+          "id": "step4",
+          "name": "Review Program Records",
+          "type": "Collect information",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "programId",
+              "label": "Program ID",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step5",
+          "name": "Identify Compliance Violations",
+          "type": "Decision",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "violations",
+              "label": "Violations Found",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step6",
+          "name": "Approve Compliance Findings",
+          "type": "Approve/Reject",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "approved",
+              "label": "Findings Approved",
+              "type": "checkbox"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage3",
+      "name": "Risk Assessment",
+      "status": "pending",
+      "steps": [
+        {
+          "id": "step7",
+          "name": "Analyze Risk Factors",
+          "type": "Generative AI",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "riskFactors",
+              "label": "Risk Factors",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step8",
+          "name": "Determine Investigation Needed",
+          "type": "Decision",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "investigationRequired",
+              "label": "Investigation Required",
+              "type": "checkbox"
+            }
+          ]
+        },
+        {
+          "id": "step9",
+          "name": "Assign Investigation Team",
+          "type": "Create Case",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "teamMembers",
+              "label": "Team Members",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage4",
+      "name": "Investigation",
+      "status": "pending",
+      "steps": [
+        {
+          "id": "step10",
+          "name": "Gather Additional Evidence",
+          "type": "Collect information",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "evidence",
+              "label": "Evidence Details",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step11",
+          "name": "Approve Investigation Findings",
+          "type": "Approve/Reject",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "findingsApproved",
+              "label": "Findings Approved",
+              "type": "checkbox"
+            }
+          ]
+        },
+        {
+          "id": "step12",
+          "name": "Notify Stakeholders",
+          "type": "Send Notification",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "stakeholders",
+              "label": "Stakeholders",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage5",
+      "name": "Case Closure",
+      "status": "pending",
+      "steps": [
+        {
+          "id": "step13",
+          "name": "Update Case Records",
+          "type": "Generate Document",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "resolution",
+              "label": "Resolution Details",
+              "type": "text"
+            }
+          ]
+        },
+        {
+          "id": "step14",
+          "name": "Notify Stakeholders of Resolution",
+          "type": "Send Notification",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "notificationSent",
+              "label": "Notification Sent",
+              "type": "checkbox"
+            }
+          ]
+        },
+        {
+          "id": "step15",
+          "name": "Conduct Post-Mortem Review",
+          "type": "Generate Document",
+          "status": "pending",
+          "fields": [
+            {
+              "id": "lessons",
+              "label": "Lessons Learned",
+              "type": "text"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+} 

@@ -1,15 +1,41 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../types';
+import dynamic from 'next/dynamic';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-json';
 
+// Client-side only component for code highlighting
+const CodeBlock = ({ code }: { code: string }) => {
+  const codeRef = useRef<HTMLPreElement>(null);
+
+  useEffect(() => {
+    if (codeRef.current) {
+      Prism.highlightElement(codeRef.current);
+    }
+  }, [code]);
+
+  return (
+    <pre ref={codeRef} className="text-sm bg-gray-800 rounded-lg p-4 overflow-x-auto">
+      <code className="language-json">
+        {code}
+      </code>
+    </pre>
+  );
+};
+
+// Dynamic import with SSR disabled
+const DynamicCodeBlock = dynamic(() => Promise.resolve(CodeBlock), {
+  ssr: false
+});
+
 interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
+  onClear: () => void;
 }
 
-export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
+export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -92,7 +118,10 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
                 <p className="text-gray-700 dark:text-gray-300">
                   Total Stages: {content.visualization.totalStages}
                 </p>
-                <div className="mt-2 space-y-2">
+                <div 
+                  className="mt-2 space-y-2 resize-y overflow-auto min-h-[200px] max-h-[600px] border border-gray-200 dark:border-gray-700 p-4 rounded-lg"
+                  style={{ resize: 'vertical' }}
+                >
                   {content.visualization.stageBreakdown.map((stage: { name: string; status: string; stepCount: number; steps?: { name: string; status: string }[] }, index: number) => (
                     <div key={index} className="pl-4 border-l-2 border-gray-200 dark:border-gray-700">
                       <p className="font-medium text-gray-800 dark:text-gray-200">
@@ -104,7 +133,7 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
                       {stage.steps && (
                         <ul className="mt-1 pl-4 text-sm text-gray-600 dark:text-gray-400">
                           {stage.steps.map((step: { name: string; status: string }, stepIndex: number) => (
-                            <li key={stepIndex}>
+                            <li key={stepIndex} className="py-1">
                               • {step.name} ({step.status})
                             </li>
                           ))}
@@ -120,11 +149,7 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
           {content.model && (
             <div className="space-y-2">
               <h4 className="font-medium text-gray-900 dark:text-gray-100">Technical Details:</h4>
-              <pre className="text-sm bg-gray-800 rounded-lg p-4 overflow-x-auto">
-                <code className="language-json">
-                  {JSON.stringify(content.model, null, 2)}
-                </code>
-              </pre>
+              <DynamicCodeBlock code={JSON.stringify(content.model, null, 2)} />
             </div>
           )}
         </div>
@@ -140,6 +165,17 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Chat Header */}
+      <div className="flex justify-between items-center p-4 border-b dark:border-gray-700 bg-white dark:bg-gray-900">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI Assistant</h2>
+        <button
+          onClick={onClear}
+          className="px-3 py-1 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+        >
+          Clear Chat
+        </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto" ref={chatContainerRef}>
         {messages.map((message) => (
           <div

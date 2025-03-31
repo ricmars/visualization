@@ -1,78 +1,71 @@
-import React from 'react';
-
-interface Field {
-  id: string;
-  label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox';
-  value?: string | number | boolean;
-  options?: string[];
-}
+import React, { RefObject } from 'react';
+import { Field } from '../types';
+import { FaTrash, FaPencilAlt } from 'react-icons/fa';
+import Tooltip from './Tooltip';
 
 interface StepFormProps {
   fields: Field[];
   onFieldChange: (fieldId: string, value: string | number | boolean) => void;
+  onDeleteField?: (fieldId: string) => void;
+  onEditField?: (field: Field) => void;
+  firstFieldRef: RefObject<HTMLInputElement>;
 }
 
-export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => {
-  const renderField = (field: Field) => {
-    switch (field.type) {
-      case 'text':
-        return (
-          <input
-            type="text"
-            value={typeof field.value === 'boolean' ? '' : field.value || ''}
-            onChange={(e) => onFieldChange(field.id, e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
-          />
-        );
-      case 'number':
-        return (
-          <input
-            type="number"
-            value={typeof field.value === 'string' || typeof field.value === 'number' ? field.value : ''}
-            onChange={(e) => onFieldChange(field.id, e.target.valueAsNumber)}
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
-          />
-        );
-      case 'select':
-        return (
-          <select
-            value={typeof field.value === 'string' || typeof field.value === 'number' ? field.value : ''}
-            onChange={(e) => onFieldChange(field.id, e.target.value)}
-            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
-          >
-            <option value="">Select an option</option>
-            {field.options?.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        );
-      case 'checkbox':
-        return (
-          <input
-            type="checkbox"
-            checked={!!field.value}
-            onChange={(e) => onFieldChange(field.id, e.target.checked)}
-            className="w-5 h-5 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
+const StepForm: React.FC<StepFormProps> = ({
+  fields,
+  onFieldChange,
+  onDeleteField,
+  onEditField,
+  firstFieldRef
+}) => {
   return (
     <div className="space-y-4">
-      {fields.map((field) => (
-        <div key={field.id} className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            {field.label}
-          </label>
-          {renderField(field)}
+      {fields.map((field, index) => (
+        <div key={field.id} className="relative group p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {field.label}
+                {field.required && <span className="text-red-500 ml-1">*</span>}
+              </h4>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Type: {field.type}
+              </p>
+              {field.description && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {field.description}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {onEditField && (
+                <Tooltip content={`Edit ${field.label}`}>
+                  <button
+                    onClick={() => onEditField(field)}
+                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                    aria-label={`Edit ${field.label}`}
+                  >
+                    <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                  </button>
+                </Tooltip>
+              )}
+              {onDeleteField && (
+                <Tooltip content={`Delete ${field.label}`}>
+                  <button
+                    onClick={() => onDeleteField(field.id)}
+                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                    aria-label={`Delete ${field.label}`}
+                  >
+                    <FaTrash className="w-4 h-4 text-gray-500" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+          </div>
         </div>
       ))}
     </div>
   );
-}; 
+};
+
+export default StepForm; 

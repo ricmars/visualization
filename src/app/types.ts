@@ -1,27 +1,33 @@
 export interface Field {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox';
-  value?: string | number | boolean | null;
-  options?: string[];
+  type: 'text' | 'email' | 'number' | 'textarea' | 'select' | 'checkbox';
+  value?: string | number | boolean;
+  placeholder?: string;
+  description?: string;
+  required?: boolean;
+  error?: string;
+  options?: Array<{
+    value: string;
+    label: string;
+  }>;
 }
 
 export interface Step {
   id: string;
   name: string;
-  isNew?: boolean;
-  status: 'pending' | 'active' | 'completed';
-  fields: Array<Field>;
+  type: string;
+  status: 'pending' | 'completed' | 'error';
+  fields: Field[];
 }
 
 export interface Stage {
   id: string;
   name: string;
-  status: 'pending' | 'active' | 'completed';
   steps: Step[];
   isNew?: boolean;
-  isMoving?: boolean;
   isDeleting?: boolean;
+  isMoving?: boolean;
   moveDirection?: 'up' | 'down';
 }
 

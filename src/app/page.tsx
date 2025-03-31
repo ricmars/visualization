@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
-import { StepForm } from './components/StepForm';
+import StepForm from './components/StepForm';
 import { OllamaService, ChatRole } from './services/ollama';
 import { Stage, Message } from './types';
 import AddFieldModal from './components/AddFieldModal';
+import { motion } from 'framer-motion';
+import defaultModel from './model.json';
+import { v4 as uuidv4 } from 'uuid';
+import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 
 interface ChatMessage {
   role: ChatRole;
@@ -34,264 +38,64 @@ interface OllamaResponse {
   content: string;
 }
 
-const sampleStages: Stage[] = [
-  {
-    id: 'stage1',
-    name: 'Incident Intake',
-    status: 'active',
-    steps: [
-      {
-        id: 'step1',
-        name: 'Collect Incident Details',
-        status: 'pending',
-        fields: [
-          {
-            id: 'incidentTitle',
-            label: 'Incident Title',
-            type: 'text',
-          },
-          {
-            id: 'description',
-            label: 'Description',
-            type: 'text',
-          }
-        ]
-      },
-      {
-        id: 'step2',
-        name: 'Determine Incident Severity',
-        status: 'pending',
-        fields: [
-          {
-            id: 'severity',
-            label: 'Severity Level',
-            type: 'select',
-            options: ['Low', 'Medium', 'High', 'Critical']
-          }
-        ]
-      },
-      {
-        id: 'step3',
-        name: 'Trigger Compliance Verification',
-        status: 'pending',
-        fields: [
-          {
-            id: 'complianceRequired',
-            label: 'Compliance Check Required',
-            type: 'checkbox'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'stage2',
-    name: 'Compliance Verification',
-    status: 'pending',
-    steps: [
-      {
-        id: 'step4',
-        name: 'Review Program Records',
-        status: 'pending',
-        fields: [
-          {
-            id: 'programId',
-            label: 'Program ID',
-            type: 'text'
-          }
-        ]
-      },
-      {
-        id: 'step5',
-        name: 'Identify Compliance Violations',
-        status: 'pending',
-        fields: [
-          {
-            id: 'violations',
-            label: 'Violations Found',
-            type: 'text'
-          }
-        ]
-      },
-      {
-        id: 'step6',
-        name: 'Approve Compliance Findings',
-        status: 'pending',
-        fields: [
-          {
-            id: 'approved',
-            label: 'Findings Approved',
-            type: 'checkbox'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'stage3',
-    name: 'Risk Assessment',
-    status: 'pending',
-    steps: [
-      {
-        id: 'step7',
-        name: 'Analyze Risk Factors',
-        status: 'pending',
-        fields: [
-          {
-            id: 'riskFactors',
-            label: 'Risk Factors',
-            type: 'text'
-          }
-        ]
-      },
-      {
-        id: 'step8',
-        name: 'Determine Investigation Needed',
-        status: 'pending',
-        fields: [
-          {
-            id: 'investigationRequired',
-            label: 'Investigation Required',
-            type: 'checkbox'
-          }
-        ]
-      },
-      {
-        id: 'step9',
-        name: 'Assign Investigation Team',
-        status: 'pending',
-        fields: [
-          {
-            id: 'teamMembers',
-            label: 'Team Members',
-            type: 'text'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'stage4',
-    name: 'Investigation',
-    status: 'pending',
-    steps: [
-      {
-        id: 'step10',
-        name: 'Gather Additional Evidence',
-        status: 'pending',
-        fields: [
-          {
-            id: 'evidence',
-            label: 'Evidence Details',
-            type: 'text'
-          }
-        ]
-      },
-      {
-        id: 'step11',
-        name: 'Approve Investigation Findings',
-        status: 'pending',
-        fields: [
-          {
-            id: 'findingsApproved',
-            label: 'Findings Approved',
-            type: 'checkbox'
-          }
-        ]
-      },
-      {
-        id: 'step12',
-        name: 'Notify Stakeholders',
-        status: 'pending',
-        fields: [
-          {
-            id: 'stakeholders',
-            label: 'Stakeholders',
-            type: 'text'
-          }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'stage5',
-    name: 'Case Closure',
-    status: 'pending',
-    steps: [
-      {
-        id: 'step13',
-        name: 'Update Case Records',
-        status: 'pending',
-        fields: [
-          {
-            id: 'resolution',
-            label: 'Resolution Details',
-            type: 'text'
-          }
-        ]
-      },
-      {
-        id: 'step14',
-        name: 'Notify Stakeholders of Resolution',
-        status: 'pending',
-        fields: [
-          {
-            id: 'notificationSent',
-            label: 'Notification Sent',
-            type: 'checkbox'
-          }
-        ]
-      },
-      {
-        id: 'step15',
-        name: 'Conduct Post-Mortem Review',
-        status: 'pending',
-        fields: [
-          {
-            id: 'lessons',
-            label: 'Lessons Learned',
-            type: 'text'
-          }
-        ]
-      }
-    ]
-  }
-];
+const SESSION_STORAGE_KEY = 'workflow_stages';
 
 export default function Home() {
-  const [stages, setStages] = useState<Stage[]>(sampleStages);
+  const [stages, setStages] = useState<Stage[]>([]);
   const [activeStage, setActiveStage] = useState<string | undefined>();
   const [activeStep, setActiveStep] = useState<string | undefined>();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      type: 'json',
-      content: {
-        message: 'Welcome! I can help you manage your workflow. Here is your current workflow:',
-        model: sampleStages,
-        visualization: {
-          totalStages: sampleStages.length,
-          stageBreakdown: sampleStages.map(stage => ({
-            name: stage.name,
-            status: stage.status,
-            stepCount: stage.steps.length
-          }))
-        }
-      },
-      sender: 'ai'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatPanelWidth, setChatPanelWidth] = useState(500);
   const [isResizing, setIsResizing] = useState(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
-    const [isModalOpen, setModalOpen] = useState(false);
-    const [fields, setFields] = useState<{ label: string; type: string }[]>([]);
+  const [isModalOpen, setModalOpen] = useState(false);
+  const [fields, setFields] = useState<{ label: string; type: string }[]>([]);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   
-    const handleAddField = (field: { label: string; type: string }) => {
-      setFields([...fields, field]);
+  // Load stages from session storage or default model
+  useEffect(() => {
+    const loadStages = () => {
+      const savedStages = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      const initialStages = savedStages ? JSON.parse(savedStages) : defaultModel.stages;
+      setStages(initialStages);
+      
+      // Set initial welcome message
+      setMessages([{
+        id: 'welcome',
+        type: 'json',
+        content: {
+          message: 'Welcome! I can help you manage your workflow. Here is your current workflow:',
+          model: initialStages,
+          visualization: {
+            totalStages: initialStages.length,
+            stageBreakdown: initialStages.map((stage: Stage) => ({
+              name: stage.name,
+              status: stage.status,
+              stepCount: stage.steps.length
+            }))
+          }
+        },
+        sender: 'ai'
+      }]);
     };
+
+    loadStages();
+  }, []);
+
+  // Save stages to session storage whenever they change
+  useEffect(() => {
+    if (stages.length > 0) {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stages));
+    }
+  }, [stages]);
+
+  const handleAddField = (field: { label: string; type: string }) => {
+    setFields([...fields, field]);
+  };
 
   const addMessage = (message: Message) => {
     setMessages(prev => [...prev, message]);
@@ -439,7 +243,7 @@ export default function Home() {
     addMessage(responseMessage);
 
     // Apply animation flags
-    const animatedStages: Stage[] = updatedStages.map(stage => {
+    const animatedStages = updatedStages.map(stage => {
       const delta = deltas.find(d => 
         (d.target.type === 'stage' && d.target.id === stage.id) ||
         (d.target.type === 'step' && (d.target.sourceStageId === stage.id || d.target.targetStageId === stage.id))
@@ -721,7 +525,85 @@ export default function Home() {
     document.body.style.userSelect = 'none';
   }, [chatPanelWidth, handleMouseMove, handleMouseUp]);
 
+  const handleClearChat = () => {
+    setMessages([]);
+    setChatHistory([]);
+  };
 
+  const handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+    if (!selectedStageId) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStageId) {
+        return {
+          ...stage,
+          steps: [
+            ...stage.steps,
+            {
+              id: uuidv4(),
+              name: stepData.name,
+              type: stepData.type,
+              status: 'pending' as const,
+              fields: []
+            }
+          ]
+        };
+      }
+      return stage;
+    });
+
+    handleStepsUpdate(updatedStages);
+    setIsAddStepModalOpen(false);
+    setSelectedStageId(null);
+  };
+
+  const handleDeleteStage = (stageId: string) => {
+    const updatedStages = stages.filter(stage => stage.id !== stageId);
+    handleStepsUpdate(updatedStages);
+  };
+
+  const handleDeleteStep = (stageId: string, stepId: string) => {
+    const updatedStages = stages.map(stage => {
+      if (stage.id === stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.filter(step => step.id !== stepId)
+        };
+      }
+      return stage;
+    });
+    handleStepsUpdate(updatedStages);
+  };
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = (result: DropResult) => {
+    setIsDragging(false);
+
+    if (!result.destination) {
+      return;
+    }
+
+    const sourceStageId = result.source.droppableId;
+    const destinationStageId = result.destination.droppableId;
+    const sourceIndex = result.source.index;
+    const destinationIndex = result.destination.index;
+
+    const updatedStages = [...stages];
+    const sourceStage = updatedStages.find(s => s.id === sourceStageId);
+    const destinationStage = updatedStages.find(s => s.id === destinationStageId);
+
+    if (!sourceStage || !destinationStage) {
+      return;
+    }
+
+    const [movedStep] = sourceStage.steps.splice(sourceIndex, 1);
+    destinationStage.steps.splice(destinationIndex, 0, movedStep);
+
+    handleStepsUpdate(updatedStages);
+  };
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
@@ -734,23 +616,11 @@ export default function Home() {
             activeStage={activeStage}
             activeStep={activeStep}
             onStepsUpdate={handleStepsUpdate}
+            onDeleteStage={handleDeleteStage}
+            onDeleteStep={handleDeleteStep}
           />
         </main>
-        {activeStep && (
-          <div className="h-1/3 border-t dark:border-gray-700 p-4 overflow-auto">
-            <h2 className="text-lg font-semibold mb-4">Step Configuration</h2>
-            <button onClick={() => setModalOpen(true)}>Add Field</button>
-      <AddFieldModal
-        isOpen={isModalOpen}
-        onClose={() => setModalOpen(false)}
-        onAddField={handleAddField}
-      />
-            <StepForm
-              fields={getActiveStepFields()}
-              onFieldChange={handleFieldChange}
-            />
-          </div>
-        )}
+        
       </div>
 
       {/* Resize Handle */}
@@ -774,13 +644,11 @@ export default function Home() {
           maxWidth: '800px'
         }}
       >
-        <div className="p-2 border-b dark:border-gray-700">
-          <h2 className="text-lg font-semibold">AI Assistant</h2>
-        </div>
         <div className="flex-1 overflow-hidden">
           <ChatInterface
-            onSendMessage={handleChatMessage}
             messages={messages}
+            onSendMessage={handleChatMessage}
+            onClear={handleClearChat}
           />
         </div>
       </div>
