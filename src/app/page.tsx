@@ -6,6 +6,7 @@ import { ChatInterface } from './components/ChatInterface';
 import { StepForm } from './components/StepForm';
 import { OllamaService, ChatRole } from './services/ollama';
 import { Stage, Message } from './types';
+import AddFieldModal from './components/AddFieldModal';
 
 interface ChatMessage {
   role: ChatRole;
@@ -285,6 +286,12 @@ export default function Home() {
   const [isResizing, setIsResizing] = useState(false);
   const startX = useRef(0);
   const startWidth = useRef(0);
+    const [isModalOpen, setModalOpen] = useState(false);
+    const [fields, setFields] = useState<{ label: string; type: string }[]>([]);
+  
+    const handleAddField = (field: { label: string; type: string }) => {
+      setFields([...fields, field]);
+    };
 
   const addMessage = (message: Message) => {
     setMessages(prev => [...prev, message]);
@@ -732,6 +739,12 @@ export default function Home() {
         {activeStep && (
           <div className="h-1/3 border-t dark:border-gray-700 p-4 overflow-auto">
             <h2 className="text-lg font-semibold mb-4">Step Configuration</h2>
+            <button onClick={() => setModalOpen(true)}>Add Field</button>
+      <AddFieldModal
+        isOpen={isModalOpen}
+        onClose={() => setModalOpen(false)}
+        onAddField={handleAddField}
+      />
             <StepForm
               fields={getActiveStepFields()}
               onFieldChange={handleFieldChange}
