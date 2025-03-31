@@ -3,6 +3,20 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+  --chevron-width: 32px;
+  --stage-height: 64px;
+  --stage-min-width: 200px;
+  --animation-duration: 500ms;
+  
+  /* Stage Colors */
+  --stage-intake: #0D47A1;
+  --stage-compliance: #1976D2;
+  --stage-risk: #1E88E5;
+  --stage-investigation: #2196F3;
+  --stage-closure: #2E7D32;
 }
 
 @theme inline {
@@ -16,6 +30,9 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
   }
 }
 
@@ -23,4 +40,196 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.clip-path-chevron {
+  position: relative;
+  margin-right: calc(var(--chevron-width) * -1);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chevron-width)) 0,
+    100% 50%,
+    calc(100% - var(--chevron-width)) 100%,
+    0 100%,
+    var(--chevron-width) 50%
+  );
+}
+
+.clip-path-chevron::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  bottom: 2px;
+  left: 2px;
+  background: inherit;
+  opacity: 0.7;
+  clip-path: inherit;
+}
+
+.clip-path-chevron:first-child {
+  margin-left: 0;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--chevron-width)) 0,
+    100% 50%,
+    calc(100% - var(--chevron-width)) 100%,
+    0 100%
+  );
+}
+
+.clip-path-chevron:last-child {
+  margin-right: 0;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    var(--chevron-width) 50%
+  );
+}
+
+/* Stage-specific styles */
+.stage-completed {
+  background: var(--stage-closure);
+  box-shadow: 0 4px 6px -1px rgba(46, 125, 50, 0.1), 0 2px 4px -1px rgba(46, 125, 50, 0.06);
+}
+
+.stage-active {
+  background: var(--stage-intake);
+  box-shadow: 0 4px 6px -1px rgba(13, 71, 161, 0.1), 0 2px 4px -1px rgba(13, 71, 161, 0.06);
+}
+
+.stage-pending {
+  background: var(--stage-compliance);
+  box-shadow: 0 4px 6px -1px rgba(25, 118, 210, 0.1), 0 2px 4px -1px rgba(25, 118, 210, 0.06);
+}
+
+/* Stage position-specific colors */
+.stage-1 { background: var(--stage-intake); }
+.stage-2 { background: var(--stage-compliance); }
+.stage-3 { background: var(--stage-risk); }
+.stage-4 { background: var(--stage-investigation); }
+.stage-5 { background: var(--stage-closure); }
+
+/* Animation keyframes */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes moveUp {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes moveDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn var(--animation-duration) ease-out forwards;
+}
+
+.animate-slide-out {
+  animation: slideOut var(--animation-duration) ease-in forwards;
+}
+
+.animate-move-up {
+  animation: moveUp var(--animation-duration) ease-in-out forwards;
+}
+
+.animate-move-down {
+  animation: moveDown var(--animation-duration) ease-in-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn var(--animation-duration) ease-out forwards;
+}
+
+.animate-fade-out {
+  animation: fadeOut var(--animation-duration) ease-in forwards;
+}
+
+.workflow-container {
+  padding: 2rem;
+  background: linear-gradient(to bottom, rgba(249, 250, 251, 0.8), rgba(249, 250, 251, 0.4));
+  backdrop-filter: blur(8px);
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.dark .workflow-container {
+  background: linear-gradient(to bottom, rgba(17, 24, 39, 0.8), rgba(17, 24, 39, 0.4));
+}
+
+.resize-handle {
+  width: 4px;
+  background: transparent;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+  margin: 0 -2px;
+  z-index: 10;
+}
+
+.resize-handle:hover,
+.resize-handle.resizing {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+.resize-handle::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  width: 12px;
+  height: 100%;
+  cursor: col-resize;
 }
