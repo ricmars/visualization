@@ -2,13 +2,14 @@ export interface Field {
   id: string;
   label: string;
   type: 'text' | 'number' | 'select' | 'checkbox';
-  value?: any;
+  value?: string | number | boolean | null;
   options?: string[];
 }
 
 export interface Step {
   id: string;
   name: string;
+  isNew?: boolean;
   status: 'pending' | 'active' | 'completed';
   fields: Array<Field>;
 }
@@ -27,7 +28,7 @@ export interface Stage {
 export interface Message {
   id: string;
   type: 'text' | 'json';
-  content: string | any;
+  content: string | Record<string, unknown>;
   sender: 'user' | 'ai';
 }
 
@@ -43,7 +44,7 @@ export interface WorkflowDelta {
     targetIndex?: number;
   };
   changes: {
-    before?: any;
-    after?: any;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
   };
 } 

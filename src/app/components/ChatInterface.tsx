@@ -32,7 +32,17 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
     }
   };
 
-  const formatDelta = (delta: any) => {
+  interface Delta {
+    type: 'add' | 'delete' | 'move' | 'update';
+    target: {
+      type: string;
+      name: string;
+      sourceStageId?: number;
+      targetStageId?: number;
+    };
+  }
+
+  const formatDelta = (delta: Delta) => {
     switch (delta.type) {
       case 'add':
         return `Added ${delta.target.type} "${delta.target.name}"`;
@@ -66,7 +76,7 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
             <div className="space-y-2">
               <h4 className="font-medium text-gray-900 dark:text-gray-100">Changes:</h4>
               <ul className="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300">
-                {content.action.changes.map((delta: any, index: number) => (
+                {content.action.changes.map((delta: Delta, index: number) => (
                   <li key={index} className="ml-4">
                     {formatDelta(delta)}
                   </li>
@@ -83,7 +93,7 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
                   Total Stages: {content.visualization.totalStages}
                 </p>
                 <div className="mt-2 space-y-2">
-                  {content.visualization.stageBreakdown.map((stage: any, index: number) => (
+                  {content.visualization.stageBreakdown.map((stage: { name: string; status: string; stepCount: number; steps?: { name: string; status: string }[] }, index: number) => (
                     <div key={index} className="pl-4 border-l-2 border-gray-200 dark:border-gray-700">
                       <p className="font-medium text-gray-800 dark:text-gray-200">
                         {stage.name} ({stage.status})
@@ -93,7 +103,7 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
                       </p>
                       {stage.steps && (
                         <ul className="mt-1 pl-4 text-sm text-gray-600 dark:text-gray-400">
-                          {stage.steps.map((step: any, stepIndex: number) => (
+                          {stage.steps.map((step: { name: string; status: string }, stepIndex: number) => (
                             <li key={stepIndex}>
                               • {step.name} ({step.status})
                             </li>
@@ -121,13 +131,17 @@ export function ChatInterface({ messages, onSendMessage }: ChatInterfaceProps) {
       );
     }
 
-    return <p className={`${message.sender === 'ai' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400'}`}>{message.content}</p>;
+    return (
+      <p className={`${message.sender === 'ai' ? 'text-gray-700 dark:text-gray-300' : 'text-blue-600 dark:text-blue-400'}`}>
+        {typeof message.content === 'string' ? message.content : '[Invalid content]'}
+      </p>
+    );
   };
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto" ref={chatContainerRef}>
-        {messages.map((message, index) => (
+        {messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}

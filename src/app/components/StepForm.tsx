@@ -4,13 +4,13 @@ interface Field {
   id: string;
   label: string;
   type: 'text' | 'number' | 'select' | 'checkbox';
-  value?: any;
+  value?: string | number | boolean;
   options?: string[];
 }
 
 interface StepFormProps {
   fields: Field[];
-  onFieldChange: (fieldId: string, value: any) => void;
+  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
 }
 
 export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => {
@@ -20,7 +20,7 @@ export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => 
         return (
           <input
             type="text"
-            value={field.value || ''}
+            value={typeof field.value === 'boolean' ? '' : field.value || ''}
             onChange={(e) => onFieldChange(field.id, e.target.value)}
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
           />
@@ -29,7 +29,7 @@ export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => 
         return (
           <input
             type="number"
-            value={field.value || ''}
+            value={typeof field.value === 'string' || typeof field.value === 'number' ? field.value : ''}
             onChange={(e) => onFieldChange(field.id, e.target.valueAsNumber)}
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
           />
@@ -37,7 +37,7 @@ export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => 
       case 'select':
         return (
           <select
-            value={field.value || ''}
+            value={typeof field.value === 'string' || typeof field.value === 'number' ? field.value : ''}
             onChange={(e) => onFieldChange(field.id, e.target.value)}
             className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
           >
@@ -53,7 +53,7 @@ export const StepForm: React.FC<StepFormProps> = ({ fields, onFieldChange }) => 
         return (
           <input
             type="checkbox"
-            checked={field.value || false}
+            checked={!!field.value}
             onChange={(e) => onFieldChange(field.id, e.target.checked)}
             className="w-5 h-5 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
           />

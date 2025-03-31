@@ -1,31 +1,23 @@
 import React, { useState } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
-import { Stage, Step } from '../types';
-
-interface Field {
-  id: string;
-  label: string;
-  type: string;
-  value?: any;
-  options?: string[];
-}
+import { DragDropContext, Droppable, Draggable, DropResult } from  '@hello-pangea/dnd'
+import { Stage } from '../types';
 
 interface WorkflowDiagramProps {
   stages: Stage[];
   onStepSelect: (stageId: string, stepId: string) => void;
   activeStage?: string;
   activeStep?: string;
-  onStepsUpdate: (stages: Stage[]) => void;
+  onStepsUpdate: (updatedStages: Stage[]) => void;
 }
 
-export function WorkflowDiagram({ 
-  stages, 
-  onStepSelect, 
-  activeStage, 
+export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
+  stages,
+  onStepSelect,
+  activeStage,
   activeStep,
-  onStepsUpdate 
-}: WorkflowDiagramProps) {
-  const [isDragging, setIsDragging] = useState(false);
+  onStepsUpdate
+}) => {
+  const [, setIsDragging] = useState(false);
 
   const getStageClass = (stage: Stage, index: number) => {
     const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500';
@@ -201,4 +193,4 @@ export function WorkflowDiagram({
       </div>
     </div>
   );
-} 
+};

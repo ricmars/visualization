@@ -5,8 +5,7 @@ import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
 import { StepForm } from './components/StepForm';
 import { OllamaService, ChatRole } from './services/ollama';
-import { Stage, Step, Message } from './types';
-import { workflowSchema } from './types/schema';
+import { Stage, Message } from './types';
 
 interface ChatMessage {
   role: ChatRole;
@@ -25,36 +24,13 @@ interface WorkflowDelta {
     targetIndex?: number;
   };
   changes: {
-    before?: any;
-    after?: any;
+    before?: Stage | Stage['steps'][number];
+    after?: Partial<Stage | Stage['steps'][number]>;
   };
 }
 
 interface OllamaResponse {
   content: string;
-}
-
-interface WorkflowResponse {
-  stages: Array<{
-    id: string;
-    name: string;
-    status: 'pending' | 'active' | 'completed';
-    steps: Array<{
-      id: string;
-      name: string;
-      status: 'pending' | 'active' | 'completed';
-      fields: Array<{
-        id: string;
-        label: string;
-        type: string;
-        options?: string[];
-      }>;
-    }>;
-    isNew?: boolean;
-    isMoving?: boolean;
-    isDeleting?: boolean;
-    moveDirection?: 'up' | 'down';
-  }>;
 }
 
 const sampleStages: Stage[] = [
@@ -361,7 +337,6 @@ export default function Home() {
       if (!newStage) return;
 
       // Compare steps
-      const oldStepIds = new Set(oldStage.steps.map(s => s.id));
       const newStepIds = new Set(newStage.steps.map(s => s.id));
 
       // Check for moved steps
@@ -380,8 +355,8 @@ export default function Home() {
               targetIndex: newStepIndex
             },
             changes: {
-              before: { stageId: oldStage.id, index: oldIndex },
-              after: { stageId: newStage.id, index: newStepIndex }
+              before: oldStage.steps[oldIndex],
+              after: { ...newStage.steps[newStepIndex] }
             }
           });
         }
@@ -408,8 +383,8 @@ export default function Home() {
                 targetIndex: newIndex
               },
               changes: {
-                before: { stageId: oldStage.id },
-                after: { stageId: targetStage.id }
+                before: oldStep,
+                after: { id: targetStage.id }
               }
             });
           }
@@ -509,7 +484,7 @@ export default function Home() {
     setActiveStep(stepId);
   };
 
-  const handleFieldChange = (fieldId: string, value: any) => {
+  const handleFieldChange = (fieldId: string, value: string | number | boolean | undefined) => {
     setStages(prevStages => {
       return prevStages.map(stage => ({
         ...stage,
@@ -618,7 +593,7 @@ export default function Home() {
             throw new Error(`Invalid stage format at index ${index}`);
           }
           
-          stage.steps.forEach((step: any, stepIndex: number) => {
+          stage.steps.forEach((step: Stage['steps'][number], stepIndex: number) => {
             if (!step.id || !step.name || !step.status || !Array.isArray(step.fields)) {
               throw new Error(`Invalid step format at stage ${index}, step ${stepIndex}`);
             }
@@ -630,11 +605,11 @@ export default function Home() {
           id: stage.id,
           name: stage.name,
           status: stage.status as 'pending' | 'active' | 'completed',
-          steps: stage.steps.map((step: any) => ({
+          steps: stage.steps.map((step: Stage['steps'][number]) => ({
             id: step.id,
             name: step.name,
             status: step.status as 'pending' | 'active' | 'completed',
-            fields: Array.isArray(step.fields) ? step.fields.map((field: any) => ({
+            fields: Array.isArray(step.fields) ? step.fields.map((field: { id: string; label: string; type: 'number' | 'text' | 'select' | 'checkbox'; options?: string[] }) => ({
               id: field.id,
               label: field.label,
               type: field.type as 'number' | 'text' | 'select' | 'checkbox',
@@ -681,16 +656,15 @@ export default function Home() {
           sender: 'ai'
         };
         addMessage(responseMessage);
-      } catch (error: any) {
-        console.error('Error parsing LLM response:', error);
-        // Add error message if response parsing fails
-        const errorMessage: Message = {
-          id: Date.now().toString(),
-          type: 'text',
-          content: `Sorry, I was unable to update the workflow. The response was not in the expected format. Error: ${error.message}`,
-          sender: 'ai'
-        };
-        addMessage(errorMessage);
+      } catch (error: unknown) {
+          console.error('Error parsing LLM response:', error);
+           const errorMessage: Message = {
+            id: Date.now().toString(),
+            type: 'text',
+            content: 'Sorry, there was an error processing your request. Please try again.',
+            sender: 'ai'
+          };
+          addMessage(errorMessage);
       }
     } catch (error) {
       console.error('Error handling chat message:', error);
@@ -709,7 +683,8 @@ export default function Home() {
     const step = stage?.steps.find(s => s.id === activeStep);
     return (step?.fields || []).map(field => ({
       ...field,
-      type: field.type as 'number' | 'text' | 'select' | 'checkbox'
+      type: field.type as 'number' | 'text' | 'select' | 'checkbox',
+      value: field.value ?? undefined // Ensure null is replaced with undefined
     }));
   };
 
@@ -720,6 +695,14 @@ export default function Home() {
     setChatPanelWidth(newWidth);
   }, [isResizing]);
 
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+    window.removeEventListener('mousemove', handleMouseMove);
+    window.removeEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, [handleMouseMove]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
@@ -729,15 +712,9 @@ export default function Home() {
     window.addEventListener('mouseup', handleMouseUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
-  }, [chatPanelWidth]);
+  }, [chatPanelWidth, handleMouseMove, handleMouseUp]);
 
-  const handleMouseUp = useCallback(() => {
-    setIsResizing(false);
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }, [handleMouseMove]);
+
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
