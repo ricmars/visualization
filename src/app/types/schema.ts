@@ -1,6 +1,25 @@
 export const workflowSchema = {
   type: 'object',
   properties: {
+    fields: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id', 'label', 'type'],
+        properties: {
+          id: { type: 'string' },
+          label: { type: 'string' },
+          type: { 
+            type: 'string',
+            enum: ['text', 'select', 'checkbox', 'email', 'textarea', 'number']
+          },
+          options: {
+            type: 'array',
+            items: { type: 'string' }
+          }
+        }
+      }
+    },
     stages: {
       type: 'array',
       items: {
@@ -21,26 +40,13 @@ export const workflowSchema = {
               properties: {
                 id: { type: 'string' },
                 name: { type: 'string' },
-                status: {
-                  type: 'string',
-                  enum: ['pending', 'active', 'completed']
-                },
                 fields: {
                   type: 'array',
                   items: {
                     type: 'object',
-                    required: ['id', 'label', 'type'],
+                    required: ['id', 'value'],
                     properties: {
-                      id: { type: 'string' },
-                      label: { type: 'string' },
-                      type: { 
-                        type: 'string',
-                        enum: ['text', 'select', 'checkbox']
-                      },
-                      options: {
-                        type: 'array',
-                        items: { type: 'string' }
-                      }
+                      id: { type: 'string' }
                     }
                   }
                 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, MutableRefObject } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StepForm from './StepForm';
-import { Field } from '../types';
+import { Field, FieldValue } from '../types';
 import { FaPencilAlt } from 'react-icons/fa';
 import AddFieldModal from './AddFieldModal';
 import Tooltip from './Tooltip';
@@ -10,14 +10,17 @@ import type { DropResult } from '@hello-pangea/dnd';
 interface StepConfigurationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  step: {
+    id: string;
+    name: string;
+    type: string;
+    fields: FieldValue[];
+  };
   fields: Field[];
-  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
-  onAddField: (field: { label: string; type: string }) => void;
-  stepName: string;
-  stepType: string;
-  onUpdateField?: (fieldId: string, updates: Partial<Field>) => void;
-  onDeleteField?: (fieldId: string) => void;
-  onReorderFields?: (fields: Field[]) => void;
+  onAddField: (field: { label: string; type: Field['type']; options?: string[] }) => string;
+  onUpdateField?: (updates: Partial<Field>) => void;
+  onDeleteField: (fieldId: string) => void;
+  onFieldsReorder?: (stepId: string, fieldIds: string[]) => void;
 }
 
 const FIELD_TYPES = ['text', 'number', 'select', 'checkbox', 'email', 'textarea'] as const;
@@ -26,26 +29,29 @@ type FieldType = typeof FIELD_TYPES[number];
 const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   isOpen,
   onClose,
+  step,
   fields,
-  onFieldChange,
   onAddField,
-  stepName,
-  stepType,
   onUpdateField,
   onDeleteField,
-  onReorderFields
+  onFieldsReorder
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null) as MutableRefObject<HTMLInputElement>;
   const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
+  const [editingFieldType, setEditingFieldType] = useState<Field['type']>('text');
+
+  // Filter fields to only show those associated with this step
+  const stepFieldIds = step.fields.map(f => f.id);
+  const filteredFields = fields.filter(field => stepFieldIds.includes(field.id));
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       setTimeout(() => {
-        if (fields.length > 0) {
+        if (filteredFields.length > 0) {
           firstFieldRef.current?.focus();
         } else {
           modalRef.current?.focus();
@@ -58,7 +64,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, fields.length]);
+  }, [isOpen, filteredFields.length]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -70,30 +76,34 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     }
   };
 
-  const handleAddFieldSubmit = (field: { label: string; type: string }) => {
+  const handleAddFieldSubmit = (field: { label: string; type: Field['type'] }) => {
     onAddField(field);
     setIsAddFieldOpen(false);
   };
 
   const handleEditField = (field: Field) => {
     setEditingField(field);
+    setEditingFieldType(field.type);
   };
 
-  const handleUpdateField = (updates: Partial<Field>) => {
+  const handleEditSubmit = (updates: { label: string; type: Field['type']; options?: string[] }) => {
     if (editingField && onUpdateField) {
-      onUpdateField(editingField.id, updates);
+      onUpdateField({
+        id: editingField.id,
+        ...updates
+      });
       setEditingField(null);
     }
   };
 
   const handleReorderFields = (startIndex: number, endIndex: number) => {
-    if (!onReorderFields) return;
+    if (!onFieldsReorder || !step) return;
     
-    const reorderedFields = Array.from(fields);
+    const reorderedFields = Array.from(filteredFields);
     const [removed] = reorderedFields.splice(startIndex, 1);
     reorderedFields.splice(endIndex, 0, removed);
     
-    onReorderFields(reorderedFields);
+    onFieldsReorder(step.id, reorderedFields.map(field => field.id));
   };
 
   return (
@@ -118,11 +128,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-                    Configure Step: {stepName}
+                    Configure Step: {step.name}
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  {stepType === 'Collect information' && (
+                  {step.type === 'Collect information' && (
                     <Tooltip content="Add new field">
                       <motion.button
                         ref={addFieldButtonRef}
@@ -154,7 +164,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
               </div>
 
               <div className="mt-4 max-h-[calc(100vh-14rem)] overflow-y-auto">
-                {stepType !== 'Collect information' ? (
+                {step.type !== 'Collect information' ? (
                   <div className="text-center py-8">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       This step type does not support custom fields.
@@ -163,7 +173,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                       Only steps of type "Collect information" can have fields.
                     </p>
                   </div>
-                ) : fields.length === 0 ? (
+                ) : filteredFields.length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       No fields added yet. Click "Add Field" to get started.
@@ -172,8 +182,10 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                 ) : (
                   <div className="relative">
                     <StepForm
-                      fields={fields}
-                      onFieldChange={onFieldChange}
+                      fields={filteredFields}
+                      onFieldChange={(id, value) => {
+                        // Implementation of onFieldChange
+                      }}
                       onDeleteField={onDeleteField}
                       onEditField={handleEditField}
                       onReorderFields={handleReorderFields}
@@ -217,20 +229,24 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                     />
                   </div>
-                  <div>
+                  <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Type
+                      Field Type
                     </label>
                     <select
-                      value={editingField.type}
-                      onChange={(e) => setEditingField({ ...editingField, type: e.target.value as FieldType })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                      value={editingFieldType}
+                      onChange={(e) => {
+                        const newType = e.target.value as Field['type'];
+                        setEditingFieldType(newType);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                     >
-                      {FIELD_TYPES.map(type => (
-                        <option key={type} value={type}>
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </option>
-                      ))}
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="select">Select</option>
+                      <option value="checkbox">Checkbox</option>
+                      <option value="email">Email</option>
+                      <option value="textarea">Textarea</option>
                     </select>
                   </div>
                   <div className="flex items-center gap-2">
@@ -256,12 +272,15 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                     </Tooltip>
                     <Tooltip content="Save field changes">
                       <button
-                        onClick={() => handleUpdateField({
-                          label: editingField.label,
-                          type: editingField.type,
-                          required: editingField.required
-                        })}
-                        className="px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
+                        onClick={() => {
+                          if (editingField) {
+                            handleEditSubmit({
+                              label: editingField.label,
+                              type: editingFieldType
+                            });
+                          }
+                        }}
+                        className="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                       >
                         Save Changes
                       </button>

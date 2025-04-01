@@ -1,18 +1,19 @@
 export interface Field {
   id: string;
   label: string;
-  type: 'number' | 'text' | 'select' | 'checkbox' | 'email' | 'textarea';
+  type: 'text' | 'select' | 'checkbox' | 'email' | 'textarea' | 'number';
   options?: string[];
-  value?: string | number | boolean;
-  required?: boolean;
+}
+
+export interface FieldValue {
+  id: string;
 }
 
 export interface Step {
   id: string;
   name: string;
-  type?: string;
-  fields: Field[];
-  isNew?: boolean;
+  type: string;
+  fields: FieldValue[];
 }
 
 export interface Stage {
@@ -20,8 +21,8 @@ export interface Stage {
   name: string;
   steps: Step[];
   isNew?: boolean;
-  isDeleting?: boolean;
   isMoving?: boolean;
+  isDeleting?: boolean;
   moveDirection?: 'up' | 'down';
 }
 

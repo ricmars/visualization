@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Stage, Step, Field } from '../types';
+import { Stage, Step, Field, FieldValue } from '../types';
 import AddStepModal from './AddStepModal';
 import EditModal from './EditModal';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,22 +13,30 @@ import StepConfigurationModal from './StepConfigurationModal';
 
 interface WorkflowDiagramProps {
   stages: Stage[];
+  fields: Field[];
   onStepSelect: (stageId: string, stepId: string) => void;
   activeStage?: string;
   activeStep?: string;
   onStepsUpdate: (updatedStages: Stage[]) => void;
   onDeleteStage?: (stageId: string) => void;
   onDeleteStep?: (stageId: string, stepId: string) => void;
+  onAddField: (field: { label: string; type: Field['type']; options?: string[] }) => string;
+  onUpdateField: (updates: Partial<Field>) => void;
+  onDeleteField: (fieldId: string) => void;
 }
 
 export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   stages,
+  fields,
   onStepSelect,
   activeStage,
   activeStep,
   onStepsUpdate,
   onDeleteStage,
-  onDeleteStep
+  onDeleteStep,
+  onAddField,
+  onUpdateField,
+  onDeleteField
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
@@ -46,7 +54,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     stageId: string;
     stepId: string;
     name: string;
-    fields: Field[];
+    fields: FieldValue[];
     type: string;
   } | null>(null);
 
@@ -217,7 +225,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
           ...stage,
           steps: stage.steps.map(step => 
             step.id === editItem.id
-              ? { ...step, name: data.name, type: data.type || step.type || 'Automation' }
+              ? { ...step, name: data.name, type: data.type || step.type }
               : step
           )
         };
@@ -243,7 +251,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
         stepId,
         name: step.name,
         fields: step.fields,
-        type: step.type || 'Automation'
+        type: step.type
       });
       setIsConfigModalOpen(true);
     }
@@ -251,7 +259,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepSelect(stageId, stepId);
   };
 
-  const handleFieldChange = (fieldId: string, value: string | number | boolean) => {
+  const handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
     if (!selectedStep) return;
 
     const updatedStages = stages.map(stage => {
@@ -274,20 +282,15 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return stage;
     });
 
-    // Save to session storage
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
     onStepsUpdate(updatedStages);
   };
 
-  const handleAddField = (fieldData: { label: string; type: string }) => {
+  const handleAddFieldToStep = (fieldData: { label: string; type: Field['type']; options?: string[] }) => {
     if (!selectedStep) return;
 
-    const newField: Field = {
-      id: uuidv4(),
-      label: fieldData.label,
-      type: fieldData.type as 'text' | 'number' | 'select' | 'checkbox' | 'email' | 'textarea',
-      value: '',
-      required: false
+    const fieldId = onAddField(fieldData);
+    const fieldValue: FieldValue = {
+      id: fieldId,
     };
 
     const updatedStages = stages.map(stage => {
@@ -298,7 +301,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             if (step.id === selectedStep.stepId) {
               return {
                 ...step,
-                fields: [...step.fields, newField]
+                fields: [...step.fields, fieldValue]
               };
             }
             return step;
@@ -308,92 +311,18 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return stage;
     });
 
-    // Update the selected step's fields to trigger a re-render
-    setSelectedStep(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        fields: [...prev.fields, newField]
-      };
-    });
-
-    // Save to session storage and update the stages
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    // Update the stages
     onStepsUpdate(updatedStages);
-  };
 
-  const handleUpdateField = (fieldId: string, updates: Partial<Field>) => {
-    if (!selectedStep) return;
-
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStep.stageId) {
-        return {
-          ...stage,
-          steps: stage.steps.map(step => {
-            if (step.id === selectedStep.stepId) {
-              return {
-                ...step,
-                fields: step.fields.map(field => 
-                  field.id === fieldId ? { ...field, ...updates } : field
-                )
-              };
-            }
-            return step;
-          })
-        };
-      }
-      return stage;
-    });
-
-    // Update the selected step's fields to trigger a re-render
-    setSelectedStep(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        fields: prev.fields.map(field => 
-          field.id === fieldId ? { ...field, ...updates } : field
-        )
-      };
-    });
-
-    // Save to session storage and update the stages
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
-    onStepsUpdate(updatedStages);
-  };
-
-  const handleDeleteField = (fieldId: string) => {
-    if (!selectedStep) return;
-
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStep.stageId) {
-        return {
-          ...stage,
-          steps: stage.steps.map(step => {
-            if (step.id === selectedStep.stepId) {
-              return {
-                ...step,
-                fields: step.fields.filter(field => field.id !== fieldId)
-              };
-            }
-            return step;
-          })
-        };
-      }
-      return stage;
-    });
-
-    // Update the selected step's fields to trigger a re-render
-    setSelectedStep(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        fields: prev.fields.filter(field => field.id !== fieldId)
-      };
-    });
-
-    // Save to session storage and update the stages
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
-    onStepsUpdate(updatedStages);
+    // Update the selectedStep state to reflect the new field
+    const updatedStage = updatedStages.find(s => s.id === selectedStep.stageId);
+    const updatedStep = updatedStage?.steps.find(s => s.id === selectedStep.stepId);
+    if (updatedStep) {
+      setSelectedStep({
+        ...selectedStep,
+        fields: updatedStep.fields
+      });
+    }
   };
 
   return (
@@ -566,13 +495,14 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
               setIsConfigModalOpen(false);
               setSelectedStep(null);
             }}
-            fields={selectedStep.fields}
+            fields={fields}
+            stepFields={selectedStep.fields}
             onFieldChange={handleFieldChange}
-            onAddField={handleAddField}
+            onAddField={handleAddFieldToStep}
             stepName={selectedStep.name}
             stepType={selectedStep.type}
-            onUpdateField={handleUpdateField}
-            onDeleteField={handleDeleteField}
+            onUpdateField={onUpdateField}
+            onDeleteField={onDeleteField}
           />
         )}
       </div>

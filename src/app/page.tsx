@@ -5,7 +5,7 @@ import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
 import StepForm from './components/StepForm';
 import { OllamaService, ChatRole } from './services/ollama';
-import { Stage, Message, Delta } from './types';
+import { Stage, Message, Delta, Field } from './types';
 import AddFieldModal from './components/AddFieldModal';
 import { motion } from 'framer-motion';
 import defaultModel from './model.json';
@@ -13,6 +13,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import AddStageModal from './components/AddStageModal';
+import { FaPencilAlt, FaTrash } from 'react-icons/fa';
+import EditFieldModal from './components/EditFieldModal';
 
 interface ChatMessage {
   role: ChatRole;
@@ -55,19 +57,28 @@ export default function Home() {
   const startX = useRef(0);
   const startWidth = useRef(0);
   const [isModalOpen, setModalOpen] = useState(false);
-  const [fields, setFields] = useState<{ label: string; type: string }[]>([]);
+  const [fields, setFields] = useState<Field[]>(() => {
+    const savedFields = sessionStorage.getItem('workflow_fields');
+    return savedFields ? JSON.parse(savedFields) : [];
+  });
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux'>('workflow');
+  const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux' | 'fields'>('workflow');
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
+  const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
+  const [editingField, setEditingField] = useState<Field | null>(null);
   
-  // Load stages from session storage or default model
+  // Load stages and fields from session storage or default model
   useEffect(() => {
-    const loadStages = () => {
+    const loadData = () => {
       const savedStages = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      const savedFields = sessionStorage.getItem('workflow_fields');
       const initialStages = savedStages ? JSON.parse(savedStages) : defaultModel.stages;
+      const initialFields = savedFields ? JSON.parse(savedFields) : defaultModel.fields || [];
+      
       setStages(initialStages);
+      setFields(initialFields);
       
       // Set initial welcome message
       setMessages([{
@@ -75,7 +86,10 @@ export default function Home() {
         type: 'json',
         content: {
           message: 'Welcome! I can help you manage your workflow. Here is your current workflow:',
-          model: initialStages,
+          model: {
+            stages: initialStages,
+            fields: initialFields
+          },
           visualization: {
             totalStages: initialStages.length,
             stageBreakdown: initialStages.map((stage: Stage) => ({
@@ -88,7 +102,7 @@ export default function Home() {
       }]);
     };
 
-    loadStages();
+    loadData();
   }, []);
 
   // Save stages to session storage whenever they change
@@ -98,8 +112,56 @@ export default function Home() {
     }
   }, [stages]);
 
-  const handleAddField = (field: { label: string; type: string }) => {
-    setFields([...fields, field]);
+  const handleAddField = (fieldData: { label: string; type: Field['type']; options?: string[] }) => {
+    const newField: Field = {
+      id: uuidv4(),
+      label: fieldData.label,
+      type: fieldData.type,
+      ...(fieldData.options && { options: fieldData.options })
+    };
+
+    setFields(prevFields => {
+      const updatedFields = [...prevFields, newField];
+      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
+      return updatedFields;
+    });
+
+    return newField.id;
+  };
+
+  const handleUpdateField = (updates: Partial<Field>) => {
+    if (!editingField) return;
+
+    setFields(prevFields => {
+      const updatedFields = prevFields.map(field => 
+        field.id === editingField.id ? { ...field, ...updates } : field
+      );
+      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
+      return updatedFields;
+    });
+
+    setEditingField(null);
+  };
+
+  const handleDeleteField = (fieldId: string) => {
+    setFields(prevFields => {
+      const updatedFields = prevFields.filter(field => field.id !== fieldId);
+      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
+      return updatedFields;
+    });
+
+    // Remove references to this field from all steps
+    setStages(prevStages => {
+      const updatedStages = prevStages.map(stage => ({
+        ...stage,
+        steps: stage.steps.map(step => ({
+          ...step,
+          fields: step.fields.filter(f => f.id !== fieldId)
+        }))
+      }));
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      return updatedStages;
+    });
   };
 
   const addMessage = (message: Message) => {
@@ -315,9 +377,9 @@ export default function Home() {
     setActiveStep(stepId);
   };
 
-  const handleFieldChange = (fieldId: string, value: string | number | boolean | undefined) => {
+  const handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
     setStages(prevStages => {
-      return prevStages.map(stage => ({
+      const updatedStages = prevStages.map(stage => ({
         ...stage,
         steps: stage.steps.map(step => ({
           ...step,
@@ -326,6 +388,8 @@ export default function Home() {
           )
         }))
       }));
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      return updatedStages;
     });
   };
 
@@ -419,8 +483,6 @@ export default function Home() {
     const step = stage?.steps.find(s => s.id === activeStep);
     return (step?.fields || []).map(field => ({
       ...field,
-      type: field.type,
-      value: field.value ?? undefined // Ensure null is replaced with undefined
     }));
   };
 
@@ -534,11 +596,23 @@ export default function Home() {
     const newStage: Stage = {
       id: uuidv4(),
       name: stageData.name,
-      steps: []
+      steps: [],
+      isNew: true
     };
 
-    const updatedStages = [...stages, newStage];
-    handleStepsUpdate(updatedStages);
+    setStages(prevStages => {
+      const updatedStages = [...prevStages, newStage];
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      return updatedStages;
+    });
+    setIsAddStageModalOpen(false);
+  };
+
+  const handleEditField = (fieldId: string) => {
+    const field = fields.find(f => f.id === fieldId);
+    if (field) {
+      setEditingField(field);
+    }
   };
 
   return (
@@ -590,6 +664,7 @@ export default function Home() {
           >
             UX
           </button>
+         
         </div>
         
         {/* Tab Content */}
@@ -607,12 +682,16 @@ export default function Home() {
               </div>
               <WorkflowDiagram
                 stages={stages}
+                fields={fields}
                 onStepSelect={handleStepSelect}
                 activeStage={activeStage}
                 activeStep={activeStep}
                 onStepsUpdate={handleStepsUpdate}
                 onDeleteStage={handleDeleteStage}
                 onDeleteStep={handleDeleteStep}
+                onAddField={handleAddField}
+                onUpdateField={handleUpdateField}
+                onDeleteField={handleDeleteField}
               />
               <AddStageModal
                 isOpen={isAddStageModalOpen}
@@ -621,16 +700,50 @@ export default function Home() {
               />
             </>
           )}
-          {activeTab === 'data' && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Data</h2>
-              <p className="text-gray-600 dark:text-gray-400">Data tab content coming soon...</p>
-            </div>
-          )}
           {activeTab === 'ux' && (
             <div className="p-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">UX</h2>
               <p className="text-gray-600 dark:text-gray-400">UX tab content coming soon...</p>
+            </div>
+          )}
+          {activeTab === 'data' && (
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Data</h2>
+                <button
+                  onClick={() => setIsAddFieldModalOpen(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                >
+                  Add Field
+                </button>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {fields.map(field => (
+                  <div
+                    key={field.id}
+                    className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleEditField(field.id)}
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                          <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteField(field.id)}
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                        >
+                          <FaTrash className="w-4 h-4 text-gray-500" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Type: {field.type}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </main>
@@ -657,6 +770,15 @@ export default function Home() {
           />
         </div>
       </motion.div>
+
+      {editingField && (
+        <EditFieldModal
+          isOpen={!!editingField}
+          onClose={() => setEditingField(null)}
+          onSubmit={handleUpdateField}
+          field={editingField}
+        />
+      )}
     </div>
   );
 }

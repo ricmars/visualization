@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Field } from '../types';
 
 interface AddFieldModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddField: (field: { label: string; type: string }) => void;
+  onAddField: (field: { label: string; type: Field['type']; options?: string[] }) => void;
   buttonRef?: React.RefObject<HTMLButtonElement>;
 }
 
 const AddFieldModal: React.FC<AddFieldModalProps> = ({ isOpen, onClose, onAddField, buttonRef }) => {
   const [label, setLabel] = useState('');
-  const [type, setType] = useState('text');
+  const [type, setType] = useState<Field['type']>('text');
   const [error, setError] = useState('');
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +131,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({ isOpen, onClose, onAddFie
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value)}
+                    onChange={(e) => setType(e.target.value as Field['type'])}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
                     <option value="text">Text</option>

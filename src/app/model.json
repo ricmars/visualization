@@ -1,48 +1,68 @@
 {
+  "fields": [
+    {
+      "id": "incidentTitle",
+      "label": "Incident Title",
+      "type": "text"
+    },
+    {
+      "id": "description",
+      "label": "Description",
+      "type": "textarea"
+    },
+    {
+      "id": "programId",
+      "label": "Program ID",
+      "type": "text"
+    },
+    {
+      "id": "evidence",
+      "label": "Evidence Details",
+      "type": "textarea"
+    },
+    {
+      "id": "severity",
+      "label": "Severity Level",
+      "type": "select",
+      "options": ["Low", "Medium", "High", "Critical"]
+    }
+  ],
   "stages": [
     {
       "id": "stage1",
       "name": "Incident Intake",
-      "status": "active",
       "steps": [
         {
           "id": "step1",
           "name": "Collect Incident Details",
           "type": "Collect information",
-          "status": "pending",
           "fields": [
             {
-              "id": "incidentTitle",
-              "label": "Incident Title",
-              "type": "text"
+              "id": "incidentTitle"
             },
             {
-              "id": "description",
-              "label": "Description",
-              "type": "text"
+              "id": "description"
+            },
+            {
+              "id": "severity"
             }
           ]
         },
         {
           "id": "step2",
           "name": "Determine Incident Severity",
-          "type": "Decision",
-          "status": "pending",
-          "fields": []
+          "type": "Decision"
         },
         {
           "id": "step3",
           "name": "Trigger Compliance Verification",
-          "type": "Automation",
-          "status": "pending",
-          "fields": []
+          "type": "Automation"
         }
       ]
     },
     {
       "id": "stage2",
       "name": "Compliance Verification",
-      "status": "pending",
       "steps": [
         {
           "id": "step4",
@@ -51,53 +71,40 @@
           "status": "pending",
           "fields": [
             {
-              "id": "programId",
-              "label": "Program ID",
-              "type": "text"
+              "id": "programId"
             }
           ]
         },
         {
           "id": "step5",
           "name": "Identify Compliance Violations",
-          "type": "Decision",
-          "status": "pending",
-          "fields": []
+          "type": "Decision"
         },
         {
           "id": "step6",
           "name": "Approve Compliance Findings",
-          "type": "Approve/Reject",
-          "status": "pending",
-          "fields": []
+          "type": "Approve/Reject"
         }
       ]
     },
     {
       "id": "stage3",
       "name": "Risk Assessment",
-      "status": "pending",
       "steps": [
         {
           "id": "step7",
           "name": "Analyze Risk Factors",
-          "type": "Generative AI",
-          "status": "pending",
-          "fields": []
+          "type": "Generative AI"
         },
         {
           "id": "step8",
           "name": "Determine Investigation Needed",
-          "type": "Decision",
-          "status": "pending",
-          "fields": []
+          "type": "Decision"
         },
         {
           "id": "step9",
           "name": "Assign Investigation Team",
-          "type": "Create Case",
-          "status": "pending",
-          "fields": []
+          "type": "Create Case"
         }
       ]
     },
@@ -110,56 +117,42 @@
           "id": "step10",
           "name": "Gather Additional Evidence",
           "type": "Collect information",
-          "status": "pending",
           "fields": [
             {
-              "id": "evidence",
-              "label": "Evidence Details",
-              "type": "text"
+              "id": "evidence"
             }
           ]
         },
         {
           "id": "step11",
           "name": "Approve Investigation Findings",
-          "type": "Approve/Reject",
-          "status": "pending",
-          "fields": []
+          "type": "Approve/Reject"
         },
         {
           "id": "step12",
           "name": "Notify Stakeholders",
-          "type": "Send Notification",
-          "status": "pending",
-          "fields": []
+          "type": "Send Notification"
         }
       ]
     },
     {
       "id": "stage5",
       "name": "Case Closure",
-      "status": "pending",
-      "steps": [
+       "steps": [
         {
           "id": "step13",
           "name": "Update Case Records",
-          "type": "Generate Document",
-          "status": "pending",
-          "fields": []
+          "type": "Generate Document"
         },
         {
           "id": "step14",
           "name": "Notify Stakeholders of Resolution",
-          "type": "Send Notification",
-          "status": "pending",
-          "fields": []
+          "type": "Send Notification"
         },
         {
           "id": "step15",
           "name": "Conduct Post-Mortem Review",
-          "type": "Generate Document",
-          "status": "pending",
-          "fields": []
+          "type": "Generate Document"
         }
       ]
     }
