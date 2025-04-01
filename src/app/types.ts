@@ -1,24 +1,18 @@
 export interface Field {
   id: string;
   label: string;
-  type: 'text' | 'email' | 'number' | 'textarea' | 'select' | 'checkbox';
+  type: 'number' | 'text' | 'select' | 'checkbox' | 'email' | 'textarea';
+  options?: string[];
   value?: string | number | boolean;
-  placeholder?: string;
-  description?: string;
   required?: boolean;
-  error?: string;
-  options?: Array<{
-    value: string;
-    label: string;
-  }>;
 }
 
 export interface Step {
   id: string;
   name: string;
-  type: string;
-  status: 'pending' | 'completed' | 'error';
+  type?: string;
   fields: Field[];
+  isNew?: boolean;
 }
 
 export interface Stage {
@@ -34,7 +28,38 @@ export interface Stage {
 export interface Message {
   id: string;
   type: 'text' | 'json';
-  content: string | Record<string, unknown>;
+  content: string | {
+    message?: string;
+    model?: any;
+    action?: {
+      type?: 'add' | 'delete' | 'move' | 'update';
+      changes: Array<{
+        type: 'add' | 'delete' | 'move' | 'update';
+        path: string;
+        value?: any;
+        oldValue?: any;
+        target: {
+          type: 'stage' | 'step';
+          id?: string;
+          name?: string;
+          sourceStageId?: string;
+          targetStageId?: string;
+          sourceIndex?: number;
+          targetIndex?: number;
+        };
+      }>;
+    };
+    visualization?: {
+      totalStages: number;
+      stageBreakdown: {
+        name: string;
+        stepCount: number;
+        steps?: {
+          name: string;
+        }[];
+      }[];
+    };
+  };
   sender: 'user' | 'ai';
 }
 
@@ -52,5 +77,25 @@ export interface WorkflowDelta {
   changes: {
     before?: Record<string, unknown> | null;
     after?: Record<string, unknown> | null;
+  };
+}
+
+export interface Delta {
+  type: 'add' | 'delete' | 'move' | 'update';
+  path: string;
+  value?: any;
+  oldValue?: any;
+  target?: {
+    type: 'stage' | 'step';
+    id?: string;
+    name?: string;
+    sourceStageId?: string;
+    targetStageId?: string;
+    sourceIndex?: number;
+    targetIndex?: number;
+  };
+  changes?: {
+    before?: Stage | Stage['steps'][number];
+    after?: Partial<Stage | Stage['steps'][number]>;
   };
 } 

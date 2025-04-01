@@ -5,12 +5,14 @@ import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
 import StepForm from './components/StepForm';
 import { OllamaService, ChatRole } from './services/ollama';
-import { Stage, Message } from './types';
+import { Stage, Message, Delta } from './types';
 import AddFieldModal from './components/AddFieldModal';
 import { motion } from 'framer-motion';
 import defaultModel from './model.json';
 import { v4 as uuidv4 } from 'uuid';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
+import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import AddStageModal from './components/AddStageModal';
 
 interface ChatMessage {
   role: ChatRole;
@@ -19,6 +21,7 @@ interface ChatMessage {
 
 interface WorkflowDelta {
   type: 'add' | 'delete' | 'move' | 'update';
+  path: string;
   target: {
     type: 'stage' | 'step';
     id?: string;
@@ -48,6 +51,7 @@ export default function Home() {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatPanelWidth, setChatPanelWidth] = useState(500);
   const [isResizing, setIsResizing] = useState(false);
+  const [isChatPanelExpanded, setIsChatPanelExpanded] = useState(true);
   const startX = useRef(0);
   const startWidth = useRef(0);
   const [isModalOpen, setModalOpen] = useState(false);
@@ -55,6 +59,8 @@ export default function Home() {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux'>('workflow');
+  const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   
   // Load stages from session storage or default model
   useEffect(() => {
@@ -74,7 +80,6 @@ export default function Home() {
             totalStages: initialStages.length,
             stageBreakdown: initialStages.map((stage: Stage) => ({
               name: stage.name,
-              status: stage.status,
               stepCount: stage.steps.length
             }))
           }
@@ -101,7 +106,7 @@ export default function Home() {
     setMessages(prev => [...prev, message]);
   };
 
-  const generateDelta = (oldStages: Stage[], newStages: Stage[]): WorkflowDelta[] => {
+  const generateDelta = (oldStages: Stage[], newStages: Stage[]): Delta[] => {
     const deltas: WorkflowDelta[] = [];
 
     // Check for added or deleted stages
@@ -113,6 +118,7 @@ export default function Home() {
       if (!oldStageIds.has(stage.id)) {
         deltas.push({
           type: 'add',
+          path: `/stages/${stage.id}`,
           target: {
             type: 'stage',
             id: stage.id,
@@ -130,6 +136,7 @@ export default function Home() {
       if (!newStageIds.has(stage.id)) {
         deltas.push({
           type: 'delete',
+          path: `/stages/${stage.id}`,
           target: {
             type: 'stage',
             id: stage.id,
@@ -156,6 +163,7 @@ export default function Home() {
         if (newStepIndex !== -1 && newStepIndex !== oldIndex) {
           deltas.push({
             type: 'move',
+            path: `/stages/${oldStage.id}/steps/${oldStep.id}`,
             target: {
               type: 'step',
               id: oldStep.id,
@@ -184,6 +192,7 @@ export default function Home() {
             const newIndex = targetStage.steps.findIndex(s => s.id === oldStep.id);
             deltas.push({
               type: 'move',
+              path: `/stages/${oldStage.id}/steps/${oldStep.id}`,
               target: {
                 type: 'step',
                 id: oldStep.id,
@@ -215,11 +224,24 @@ export default function Home() {
       id: Date.now().toString(),
       type: 'json',
       content: {
-        status: 'success',
+        message: 'Changes applied successfully',
         action: {
-          type: 'Workflow Updated',
-          timestamp: new Date().toISOString(),
-          changes: deltas
+          type: 'update',
+          changes: deltas.map(delta => ({
+            type: delta.type,
+            path: delta.path,
+            target: delta.target || {
+              type: 'step',
+              id: '',
+              name: '',
+              sourceStageId: '',
+              targetStageId: '',
+              sourceIndex: 0,
+              targetIndex: 0
+            },
+            value: delta.changes?.after,
+            oldValue: delta.changes?.before
+          }))
         },
         model: {
           before: stages,
@@ -229,11 +251,9 @@ export default function Home() {
           totalStages: updatedStages.length,
           stageBreakdown: updatedStages.map(stage => ({
             name: stage.name,
-            status: stage.status,
             stepCount: stage.steps.length,
             steps: stage.steps.map(step => ({
-              name: step.name,
-              status: step.status
+              name: step.name
             }))
           }))
         }
@@ -245,20 +265,20 @@ export default function Home() {
     // Apply animation flags
     const animatedStages = updatedStages.map(stage => {
       const delta = deltas.find(d => 
-        (d.target.type === 'stage' && d.target.id === stage.id) ||
-        (d.target.type === 'step' && (d.target.sourceStageId === stage.id || d.target.targetStageId === stage.id))
+        (d.target?.type === 'stage' && d.target?.id === stage.id) ||
+        (d.target?.type === 'step' && (d.target?.sourceStageId === stage.id || d.target?.targetStageId === stage.id))
       );
 
-      if (delta) {
+      if (delta?.target) {
         switch (delta.type) {
           case 'add':
             return { ...stage, isNew: true };
           case 'delete':
             return { ...stage, isDeleting: true };
           case 'move':
-            if (delta.target.type === 'step') {
-              const isSource = delta.target.sourceStageId === stage.id;
-              const isTarget = delta.target.targetStageId === stage.id;
+            if (delta.target?.type === 'step') {
+              const isSource = delta.target?.sourceStageId === stage.id;
+              const isTarget = delta.target?.targetStageId === stage.id;
               if (isSource || isTarget) {
                 return {
                   ...stage,
@@ -310,182 +330,87 @@ export default function Home() {
   };
 
   const handleWorkflowUpdate = async (workflow: Stage[]) => {
-    // Handle animations based on flags
-    const animatingStages = workflow.map(stage => ({
-      ...stage,
-      animationComplete: false
-    }));
+    const deltas = generateDelta(stages, workflow) as Delta[];
+    if (deltas.length === 0) return;
 
-    setStages(animatingStages);
+    const changes = deltas
+      .filter((d): d is Delta => d.target !== undefined)
+      .map(d => ({
+        type: d.type,
+        path: d.path,
+        target: d.target
+      }));
 
-    // Wait for animations to complete
-    await new Promise(resolve => setTimeout(resolve, 500));
+    addMessage({
+      id: uuidv4(),
+      type: 'json',
+      content: {
+        message: 'Workflow updated',
+        model: workflow,
+        action: {
+          type: 'update' as const,
+          changes: changes.map(change => ({
+            ...change,
+            target: change.target || {
+              type: 'step',
+              id: '',
+              name: ''
+            }
+          }))
+        }
+      },
+      sender: 'ai'
+    });
 
-    // Remove animation flags
-    setStages(workflow.map(stage => ({
-      ...stage,
-      isNew: undefined,
-      isMoving: undefined,
-      isDeleting: undefined,
-      moveDirection: undefined
-    })));
+    // Update chat history
+    const deltas_str = changes
+      .map(delta => {
+        const target = delta.target;
+        if (!target) return `Unknown change was made`;
+        if (target.type === 'stage') {
+          return `Stage ${target.name || target.id} was ${delta.type}ed`;
+        } else if (target.type === 'step') {
+          return `Step ${target.name || target.id} was ${delta.type}ed`;
+        }
+        return `Unknown change was made`;
+      })
+      .join('\n');
+
+    setStages(workflow);
   };
 
   const handleChatMessage = async (message: string) => {
     try {
-      // Add user message
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        type: 'text',
-        content: message,
-        sender: 'user'
-      };
-      addMessage(userMessage);
-      
-      // Update chat history with system context
-      const systemMessage = {
-        role: 'system' as ChatRole,
-        content: JSON.stringify({
-          instruction: `You are a workflow management assistant. Help update the workflow based on the user's request.
-          Rules:
-          1. Return ONLY a valid JSON array of stages that matches the current workflow structure
-          2. Each stage should have: id, name, status, and steps array
-          3. Each step should have: id, name, status, and fields array
-          4. Use 'isNew' flag for new stages/steps
-          5. Use 'isDeleting' flag for removed stages/steps
-          6. Use 'isMoving' and 'moveDirection' flags for reordered items
-          7. Generate unique IDs for new items
-          8. Preserve existing IDs when modifying existing items
-          9. DO NOT return schema definitions or explanations - only the actual workflow data
-          
-          Current workflow structure for reference:
-          ${JSON.stringify(stages, null, 2)}`,
-          currentWorkflow: stages
-        })
-      };
+      const response = await OllamaService.chat(message);
+      const typedStages = stages;
 
-      const userChatMessage = { 
-        role: 'user' as ChatRole, 
-        content: message 
-      };
-
-      const updatedHistory = [...chatHistory, systemMessage, userChatMessage];
-      setChatHistory(updatedHistory);
-
-      // Get LLM response
-      const response = await OllamaService.chat(updatedHistory);
-      const responseContent = typeof response === 'string' ? response : (response as OllamaResponse).content;
-      
-      try {
-        // Extract JSON from the response
-        const jsonMatch = responseContent.match(/```json\s*(\[[\s\S]*?\]|\{[\s\S]*?\})\s*```/) || 
-                         responseContent.match(/\[[\s\S]*?\]|\{[\s\S]*?\}/);
-        
-        if (!jsonMatch) {
-          throw new Error('No valid JSON found in response');
-        }
-
-        const jsonStr = jsonMatch[1] || jsonMatch[0];
-        const parsedResponse = JSON.parse(jsonStr);
-        
-        // Handle both array and object formats
-        const updatedWorkflow = Array.isArray(parsedResponse) 
-          ? parsedResponse
-          : parsedResponse.stages || parsedResponse;
-        
-        // Validate the workflow structure
-        if (!Array.isArray(updatedWorkflow)) {
-          throw new Error('Invalid workflow format: not an array');
-        }
-
-        // Validate each stage has required properties
-        updatedWorkflow.forEach((stage, index) => {
-          if (!stage.id || !stage.name || !stage.status || !Array.isArray(stage.steps)) {
-            throw new Error(`Invalid stage format at index ${index}`);
-          }
-          
-          stage.steps.forEach((step: Stage['steps'][number], stepIndex: number) => {
-            if (!step.id || !step.name || !step.status || !Array.isArray(step.fields)) {
-              throw new Error(`Invalid step format at stage ${index}, step ${stepIndex}`);
-            }
-          });
-        });
-        
-        // Update the workflow with proper type casting
-        const typedStages = updatedWorkflow.map(stage => ({
-          id: stage.id,
-          name: stage.name,
-          status: stage.status as 'pending' | 'active' | 'completed',
-          steps: stage.steps.map((step: Stage['steps'][number]) => ({
-            id: step.id,
-            name: step.name,
-            status: step.status as 'pending' | 'active' | 'completed',
-            fields: Array.isArray(step.fields) ? step.fields.map((field: { id: string; label: string; type: 'number' | 'text' | 'select' | 'checkbox'; options?: string[] }) => ({
-              id: field.id,
-              label: field.label,
-              type: field.type as 'number' | 'text' | 'select' | 'checkbox',
-              options: field.options
-            })) : [],
-            ...(step.isNew && { isNew: true })
-          })),
-          ...(stage.isNew && { isNew: true }),
-          ...(stage.isMoving && { isMoving: true }),
-          ...(stage.isDeleting && { isDeleting: true }),
-          ...(stage.moveDirection && { moveDirection: stage.moveDirection as 'up' | 'down' })
-        }));
-
-        handleWorkflowUpdate(typedStages);
-        
-        // Add success message
-        const responseMessage: Message = {
-          id: Date.now().toString(),
-          type: 'json',
-          content: {
-            status: 'success',
-            action: {
-              type: 'Workflow Updated',
-              timestamp: new Date().toISOString(),
-              changes: generateDelta(stages, typedStages)
-            },
-            model: {
-              before: stages,
-              after: typedStages
-            },
-            visualization: {
-              totalStages: typedStages.length,
-              stageBreakdown: typedStages.map(stage => ({
-                name: stage.name,
-                status: stage.status,
-                stepCount: stage.steps.length,
-                steps: stage.steps.map((step: { name: string; status: string }) => ({
-                  name: step.name,
-                  status: step.status
-                }))
+      addMessage({
+        id: uuidv4(),
+        type: 'json',
+        content: {
+          message: response.content,
+          model: typedStages,
+          visualization: {
+            totalStages: typedStages.length,
+            stageBreakdown: typedStages.map(stage => ({
+              name: stage.name,
+              stepCount: stage.steps.length,
+              steps: stage.steps.map(step => ({
+                name: step.name
               }))
-            }
-          },
-          sender: 'ai'
-        };
-        addMessage(responseMessage);
-      } catch (error: unknown) {
-          console.error('Error parsing LLM response:', error);
-           const errorMessage: Message = {
-            id: Date.now().toString(),
-            type: 'text',
-            content: 'Sorry, there was an error processing your request. Please try again.',
-            sender: 'ai'
-          };
-          addMessage(errorMessage);
-      }
-    } catch (error) {
-      console.error('Error handling chat message:', error);
-      const errorMessage: Message = {
-        id: Date.now().toString(),
-        type: 'text',
-        content: 'Sorry, there was an error processing your request. Please try again.',
+            }))
+          }
+        },
         sender: 'ai'
-      };
-      addMessage(errorMessage);
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      addMessage({
+        id: uuidv4(),
+        type: 'text',
+        content: 'Sorry, there was an error processing your request.',
+        sender: 'ai'
+      });
     }
   };
 
@@ -494,7 +419,7 @@ export default function Home() {
     const step = stage?.steps.find(s => s.id === activeStep);
     return (step?.fields || []).map(field => ({
       ...field,
-      type: field.type as 'number' | 'text' | 'select' | 'checkbox',
+      type: field.type,
       value: field.value ?? undefined // Ensure null is replaced with undefined
     }));
   };
@@ -605,42 +530,122 @@ export default function Home() {
     handleStepsUpdate(updatedStages);
   };
 
+  const handleAddStage = (stageData: { name: string }) => {
+    const newStage: Stage = {
+      id: uuidv4(),
+      name: stageData.name,
+      steps: []
+    };
+
+    const updatedStages = [...stages, newStage];
+    handleStepsUpdate(updatedStages);
+  };
+
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
+      {/* Toggle Button */}
+      <button
+        onClick={() => setIsChatPanelExpanded(!isChatPanelExpanded)}
+        className="fixed right-0 top-4 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-sm z-50"
+        aria-label={isChatPanelExpanded ? "Collapse AI Assistant" : "Expand AI Assistant"}
+      >
+        {isChatPanelExpanded ? (
+          <FaChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+        ) : (
+          <FaChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+        )}
+      </button>
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <main className="flex-1 overflow-auto">
-          <WorkflowDiagram
-            stages={stages}
-            onStepSelect={handleStepSelect}
-            activeStage={activeStage}
-            activeStep={activeStep}
-            onStepsUpdate={handleStepsUpdate}
-            onDeleteStage={handleDeleteStage}
-            onDeleteStep={handleDeleteStep}
-          />
-        </main>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setActiveTab('workflow')}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeTab === 'workflow'
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            Workflow
+          </button>
+          <button
+            onClick={() => setActiveTab('data')}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeTab === 'data'
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            Data
+          </button>
+          <button
+            onClick={() => setActiveTab('ux')}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeTab === 'ux'
+                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            UX
+          </button>
+        </div>
         
-      </div>
-
-      {/* Resize Handle */}
-      <div
-        className="relative cursor-col-resize select-none"
-        onMouseDown={handleMouseDown}
-      >
-        <div 
-          className={`absolute top-0 left-[-4px] w-[8px] h-full hover:bg-blue-500/50 ${
-            isResizing ? 'bg-blue-500/50' : 'bg-transparent'
-          }`}
-        />
+        {/* Tab Content */}
+        <main className="flex-1 overflow-auto">
+          {activeTab === 'workflow' && (
+            <>
+              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Workflow</h1>
+                <button
+                  onClick={() => setIsAddStageModalOpen(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                >
+                  Add Stage
+                </button>
+              </div>
+              <WorkflowDiagram
+                stages={stages}
+                onStepSelect={handleStepSelect}
+                activeStage={activeStage}
+                activeStep={activeStep}
+                onStepsUpdate={handleStepsUpdate}
+                onDeleteStage={handleDeleteStage}
+                onDeleteStep={handleDeleteStep}
+              />
+              <AddStageModal
+                isOpen={isAddStageModalOpen}
+                onClose={() => setIsAddStageModalOpen(false)}
+                onAddStage={handleAddStage}
+              />
+            </>
+          )}
+          {activeTab === 'data' && (
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">Data</h2>
+              <p className="text-gray-600 dark:text-gray-400">Data tab content coming soon...</p>
+            </div>
+          )}
+          {activeTab === 'ux' && (
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">UX</h2>
+              <p className="text-gray-600 dark:text-gray-400">UX tab content coming soon...</p>
+            </div>
+          )}
+        </main>
       </div>
 
       {/* Chat Panel */}
-      <div 
+      <motion.div 
         className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden"
+        animate={{ 
+          width: isChatPanelExpanded ? `${chatPanelWidth}px` : '0px',
+          opacity: isChatPanelExpanded ? 1 : 0
+        }}
+        transition={{ duration: 0.3 }}
         style={{ 
-          width: `${chatPanelWidth}px`,
-          minWidth: '300px',
+          minWidth: isChatPanelExpanded ? '300px' : '0px',
           maxWidth: '800px'
         }}
       >
@@ -651,7 +656,7 @@ export default function Home() {
             onClear={handleClearChat}
           />
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

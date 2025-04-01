@@ -1,17 +1,11 @@
-interface OllamaResponse {
-  model: string;
-  created_at: string;
-  message: {
-    role: string;
-    content: string;
-  };
-  done: boolean;
-}
-
 export type ChatRole = 'system' | 'user' | 'assistant';
 
-interface ChatMessage {
+export interface ChatMessage {
   role: ChatRole;
+  content: string;
+}
+
+export interface OllamaResponse {
   content: string;
 }
 
@@ -38,37 +32,21 @@ export class OllamaService {
       }
 
       const data = await response.json() as OllamaResponse;
-      return data.message.content;
+      return data.content;
     } catch (error) {
       console.error('Error calling Ollama:', error);
       throw new Error('Failed to generate response from Ollama');
     }
   }
 
-  static async chat(messages: ChatMessage[]): Promise<string> {
-    try {
-      const response = await fetch(`${this.BASE_URL}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.MODEL,
-          messages: messages,
-          stream: false
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json() as OllamaResponse;
-      console.log('Ollama response:', data); // Debug log
-      return data.message.content;
-    } catch (error) {
-      console.error('Error calling Ollama chat:', error);
-      throw new Error('Failed to generate chat response from Ollama');
-    }
+  static async chat(message: string): Promise<OllamaResponse> {
+    // Simulate API call
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          content: `Processed: ${message}`
+        });
+      }, 1000);
+    });
   }
 } 

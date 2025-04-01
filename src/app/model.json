@@ -28,27 +28,14 @@
           "name": "Determine Incident Severity",
           "type": "Decision",
           "status": "pending",
-          "fields": [
-            {
-              "id": "severity",
-              "label": "Severity Level",
-              "type": "select",
-              "options": ["Low", "Medium", "High", "Critical"]
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step3",
           "name": "Trigger Compliance Verification",
           "type": "Automation",
           "status": "pending",
-          "fields": [
-            {
-              "id": "complianceRequired",
-              "label": "Compliance Check Required",
-              "type": "checkbox"
-            }
-          ]
+          "fields": []
         }
       ]
     },
@@ -75,26 +62,14 @@
           "name": "Identify Compliance Violations",
           "type": "Decision",
           "status": "pending",
-          "fields": [
-            {
-              "id": "violations",
-              "label": "Violations Found",
-              "type": "text"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step6",
           "name": "Approve Compliance Findings",
           "type": "Approve/Reject",
           "status": "pending",
-          "fields": [
-            {
-              "id": "approved",
-              "label": "Findings Approved",
-              "type": "checkbox"
-            }
-          ]
+          "fields": []
         }
       ]
     },
@@ -108,39 +83,21 @@
           "name": "Analyze Risk Factors",
           "type": "Generative AI",
           "status": "pending",
-          "fields": [
-            {
-              "id": "riskFactors",
-              "label": "Risk Factors",
-              "type": "text"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step8",
           "name": "Determine Investigation Needed",
           "type": "Decision",
           "status": "pending",
-          "fields": [
-            {
-              "id": "investigationRequired",
-              "label": "Investigation Required",
-              "type": "checkbox"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step9",
           "name": "Assign Investigation Team",
           "type": "Create Case",
           "status": "pending",
-          "fields": [
-            {
-              "id": "teamMembers",
-              "label": "Team Members",
-              "type": "text"
-            }
-          ]
+          "fields": []
         }
       ]
     },
@@ -167,26 +124,14 @@
           "name": "Approve Investigation Findings",
           "type": "Approve/Reject",
           "status": "pending",
-          "fields": [
-            {
-              "id": "findingsApproved",
-              "label": "Findings Approved",
-              "type": "checkbox"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step12",
           "name": "Notify Stakeholders",
           "type": "Send Notification",
           "status": "pending",
-          "fields": [
-            {
-              "id": "stakeholders",
-              "label": "Stakeholders",
-              "type": "text"
-            }
-          ]
+          "fields": []
         }
       ]
     },
@@ -200,39 +145,21 @@
           "name": "Update Case Records",
           "type": "Generate Document",
           "status": "pending",
-          "fields": [
-            {
-              "id": "resolution",
-              "label": "Resolution Details",
-              "type": "text"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step14",
           "name": "Notify Stakeholders of Resolution",
           "type": "Send Notification",
           "status": "pending",
-          "fields": [
-            {
-              "id": "notificationSent",
-              "label": "Notification Sent",
-              "type": "checkbox"
-            }
-          ]
+          "fields": []
         },
         {
           "id": "step15",
           "name": "Conduct Post-Mortem Review",
           "type": "Generate Document",
           "status": "pending",
-          "fields": [
-            {
-              "id": "lessons",
-              "label": "Lessons Learned",
-              "type": "text"
-            }
-          ]
+          "fields": []
         }
       ]
     }

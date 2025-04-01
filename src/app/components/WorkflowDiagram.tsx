@@ -47,6 +47,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     stepId: string;
     name: string;
     fields: Field[];
+    type: string;
   } | null>(null);
 
   const getStageClass = (stage: Stage, index: number) => {
@@ -241,7 +242,8 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
         stageId,
         stepId,
         name: step.name,
-        fields: step.fields
+        fields: step.fields,
+        type: step.type || 'Automation'
       });
       setIsConfigModalOpen(true);
     }
@@ -277,13 +279,13 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepsUpdate(updatedStages);
   };
 
-  const handleAddField = () => {
+  const handleAddField = (fieldData: { label: string; type: string }) => {
     if (!selectedStep) return;
 
     const newField: Field = {
       id: uuidv4(),
-      label: 'New Field',
-      type: 'text',
+      label: fieldData.label,
+      type: fieldData.type as 'text' | 'number' | 'select' | 'checkbox' | 'email' | 'textarea',
       value: '',
       required: false
     };
@@ -567,9 +569,10 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             fields={selectedStep.fields}
             onFieldChange={handleFieldChange}
             onAddField={handleAddField}
+            stepName={selectedStep.name}
+            stepType={selectedStep.type}
             onUpdateField={handleUpdateField}
             onDeleteField={handleDeleteField}
-            stepName={selectedStep.name}
           />
         )}
       </div>
