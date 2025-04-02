@@ -69,7 +69,8 @@ export async function POST(request: Request) {
       };
 
       return NextResponse.json(validatedResponse);
-    } catch (e) {
+    } catch (error) {
+      console.error('Invalid JSON:', error);
       throw new Error('Invalid or malformed JSON in Gemini response');
     }
   } catch (error) {
