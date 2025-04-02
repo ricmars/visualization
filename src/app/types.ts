@@ -33,24 +33,15 @@ export interface Message {
   type: 'text' | 'json';
   content: string | {
     message?: string;
-    model?: any;
+    model?: {
+      stages?: Stage[];
+      fields?: Field[];
+      before?: Stage[];
+      after?: Stage[];
+    };
     action?: {
       type?: 'add' | 'delete' | 'move' | 'update';
-      changes: Array<{
-        type: 'add' | 'delete' | 'move' | 'update';
-        path: string;
-        value?: any;
-        oldValue?: any;
-        target: {
-          type: 'stage' | 'step';
-          id?: string;
-          name?: string;
-          sourceStageId?: string;
-          targetStageId?: string;
-          sourceIndex?: number;
-          targetIndex?: number;
-        };
-      }>;
+      changes: MessageDelta[];
     };
     visualization?: {
       totalStages: number;
@@ -86,8 +77,6 @@ export interface WorkflowDelta {
 export interface Delta {
   type: 'add' | 'delete' | 'move' | 'update';
   path: string;
-  value?: any;
-  oldValue?: any;
   target?: {
     type: 'stage' | 'step';
     id?: string;
@@ -98,7 +87,23 @@ export interface Delta {
     targetIndex?: number;
   };
   changes?: {
-    before?: Stage | Stage['steps'][number];
-    after?: Partial<Stage | Stage['steps'][number]>;
+    before?: Stage | Stage['steps'][number] | null;
+    after?: Partial<Stage | Stage['steps'][number]> | null;
   };
+}
+
+export interface MessageDelta {
+  type: 'add' | 'delete' | 'move' | 'update';
+  path: string;
+  target: {
+    type: 'stage' | 'step';
+    id?: string;
+    name?: string;
+    sourceStageId?: string;
+    targetStageId?: string;
+    sourceIndex?: number;
+    targetIndex?: number;
+  };
+  value?: Partial<Stage | Step> | null;
+  oldValue?: Stage | Step | null;
 } 

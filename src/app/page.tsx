@@ -3,18 +3,18 @@
 import { useState, useCallback, useRef, useEffect, MutableRefObject } from 'react';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
-import StepForm from './components/StepForm';
 import { Service, ChatRole } from './services/service';
 import { Stage, Message, Delta, Field } from './types';
 import AddFieldModal from './components/AddFieldModal';
 import { motion } from 'framer-motion';
 import defaultModel from './model.json';
 import { v4 as uuidv4 } from 'uuid';
-import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import AddStageModal from './components/AddStageModal';
 import { FaPencilAlt, FaTrash } from 'react-icons/fa';
 import EditFieldModal from './components/EditFieldModal';
+import { DragDropContext as _DragDropContext, DropResult } from '@hello-pangea/dnd';
+import { default as _StepForm } from './components/StepForm';
 
 interface ChatMessage {
   role: ChatRole;
@@ -46,17 +46,17 @@ export default function Home() {
   const [activeStage, setActiveStage] = useState<string | undefined>();
   const [activeStep, setActiveStep] = useState<string | undefined>();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [_chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatPanelWidth, setChatPanelWidth] = useState(500);
   const [isResizing, setIsResizing] = useState(false);
   const [isChatPanelExpanded, setIsChatPanelExpanded] = useState(true);
   const startX = useRef(0);
   const startWidth = useRef(0);
-  const [isModalOpen, setModalOpen] = useState(false);
+  const [_isModalOpen, _setModalOpen] = useState(false);
   const [fields, setFields] = useState<Field[]>([]);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
-  const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [_isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
+  const [_isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux' | 'fields'>('workflow');
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
@@ -274,8 +274,10 @@ export default function Home() {
   };
 
   const handleStepsUpdate = (updatedStages: Stage[]) => {
-    const deltas = generateDelta(stages, updatedStages);
+    const oldStages = stages;
     setStages(updatedStages);
+    const deltas = generateDelta(oldStages, updatedStages);
+    const _deltas_str = JSON.stringify(deltas, null, 2);
 
     // Add a message showing the changes
     const responseMessage: Message = {
@@ -302,7 +304,7 @@ export default function Home() {
           }))
         },
         model: {
-          before: stages,
+          before: oldStages,
           after: updatedStages
         },
         visualization: {
@@ -373,70 +375,145 @@ export default function Home() {
     setActiveStep(stepId);
   };
 
-  const handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
+  const _handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
+    if (!activeStep || !activeStage) return;
+
     setStages(prevStages => {
-      const updatedStages = prevStages.map(stage => ({
-        ...stage,
-        steps: stage.steps.map(step => ({
-          ...step,
-          fields: step.fields.map(field => 
-            field.id === fieldId ? { ...field, value } : field
-          )
-        }))
-      }));
+      const updatedStages = prevStages.map(stage => {
+        if (stage.id === activeStage) {
+          return {
+            ...stage,
+            steps: stage.steps.map(step => {
+              if (step.id === activeStep) {
+                return {
+                  ...step,
+                  fields: step.fields.map(field => 
+                    field.id === fieldId ? { ...field, value } : field
+                  )
+                };
+              }
+              return step;
+            })
+          };
+        }
+        return stage;
+      });
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
       return updatedStages;
     });
   };
 
-  const handleWorkflowUpdate = async (workflow: Stage[]) => {
-    const deltas = generateDelta(stages, workflow) as Delta[];
-    if (deltas.length === 0) return;
+  const _handleWorkflowUpdate = async (workflow: Stage[]) => {
+    setStages(workflow);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(workflow));
+  };
 
-    const changes = deltas
-      .filter((d): d is Delta => d.target !== undefined)
-      .map(d => ({
-        type: d.type,
-        path: d.path,
-        target: d.target
-      }));
+  const _getActiveStepFields = () => {
+    if (!activeStage || !activeStep) return [];
+    const stage = stages.find(s => s.id === activeStage);
+    const step = stage?.steps.find(s => s.id === activeStep);
+    return step?.fields || [];
+  };
 
-    addMessage({
-      id: uuidv4(),
-      type: 'json',
-      content: {
-        message: 'Workflow updated',
-        model: workflow,
-        action: {
-          type: 'update' as const,
-          changes: changes.map(change => ({
-            ...change,
-            target: change.target || {
-              type: 'step',
-              id: '',
-              name: ''
-            }
-          }))
+  const _handleMouseDown = (_e: React.MouseEvent) => {
+    _e.stopPropagation();
+  };
+
+  const _handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+    if (!selectedStageId) return;
+
+    setStages(prevStages => {
+      const updatedStages = prevStages.map(stage => {
+        if (stage.id === selectedStageId) {
+          return {
+            ...stage,
+            steps: [
+              ...stage.steps,
+              {
+                id: uuidv4(),
+                name: stepData.name,
+                type: stepData.type || 'Automation',
+                status: 'pending' as const,
+                fields: []
+              }
+            ]
+          };
         }
-      },
-      sender: 'ai'
+        return stage;
+      });
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      return updatedStages;
     });
 
-    // Update chat history
-    const deltas_str = changes
-      .map(delta => {
-        const target = delta.target;
-        if (!target) return `Unknown change was made`;
-        if (target.type === 'stage') {
-          return `Stage ${target.name || target.id} was ${delta.type}ed`;
-        } else if (target.type === 'step') {
-          return `Step ${target.name || target.id} was ${delta.type}ed`;
-        }
-        return `Unknown change was made`;
-      })
-      .join('\n');
+    setIsAddStepModalOpen(false);
+    setSelectedStageId(null);
+  };
 
-    setStages(workflow);
+  const _handleDragStart = () => {
+    setIsDragging(true);
+  };
+
+  const _handleDragEnd = (result: DropResult) => {
+    setIsDragging(false);
+
+    if (!result.destination) {
+      return;
+    }
+
+    const updatedStages = [...stages];
+    const sourceStage = updatedStages.find(s => s.id === result.source.droppableId);
+    const destinationStage = updatedStages.find(s => s.id === result.destination!.droppableId);
+
+    if (!sourceStage || !destinationStage) {
+      return;
+    }
+
+    const [movedStep] = sourceStage.steps.splice(result.source.index, 1);
+    destinationStage.steps.splice(result.destination.index, 0, movedStep);
+
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+    setStages(updatedStages);
+  };
+
+  const handleAddStage = (stageData: { name: string }) => {
+    const newStage: Stage = {
+      id: uuidv4(),
+      name: stageData.name,
+      steps: [],
+      isNew: true
+    };
+
+    setStages(prevStages => {
+      const updatedStages = [...prevStages, newStage];
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      return updatedStages;
+    });
+    setIsAddStageModalOpen(false);
+  };
+
+  const handleEditField = (fieldId: string) => {
+    const field = fields.find(f => f.id === fieldId);
+    if (field) {
+      setEditingField(field);
+    }
+  };
+
+  const handleDeleteStage = (stageId: string) => {
+    const updatedStages = stages.filter(stage => stage.id !== stageId);
+    handleStepsUpdate(updatedStages);
+  };
+
+  const handleDeleteStep = (stageId: string, stepId: string) => {
+    const updatedStages = stages.map(stage => {
+      if (stage.id === stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.filter(step => step.id !== stepId)
+        };
+      }
+      return stage;
+    });
+    handleStepsUpdate(updatedStages);
   };
 
   const handleChatMessage = async (message: string) => {
@@ -452,7 +529,7 @@ export default function Home() {
       let parsedResponse;
       try {
         parsedResponse = JSON.parse(response);
-      } catch (e) {
+      } catch {
         // If parsing fails, use the raw response as a message
         parsedResponse = {
           message: response
@@ -489,141 +566,20 @@ export default function Home() {
     }
   };
 
-  const getActiveStepFields = () => {
-    const stage = stages.find(s => s.id === activeStage);
-    const step = stage?.steps.find(s => s.id === activeStep);
-    return (step?.fields || []).map(field => ({
-      ...field,
-    }));
-  };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
+  const _handleMouseMove = useCallback((_e: MouseEvent) => {
     if (!isResizing) return;
-    const delta = e.pageX - startX.current;
-    const newWidth = Math.max(300, Math.min(800, startWidth.current - delta));
+    const delta = _e.clientX - startX.current;
+    const newWidth = Math.max(300, Math.min(800, startWidth.current + delta));
     setChatPanelWidth(newWidth);
   }, [isResizing]);
 
-  const handleMouseUp = useCallback(() => {
+  const _handleMouseUp = useCallback(() => {
     setIsResizing(false);
-    window.removeEventListener('mousemove', handleMouseMove);
-    window.removeEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-  }, [handleMouseMove]);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizing(true);
-    startX.current = e.pageX;
-    startWidth.current = chatPanelWidth;
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  }, [chatPanelWidth, handleMouseMove, handleMouseUp]);
+  }, []);
 
   const handleClearChat = () => {
     setMessages([]);
     setChatHistory([]);
-  };
-
-  const handleAddStepSubmit = (stepData: { name: string; type: string }) => {
-    if (!selectedStageId) return;
-
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStageId) {
-        return {
-          ...stage,
-          steps: [
-            ...stage.steps,
-            {
-              id: uuidv4(),
-              name: stepData.name,
-              type: stepData.type,
-              status: 'pending' as const,
-              fields: []
-            }
-          ]
-        };
-      }
-      return stage;
-    });
-
-    handleStepsUpdate(updatedStages);
-    setIsAddStepModalOpen(false);
-    setSelectedStageId(null);
-  };
-
-  const handleDeleteStage = (stageId: string) => {
-    const updatedStages = stages.filter(stage => stage.id !== stageId);
-    handleStepsUpdate(updatedStages);
-  };
-
-  const handleDeleteStep = (stageId: string, stepId: string) => {
-    const updatedStages = stages.map(stage => {
-      if (stage.id === stageId) {
-        return {
-          ...stage,
-          steps: stage.steps.filter(step => step.id !== stepId)
-        };
-      }
-      return stage;
-    });
-    handleStepsUpdate(updatedStages);
-  };
-
-  const handleDragStart = () => {
-    setIsDragging(true);
-  };
-
-  const handleDragEnd = (result: DropResult) => {
-    setIsDragging(false);
-
-    if (!result.destination) {
-      return;
-    }
-
-    const sourceStageId = result.source.droppableId;
-    const destinationStageId = result.destination.droppableId;
-    const sourceIndex = result.source.index;
-    const destinationIndex = result.destination.index;
-
-    const updatedStages = [...stages];
-    const sourceStage = updatedStages.find(s => s.id === sourceStageId);
-    const destinationStage = updatedStages.find(s => s.id === destinationStageId);
-
-    if (!sourceStage || !destinationStage) {
-      return;
-    }
-
-    const [movedStep] = sourceStage.steps.splice(sourceIndex, 1);
-    destinationStage.steps.splice(destinationIndex, 0, movedStep);
-
-    handleStepsUpdate(updatedStages);
-  };
-
-  const handleAddStage = (stageData: { name: string }) => {
-    const newStage: Stage = {
-      id: uuidv4(),
-      name: stageData.name,
-      steps: [],
-      isNew: true
-    };
-
-    setStages(prevStages => {
-      const updatedStages = [...prevStages, newStage];
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
-      return updatedStages;
-    });
-    setIsAddStageModalOpen(false);
-  };
-
-  const handleEditField = (fieldId: string) => {
-    const field = fields.find(f => f.id === fieldId);
-    if (field) {
-      setEditingField(field);
-    }
   };
 
   return (

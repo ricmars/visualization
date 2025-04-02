@@ -1,8 +1,8 @@
-import React, { RefObject } from 'react';
+import React from 'react';
 import { Field } from '../types';
 import { FaTrash, FaPencilAlt, FaGripVertical } from 'react-icons/fa';
 import Tooltip from './Tooltip';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface StepFormProps {
   fields: Field[];
@@ -10,18 +10,16 @@ interface StepFormProps {
   onDeleteField?: (fieldId: string) => void;
   onEditField?: (field: Field) => void;
   onReorderFields?: (startIndex: number, endIndex: number) => void;
-  firstFieldRef: RefObject<HTMLInputElement>;
 }
 
 const StepForm: React.FC<StepFormProps> = ({
   fields,
-  onFieldChange,
+  onFieldChange: _onFieldChange,
   onDeleteField,
   onEditField,
-  onReorderFields,
-  firstFieldRef
+  onReorderFields
 }) => {
-  const handleDragEnd = (result: any) => {
+  const handleDragEnd = (result: DropResult) => {
     if (!result.destination || !onReorderFields) return;
     onReorderFields(result.source.index, result.destination.index);
   };

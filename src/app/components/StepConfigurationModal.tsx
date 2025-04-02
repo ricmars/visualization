@@ -2,10 +2,8 @@ import React, { useState, useEffect, useRef, MutableRefObject } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import StepForm from './StepForm';
 import { Field, FieldValue } from '../types';
-import { FaPencilAlt } from 'react-icons/fa';
 import AddFieldModal from './AddFieldModal';
 import Tooltip from './Tooltip';
-import type { DropResult } from '@hello-pangea/dnd';
 
 interface StepConfigurationModalProps {
   isOpen: boolean;
@@ -24,9 +22,6 @@ interface StepConfigurationModalProps {
   onAddExistingFieldToStep?: (stepId: string, fieldIds: string[]) => void;
 }
 
-const FIELD_TYPES = ['text', 'number', 'select', 'checkbox', 'email', 'textarea'] as const;
-type FieldType = typeof FIELD_TYPES[number];
-
 const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   isOpen,
   onClose,
@@ -39,11 +34,9 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   onAddExistingFieldToStep
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const firstFieldRef = useRef<HTMLInputElement>(null) as MutableRefObject<HTMLInputElement>;
   const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
-  const [editingFieldType, setEditingFieldType] = useState<Field['type']>('text');
 
   // Filter fields to only show those associated with this step
   const stepFieldIds = step.fields.map(f => f.id);
@@ -53,11 +46,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     if (isOpen) {
       document.body.style.overflow = 'hidden';
       setTimeout(() => {
-        if (filteredFields.length > 0) {
-          firstFieldRef.current?.focus();
-        } else {
-          modalRef.current?.focus();
-        }
+        modalRef.current?.focus();
       }, 100);
     } else {
       document.body.style.overflow = 'unset';
@@ -66,7 +55,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen, filteredFields.length]);
+  }, [isOpen]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -78,21 +67,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     }
   };
 
-  const handleAddFieldSubmit = (field: { label: string; type: Field['type']; options?: string[] }, isExistingField: boolean, existingFieldIds?: string[]) => {
-    if (isExistingField && existingFieldIds && onAddExistingFieldToStep) {
-      onAddExistingFieldToStep(step.id, existingFieldIds);
-    } else {
-      onAddField(field);
-    }
-    setIsAddFieldOpen(false);
-  };
-
   const handleEditField = (field: Field) => {
     setEditingField({
       ...field,
       required: field.required ?? false // Set default value if undefined
     });
-    setEditingFieldType(field.type);
   };
 
   const handleEditSubmit = (updates: { label: string; type: Field['type']; options?: string[]; required?: boolean }) => {
@@ -192,13 +171,12 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                   <div className="relative">
                     <StepForm
                       fields={filteredFields}
-                      onFieldChange={(id, value) => {
+                      onFieldChange={(_id, _value) => {
                         // Implementation of onFieldChange
                       }}
                       onDeleteField={onDeleteField}
                       onEditField={handleEditField}
                       onReorderFields={handleReorderFields}
-                      firstFieldRef={firstFieldRef}
                     />
                   </div>
                 )}
@@ -209,7 +187,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           <AddFieldModal
             isOpen={isAddFieldOpen}
             onClose={() => setIsAddFieldOpen(false)}
-            onAddField={onAddField}
+            onAddField={(field) => onAddField({ ...field, isPrimary: field.isPrimary ?? false })}
             buttonRef={addFieldButtonRef}
             existingFields={fields}
             stepFieldIds={step.fields.map(f => f.id)}
@@ -245,26 +223,6 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                     />
                   </div>
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Field Type
-                    </label>
-                    <select
-                      value={editingFieldType}
-                      onChange={(e) => {
-                        const newType = e.target.value as Field['type'];
-                        setEditingFieldType(newType);
-                      }}
-                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
-                    >
-                      <option value="text">Text</option>
-                      <option value="number">Number</option>
-                      <option value="select">Select</option>
-                      <option value="checkbox">Checkbox</option>
-                      <option value="email">Email</option>
-                      <option value="textarea">Textarea</option>
-                    </select>
-                  </div>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -292,7 +250,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                           if (editingField) {
                             handleEditSubmit({
                               label: editingField.label,
-                              type: editingFieldType,
+                              type: editingField.type,
                               required: editingField.required
                             });
                           }

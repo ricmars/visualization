@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Stage, Step, Field, FieldValue } from '../types';
+import { Stage, Field, FieldValue } from '../types';
 import AddStepModal from './AddStepModal';
 import EditModal from './EditModal';
 import { v4 as uuidv4 } from 'uuid';
@@ -38,7 +38,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onUpdateField,
   onDeleteField
 }) => {
-  const [isDragging, setIsDragging] = useState(false);
+  const [_isDragging, setIsDragging] = useState(false);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     type: string;
   } | null>(null);
 
-  const getStageClass = (stage: Stage, index: number) => {
+  const _getStageClass = (stage: Stage, index: number) => {
     const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500';
     const positionClass = `stage-${index + 1}`;
     
@@ -102,11 +102,46 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     }
   };
 
-  const handleDragStart = () => {
+  const _handleWorkflowUpdate = (updatedStages: Stage[]) => {
+    onStepsUpdate(updatedStages);
+  };
+
+  const _handleMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const _handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+    if (!selectedStageId) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStageId) {
+        return {
+          ...stage,
+          steps: [
+            ...stage.steps,
+            {
+              id: uuidv4(),
+              name: stepData.name,
+              type: stepData.type || 'Automation',
+              status: 'pending' as const,
+              fields: []
+            }
+          ]
+        };
+      }
+      return stage;
+    });
+
+    onStepsUpdate(updatedStages);
+    setIsAddStepModalOpen(false);
+    setSelectedStageId(null);
+  };
+
+  const _handleDragStart = () => {
     setIsDragging(true);
   };
 
-  const handleDragEnd = (result: DropResult) => {
+  const _handleDragEnd = (result: DropResult) => {
     setIsDragging(false);
 
     if (!result.destination) {
@@ -157,33 +192,6 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     setIsAddStepModalOpen(true);
   };
 
-  const handleAddStepSubmit = (stepData: { name: string; type: string }) => {
-    if (!selectedStageId) return;
-
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStageId) {
-        return {
-          ...stage,
-          steps: [
-            ...stage.steps,
-            {
-              id: uuidv4(),
-              name: stepData.name,
-              type: stepData.type || 'Automation',
-              status: 'pending' as const,
-              fields: []
-            }
-          ]
-        };
-      }
-      return stage;
-    });
-
-    onStepsUpdate(updatedStages);
-    setIsAddStepModalOpen(false);
-    setSelectedStageId(null);
-  };
-
   const handleEditClick = (type: 'stage' | 'step', id: string, stageId?: string) => {
     if (type === 'stage') {
       const stage = stages.find(s => s.id === id);
@@ -202,7 +210,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
         setEditItem({
           type: 'step',
           id: step.id,
-          stageId: stageId,
+          stageId,
           name: step.name,
           stepType: step.type
         });
@@ -259,7 +267,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepSelect(stageId, stepId);
   };
 
-  const handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
+  const _handleFieldChange = (fieldId: string, value: string | number | boolean) => {
     if (!selectedStep) return;
 
     const updatedStages = stages.map(stage => {
@@ -270,9 +278,12 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             if (step.id === selectedStep.stepId) {
               return {
                 ...step,
-                fields: step.fields.map(field => 
-                  field.id === fieldId ? { ...field, value } : field
-                )
+                fields: step.fields.map(field => {
+                  if (field.id === fieldId) {
+                    return { ...field, value };
+                  }
+                  return field;
+                })
               };
             }
             return step;
@@ -361,7 +372,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
-        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DragDropContext onDragStart={_handleDragStart} onDragEnd={_handleDragEnd}>
           <Droppable droppableId="stages" type="stage" direction="vertical">
             {(provided) => (
               <div
@@ -502,7 +513,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
         <AddStepModal
           isOpen={isAddStepModalOpen}
           onClose={() => setIsAddStepModalOpen(false)}
-          onAddStep={handleAddStepSubmit}
+          onAddStep={_handleAddStepSubmit}
         />
 
         {editItem && (

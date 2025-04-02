@@ -1,3 +1,5 @@
+import { Stage, Field } from '../types';
+
 export type ChatRole = 'system' | 'user' | 'assistant';
 export type LLMProvider = 'ollama' | 'gemini';
 
@@ -13,7 +15,7 @@ export interface Response {
 export class Service {
   private static readonly OLLAMA_BASE_URL = 'http://localhost:11434/api';
   private static readonly OLLAMA_MODEL = 'mistral';
-  private static readonly GEMINI_BASE_URL = 'http://localhost:8010/proxy';
+  private static readonly GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com';
   private static readonly GEMINI_MODEL = 'gemini-2.0-flash-001';
   private static currentProvider: LLMProvider = 'gemini';
   private static readonly SYSTEM_MESSAGE = `You are a workflow assistant that helps users modify and understand their workflow model.
@@ -99,7 +101,7 @@ Format your response as JSON with the following structure:
     this.currentProvider = provider;
   }
 
-  static async generateResponse(prompt: string, currentModel?: any): Promise<string> {
+  static async generateResponse(prompt: string, currentModel?: { stages: Stage[]; fields: Field[] }): Promise<string> {
     try {
       const systemContext = currentModel ? 
         `${this.SYSTEM_MESSAGE}\n\nCurrent workflow model:\n${JSON.stringify(currentModel, null, 2)}` :

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AddStageModalProps {
@@ -12,6 +12,16 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmit = useCallback(() => {
+    if (!name.trim()) {
+      setError('Stage name is required');
+      return;
+    }
+
+    onAddStage({ name: name.trim() });
+    onClose();
+  }, [name, onAddStage, onClose]);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,17 +61,7 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  const handleSubmit = () => {
-    if (!name.trim()) {
-      setError('Stage name is required');
-      return;
-    }
-
-    onAddStage({ name: name.trim() });
-    onClose();
-  };
+  }, [isOpen, onClose, handleSubmit]);
 
   return (
     <AnimatePresence>

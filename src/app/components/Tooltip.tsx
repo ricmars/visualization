@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface TooltipProps {
@@ -15,8 +15,8 @@ const Tooltip: React.FC<TooltipProps> = ({ content, children, position = 'top' }
   const getTooltipPosition = () => {
     if (!tooltipRef.current || !targetRef.current) return {};
     
-    const targetRect = targetRef.current.getBoundingClientRect();
-    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const _targetRect = targetRef.current.getBoundingClientRect();
+    const _tooltipRect = tooltipRef.current.getBoundingClientRect();
     
     switch (position) {
       case 'top':

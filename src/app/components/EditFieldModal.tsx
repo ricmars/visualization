@@ -15,7 +15,7 @@ type FieldType = typeof FIELD_TYPES[number];
 
 const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubmit, field }) => {
   const [label, setLabel] = useState(field.label);
-  const [type, setType] = useState<Field['type']>(field.type);
+  const [type, setType] = useState<FieldType>(field.type as FieldType);
   const [isPrimary, setIsPrimary] = useState(field.isPrimary || false);
   const [error, setError] = useState('');
   const modalRef = useRef<HTMLDivElement>(null);
@@ -29,7 +29,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
       }, 100);
       // Set initial values when modal opens
       setLabel(field.label);
-      setType(field.type);
+      setType(field.type as FieldType);
       setIsPrimary(field.isPrimary || false);
     } else {
       document.body.style.overflow = 'unset';
@@ -126,7 +126,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value as Field['type'])}
+                    onChange={(e) => setType(e.target.value as FieldType)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
                     {FIELD_TYPES.map(type => (
