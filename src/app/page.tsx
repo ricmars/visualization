@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, MutableRefObject } from 'react';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ChatInterface } from './components/ChatInterface';
 import StepForm from './components/StepForm';
-import { OllamaService, ChatRole } from './services/ollama';
+import { Service, ChatRole } from './services/service';
 import { Stage, Message, Delta, Field } from './types';
 import AddFieldModal from './components/AddFieldModal';
 import { motion } from 'framer-motion';
@@ -39,10 +39,6 @@ interface WorkflowDelta {
   };
 }
 
-interface OllamaResponse {
-  content: string;
-}
-
 const SESSION_STORAGE_KEY = 'workflow_stages';
 
 export default function Home() {
@@ -57,10 +53,7 @@ export default function Home() {
   const startX = useRef(0);
   const startWidth = useRef(0);
   const [isModalOpen, setModalOpen] = useState(false);
-  const [fields, setFields] = useState<Field[]>(() => {
-    const savedFields = sessionStorage.getItem('workflow_fields');
-    return savedFields ? JSON.parse(savedFields) : [];
-  });
+  const [fields, setFields] = useState<Field[]>([]);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +61,7 @@ export default function Home() {
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
+  const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
   
   // Load stages and fields from session storage or default model
   useEffect(() => {
@@ -112,11 +106,13 @@ export default function Home() {
     }
   }, [stages]);
 
-  const handleAddField = (fieldData: { label: string; type: Field['type']; options?: string[] }) => {
+  const handleAddField = (fieldData: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => {
     const newField: Field = {
       id: uuidv4(),
       label: fieldData.label,
       type: fieldData.type,
+      required: fieldData.required || false,
+      isPrimary: fieldData.isPrimary || false,
       ...(fieldData.options && { options: fieldData.options })
     };
 
@@ -445,26 +441,41 @@ export default function Home() {
 
   const handleChatMessage = async (message: string) => {
     try {
-      const response = await OllamaService.chat(message);
-      const typedStages = stages;
+      // Service.setProvider('gemini');
+      const currentModel = {
+        stages: stages,
+        fields: fields
+      };
+      const response = await Service.generateResponse(message, currentModel);
+      
+      // Try to parse the response as JSON
+      let parsedResponse;
+      try {
+        parsedResponse = JSON.parse(response);
+      } catch (e) {
+        // If parsing fails, use the raw response as a message
+        parsedResponse = {
+          message: response
+        };
+      }
 
+      // Update both stages and fields if the response includes a new model
+      if (parsedResponse.model) {
+        if (parsedResponse.model.stages) {
+          setStages(parsedResponse.model.stages);
+        }
+        if (parsedResponse.model.fields) {
+          setFields(parsedResponse.model.fields);
+          // Save updated fields to session storage
+          sessionStorage.setItem('workflow_fields', JSON.stringify(parsedResponse.model.fields));
+        }
+      }
+
+      // Add the message to the chat
       addMessage({
         id: uuidv4(),
         type: 'json',
-        content: {
-          message: response.content,
-          model: typedStages,
-          visualization: {
-            totalStages: typedStages.length,
-            stageBreakdown: typedStages.map(stage => ({
-              name: stage.name,
-              stepCount: stage.steps.length,
-              steps: stage.steps.map(step => ({
-                name: step.name
-              }))
-            }))
-          }
-        },
+        content: parsedResponse,
         sender: 'ai'
       });
     } catch (error) {
@@ -711,6 +722,7 @@ export default function Home() {
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Data</h2>
                 <button
+                  ref={addFieldButtonRef}
                   onClick={() => setIsAddFieldModalOpen(true)}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                 >
@@ -724,7 +736,14 @@ export default function Home() {
                     className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
+                        {field.isPrimary && (
+                          <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
+                            Primary
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => handleEditField(field.id)}
@@ -744,6 +763,13 @@ export default function Home() {
                   </div>
                 ))}
               </div>
+              <AddFieldModal
+                isOpen={isAddFieldModalOpen}
+                onClose={() => setIsAddFieldModalOpen(false)}
+                onAddField={handleAddField}
+                buttonRef={addFieldButtonRef}
+                allowExistingFields={false}
+              />
             </div>
           )}
         </main>

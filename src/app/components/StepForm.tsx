@@ -66,15 +66,15 @@ const StepForm: React.FC<StepFormProps> = ({
                           <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
                             {field.label}
                             {field.required && <span className="text-red-500">*</span>}
+                            {field.isPrimary && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
+                                Primary
+                              </span>
+                            )}
                             <span className="text-xs text-gray-500 dark:text-gray-400 font-normal">
                               ({field.type})
                             </span>
                           </h4>
-                          {field.description && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                              {field.description}
-                            </p>
-                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">

@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-json';
+import { Service, LLMProvider } from '../services/service';
 
 // Client-side only component for code highlighting
 const CodeBlock = ({ code }: { code: string }) => {
@@ -37,6 +38,7 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
+  const [provider, setProvider] = useState<LLMProvider>('gemini');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +58,12 @@ export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfac
       onSendMessage(input.trim());
       setInput('');
     }
+  };
+
+  const handleProviderChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newProvider = event.target.value as LLMProvider;
+    setProvider(newProvider);
+    Service.setProvider(newProvider);
   };
 
   interface Delta {
@@ -167,7 +175,17 @@ export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfac
     <div className="flex flex-col h-full">
       {/* Chat Header */}
       <div className="flex justify-between items-center p-4 pr-[50px] border-b dark:border-gray-700 bg-white dark:bg-gray-900">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI Assistant</h2>
+        <div className="flex items-center space-x-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI Assistant</h2>
+          <select
+            value={provider}
+            onChange={handleProviderChange}
+            className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500"
+          >
+            <option value="ollama">Ollama</option>
+            <option value="gemini">Gemini</option>
+          </select>
+        </div>
         <button
           onClick={onClear}
           className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 hover:ring-red-200 dark:hover:ring-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 active:bg-red-50 dark:active:bg-red-900/20 transition-colors"

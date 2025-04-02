@@ -16,6 +16,7 @@ type FieldType = typeof FIELD_TYPES[number];
 const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubmit, field }) => {
   const [label, setLabel] = useState(field.label);
   const [type, setType] = useState<Field['type']>(field.type);
+  const [isPrimary, setIsPrimary] = useState(field.isPrimary || false);
   const [error, setError] = useState('');
   const modalRef = useRef<HTMLDivElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -29,6 +30,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
       // Set initial values when modal opens
       setLabel(field.label);
       setType(field.type);
+      setIsPrimary(field.isPrimary || false);
     } else {
       document.body.style.overflow = 'unset';
     }
@@ -44,7 +46,8 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
     }
     onSubmit({ 
       label: label.trim(),
-      type
+      type,
+      isPrimary
     });
     setError('');
     onClose();
@@ -132,6 +135,26 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isPrimary"
+                    checked={isPrimary}
+                    onChange={(e) => setIsPrimary(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                  />
+                  <label htmlFor="isPrimary" className="text-sm text-gray-700 dark:text-gray-300">
+                    Primary Field
+                  </label>
+                  <Tooltip content="Primary fields are used as identifiers and are displayed prominently in the workflow">
+                    <span className="text-gray-400 hover:text-gray-500 cursor-help">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </span>
+                  </Tooltip>
                 </div>
               </div>
 

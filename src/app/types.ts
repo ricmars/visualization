@@ -3,6 +3,8 @@ export interface Field {
   label: string;
   type: 'text' | 'select' | 'checkbox' | 'email' | 'textarea' | 'number';
   options?: string[];
+  required?: boolean;
+  isPrimary?: boolean;
 }
 
 export interface FieldValue {

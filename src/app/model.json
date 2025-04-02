@@ -3,7 +3,8 @@
     {
       "id": "incidentTitle",
       "label": "Incident Title",
-      "type": "text"
+      "type": "text",
+      "primary": true
     },
     {
       "id": "description",
@@ -38,7 +39,8 @@
           "type": "Collect information",
           "fields": [
             {
-              "id": "incidentTitle"
+              "id": "incidentTitle",
+              "required": true
             },
             {
               "id": "description"

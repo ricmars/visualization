@@ -20,7 +20,7 @@ interface WorkflowDiagramProps {
   onStepsUpdate: (updatedStages: Stage[]) => void;
   onDeleteStage?: (stageId: string) => void;
   onDeleteStep?: (stageId: string, stepId: string) => void;
-  onAddField: (field: { label: string; type: Field['type']; options?: string[] }) => string;
+  onAddField: (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => string;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (fieldId: string) => void;
 }
@@ -285,23 +285,26 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepsUpdate(updatedStages);
   };
 
-  const handleAddFieldToStep = (fieldData: { label: string; type: Field['type']; options?: string[] }) => {
-    if (!selectedStep) return;
+  const handleAddFieldToStep = (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => {
+    if (!selectedStep) return '';
 
-    const fieldId = onAddField(fieldData);
-    const fieldValue: FieldValue = {
-      id: fieldId,
-    };
-
+    const fieldId = onAddField(field);
+    
     const updatedStages = stages.map(stage => {
       if (stage.id === selectedStep.stageId) {
         return {
           ...stage,
           steps: stage.steps.map(step => {
             if (step.id === selectedStep.stepId) {
+              const updatedFields = [...step.fields, { id: fieldId, value: null }];
+              // Update the selectedStep state with new fields
+              setSelectedStep({
+                ...selectedStep,
+                fields: updatedFields
+              });
               return {
                 ...step,
-                fields: [...step.fields, fieldValue]
+                fields: updatedFields
               };
             }
             return step;
@@ -311,18 +314,48 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return stage;
     });
 
-    // Update the stages
     onStepsUpdate(updatedStages);
+    return fieldId;
+  };
 
-    // Update the selectedStep state to reflect the new field
-    const updatedStage = updatedStages.find(s => s.id === selectedStep.stageId);
-    const updatedStep = updatedStage?.steps.find(s => s.id === selectedStep.stepId);
-    if (updatedStep) {
-      setSelectedStep({
-        ...selectedStep,
-        fields: updatedStep.fields
-      });
-    }
+  const handleAddExistingFieldToStep = (stepId: string, fieldIds: string[]) => {
+    if (!selectedStep) return;
+
+    const updatedStages = stages.map(stage => {
+      if (stage.id === selectedStep.stageId) {
+        return {
+          ...stage,
+          steps: stage.steps.map(step => {
+            if (step.id === stepId) {
+              // Get the field objects for all the selected field IDs
+              const fieldsToAdd = fieldIds.map(fieldId => {
+                const field = fields.find(f => f.id === fieldId);
+                return field ? {
+                  id: fieldId,
+                  value: null
+                } : null;
+              }).filter(Boolean) as FieldValue[];
+
+              const updatedFields = [...step.fields, ...fieldsToAdd];
+              // Update the selectedStep state with new fields
+              setSelectedStep({
+                ...selectedStep,
+                fields: updatedFields
+              });
+
+              return {
+                ...step,
+                fields: updatedFields
+              };
+            }
+            return step;
+          })
+        };
+      }
+      return stage;
+    });
+
+    onStepsUpdate(updatedStages);
   };
 
   return (
@@ -495,14 +528,17 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
               setIsConfigModalOpen(false);
               setSelectedStep(null);
             }}
+            step={{
+              id: selectedStep.stepId,
+              name: selectedStep.name,
+              type: selectedStep.type,
+              fields: selectedStep.fields
+            }}
             fields={fields}
-            stepFields={selectedStep.fields}
-            onFieldChange={handleFieldChange}
             onAddField={handleAddFieldToStep}
-            stepName={selectedStep.name}
-            stepType={selectedStep.type}
             onUpdateField={onUpdateField}
             onDeleteField={onDeleteField}
+            onAddExistingFieldToStep={handleAddExistingFieldToStep}
           />
         )}
       </div>

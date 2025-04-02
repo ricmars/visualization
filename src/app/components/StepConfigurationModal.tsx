@@ -17,10 +17,11 @@ interface StepConfigurationModalProps {
     fields: FieldValue[];
   };
   fields: Field[];
-  onAddField: (field: { label: string; type: Field['type']; options?: string[] }) => string;
+  onAddField: (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => string;
   onUpdateField?: (updates: Partial<Field>) => void;
   onDeleteField: (fieldId: string) => void;
   onFieldsReorder?: (stepId: string, fieldIds: string[]) => void;
+  onAddExistingFieldToStep?: (stepId: string, fieldIds: string[]) => void;
 }
 
 const FIELD_TYPES = ['text', 'number', 'select', 'checkbox', 'email', 'textarea'] as const;
@@ -34,7 +35,8 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   onAddField,
   onUpdateField,
   onDeleteField,
-  onFieldsReorder
+  onFieldsReorder,
+  onAddExistingFieldToStep
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null) as MutableRefObject<HTMLInputElement>;
@@ -76,17 +78,24 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     }
   };
 
-  const handleAddFieldSubmit = (field: { label: string; type: Field['type'] }) => {
-    onAddField(field);
+  const handleAddFieldSubmit = (field: { label: string; type: Field['type']; options?: string[] }, isExistingField: boolean, existingFieldIds?: string[]) => {
+    if (isExistingField && existingFieldIds && onAddExistingFieldToStep) {
+      onAddExistingFieldToStep(step.id, existingFieldIds);
+    } else {
+      onAddField(field);
+    }
     setIsAddFieldOpen(false);
   };
 
   const handleEditField = (field: Field) => {
-    setEditingField(field);
+    setEditingField({
+      ...field,
+      required: field.required ?? false // Set default value if undefined
+    });
     setEditingFieldType(field.type);
   };
 
-  const handleEditSubmit = (updates: { label: string; type: Field['type']; options?: string[] }) => {
+  const handleEditSubmit = (updates: { label: string; type: Field['type']; options?: string[]; required?: boolean }) => {
     if (editingField && onUpdateField) {
       onUpdateField({
         id: editingField.id,
@@ -200,8 +209,15 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           <AddFieldModal
             isOpen={isAddFieldOpen}
             onClose={() => setIsAddFieldOpen(false)}
-            onAddField={handleAddFieldSubmit}
+            onAddField={onAddField}
             buttonRef={addFieldButtonRef}
+            existingFields={fields}
+            stepFieldIds={step.fields.map(f => f.id)}
+            onAddExistingField={(fieldIds) => {
+              if (onAddExistingFieldToStep) {
+                onAddExistingFieldToStep(step.id, fieldIds);
+              }
+            }}
           />
 
           <AnimatePresence>
@@ -253,7 +269,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                     <input
                       type="checkbox"
                       id="required"
-                      checked={editingField.required}
+                      checked={editingField?.required ?? false}
                       onChange={(e) => setEditingField({ ...editingField, required: e.target.checked })}
                       className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                     />
@@ -276,7 +292,8 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                           if (editingField) {
                             handleEditSubmit({
                               label: editingField.label,
-                              type: editingFieldType
+                              type: editingFieldType,
+                              required: editingField.required
                             });
                           }
                         }}
