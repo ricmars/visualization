@@ -43,11 +43,7 @@ const StepForm: React.FC<StepFormProps> = ({
                   <div
                     ref={provided.innerRef}
                     {...provided.draggableProps}
-                    style={{
-                      ...provided.draggableProps.style,
-                      position: snapshot.isDragging ? 'absolute' : 'relative',
-                      zIndex: snapshot.isDragging ? 9999 : 'auto',
-                    }}
+                    style={provided.draggableProps.style}
                     className={`relative group p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 ${
                       snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500 ring-opacity-50' : ''
                     }`}
@@ -56,7 +52,7 @@ const StepForm: React.FC<StepFormProps> = ({
                       <div className="flex items-center gap-2 flex-1">
                         <div
                           {...provided.dragHandleProps}
-                          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors touch-none"
                         >
                           <FaGripVertical className="w-4 h-4 text-gray-400" />
                         </div>

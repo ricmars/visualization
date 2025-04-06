@@ -451,8 +451,11 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                     <div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
-                                      {...provided.dragHandleProps}
-                                      onClick={() => handleStepSelect(stage.id, step.id)}
+                                      style={{
+                                        ...provided.draggableProps.style,
+                                        transform: provided.draggableProps.style?.transform,
+                                        transformOrigin: 'top left'
+                                      }}
                                       className={`p-3 rounded-lg border transition-all cursor-pointer
                                         ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500/50' : 'hover:shadow-md'}
                                         ${
@@ -461,8 +464,15 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                             : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
                                         }
                                       `}
+                                      onClick={() => handleStepSelect(stage.id, step.id)}
                                     >
                                       <div className="flex items-center gap-3">
+                                        <div
+                                          {...provided.dragHandleProps}
+                                          className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                                        >
+                                          <FaGripVertical className="w-4 h-4 text-gray-400" />
+                                        </div>
                                         <span className="text-xl">
                                           {getStepIcon(step.type || 'Automation')}
                                         </span>
