@@ -1,8 +1,13 @@
-import React from 'react';
-import { Field } from '../types';
-import { FaTrash, FaPencilAlt, FaGripVertical } from 'react-icons/fa';
-import Tooltip from './Tooltip';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import React from "react";
+import { Field } from "../types";
+import { FaTrash, FaPencilAlt, FaGripVertical } from "react-icons/fa";
+import Tooltip from "./Tooltip";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd";
 
 interface StepFormProps {
   fields: Field[];
@@ -17,7 +22,7 @@ const StepForm: React.FC<StepFormProps> = ({
   onFieldChange: _onFieldChange,
   onDeleteField,
   onEditField,
-  onReorderFields
+  onReorderFields,
 }) => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination || !onReorderFields) return;
@@ -28,15 +33,19 @@ const StepForm: React.FC<StepFormProps> = ({
     <DragDropContext onDragEnd={handleDragEnd}>
       <Droppable droppableId="fields" direction="vertical">
         {(provided, snapshot) => (
-          <div 
-            className={`space-y-2 relative ${snapshot.isDraggingOver ? 'bg-blue-50/50 dark:bg-blue-900/10 rounded-lg' : ''}`}
-            {...provided.droppableProps} 
+          <div
+            className={`space-y-2 relative ${
+              snapshot.isDraggingOver
+                ? "bg-blue-50/50 dark:bg-blue-900/10 rounded-lg"
+                : ""
+            }`}
+            {...provided.droppableProps}
             ref={provided.innerRef}
           >
             {fields.map((field, index) => (
-              <Draggable 
-                key={field.id} 
-                draggableId={field.id} 
+              <Draggable
+                key={field.name}
+                draggableId={field.name}
                 index={index}
               >
                 {(provided, snapshot) => (
@@ -45,7 +54,9 @@ const StepForm: React.FC<StepFormProps> = ({
                     {...provided.draggableProps}
                     style={provided.draggableProps.style}
                     className={`relative group p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 ${
-                      snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500 ring-opacity-50' : ''
+                      snapshot.isDragging
+                        ? "shadow-lg ring-2 ring-blue-500 ring-opacity-50"
+                        : ""
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -59,8 +70,8 @@ const StepForm: React.FC<StepFormProps> = ({
                         <div className="flex-1">
                           <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
                             {field.label}
-                            {field.required && <span className="text-red-500">*</span>}
-                            {field.isPrimary && (
+
+                            {field.primary && (
                               <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
                                 Primary
                               </span>
@@ -86,7 +97,7 @@ const StepForm: React.FC<StepFormProps> = ({
                         {onDeleteField && (
                           <Tooltip content={`Delete ${field.label}`}>
                             <button
-                              onClick={() => onDeleteField(field.id)}
+                              onClick={() => onDeleteField(field.name)}
                               className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                               aria-label={`Delete ${field.label}`}
                             >
@@ -108,4 +119,4 @@ const StepForm: React.FC<StepFormProps> = ({
   );
 };
 
-export default StepForm; 
+export default StepForm;

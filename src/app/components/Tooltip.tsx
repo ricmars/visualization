@@ -1,51 +1,55 @@
-import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface TooltipProps {
   content: string;
   children: React.ReactNode;
-  position?: 'top' | 'bottom' | 'left' | 'right';
+  position?: "top" | "bottom" | "left" | "right";
 }
 
-const Tooltip: React.FC<TooltipProps> = ({ content, children, position = 'top' }) => {
+const Tooltip: React.FC<TooltipProps> = ({
+  content,
+  children,
+  position = "top",
+}) => {
   const [isVisible, setIsVisible] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const targetRef = useRef<HTMLDivElement>(null);
 
   const getTooltipPosition = () => {
     if (!tooltipRef.current || !targetRef.current) return {};
-    
+
     const _targetRect = targetRef.current.getBoundingClientRect();
     const _tooltipRect = tooltipRef.current.getBoundingClientRect();
-    
+
     switch (position) {
-      case 'top':
+      case "top":
         return {
-          bottom: '100%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          marginBottom: '8px'
+          bottom: "100%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          marginBottom: "8px",
         };
-      case 'bottom':
+      case "bottom":
         return {
-          top: '100%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          marginTop: '8px'
+          top: "100%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          marginTop: "8px",
         };
-      case 'left':
+      case "left":
         return {
-          right: '100%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          marginRight: '8px'
+          right: "100%",
+          top: "50%",
+          transform: "translateY(-50%)",
+          marginRight: "8px",
         };
-      case 'right':
+      case "right":
         return {
-          left: '100%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          marginLeft: '8px'
+          left: "100%",
+          top: "50%",
+          transform: "translateY(-50%)",
+          marginLeft: "8px",
         };
       default:
         return {};
@@ -81,4 +85,4 @@ const Tooltip: React.FC<TooltipProps> = ({ content, children, position = 'top' }
   );
 };
 
-export default Tooltip; 
+export default Tooltip;

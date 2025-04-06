@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, MutableRefObject } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import StepForm from './StepForm';
-import { Field, FieldValue } from '../types';
-import AddFieldModal from './AddFieldModal';
-import Tooltip from './Tooltip';
+import React, { useState, useEffect, useRef, MutableRefObject } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import StepForm from "./StepForm";
+import { Field } from "../types";
+import AddFieldModal from "./AddFieldModal";
+import Tooltip from "./Tooltip";
 
 interface StepConfigurationModalProps {
   isOpen: boolean;
@@ -12,10 +12,16 @@ interface StepConfigurationModalProps {
     id: string;
     name: string;
     type: string;
-    fields: FieldValue[];
+    fields: Field[];
   };
   fields: Field[];
-  onAddField: (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => string;
+  onAddField: (field: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+    primary?: boolean;
+  }) => string;
   onUpdateField?: (updates: Partial<Field>) => void;
   onDeleteField: (fieldId: string) => void;
   onFieldsReorder?: (stepId: string, fieldIds: string[]) => void;
@@ -31,34 +37,38 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   onUpdateField,
   onDeleteField,
   onFieldsReorder,
-  onAddExistingFieldToStep
+  onAddExistingFieldToStep,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
-  const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
+  const addFieldButtonRef = useRef<HTMLButtonElement>(
+    null,
+  ) as MutableRefObject<HTMLButtonElement>;
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
 
   // Filter fields to only show those associated with this step
-  const stepFieldIds = step.fields.map(f => f.id);
-  const filteredFields = fields.filter(field => stepFieldIds.includes(field.id));
+  const stepFieldIds = step.fields.map((f) => f.name);
+  const filteredFields = fields.filter((field) =>
+    stepFieldIds.includes(field.name),
+  );
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
       setTimeout(() => {
         modalRef.current?.focus();
       }, 100);
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
       setEditingField(null);
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       if (editingField) {
         setEditingField(null);
       } else {
@@ -70,15 +80,19 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   const handleEditField = (field: Field) => {
     setEditingField({
       ...field,
-      required: field.required ?? false // Set default value if undefined
     });
   };
 
-  const handleEditSubmit = (updates: { label: string; type: Field['type']; options?: string[]; required?: boolean }) => {
+  const handleEditSubmit = (updates: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+  }) => {
     if (editingField && onUpdateField) {
       onUpdateField({
-        id: editingField.id,
-        ...updates
+        name: editingField.name,
+        ...updates,
       });
       setEditingField(null);
     }
@@ -86,12 +100,15 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
 
   const handleReorderFields = (startIndex: number, endIndex: number) => {
     if (!onFieldsReorder || !step) return;
-    
+
     const reorderedFields = Array.from(filteredFields);
     const [removed] = reorderedFields.splice(startIndex, 1);
     reorderedFields.splice(endIndex, 0, removed);
-    
-    onFieldsReorder(step.id, reorderedFields.map(field => field.id));
+
+    onFieldsReorder(
+      step.id,
+      reorderedFields.map((field) => field.name),
+    );
   };
 
   return (
@@ -100,7 +117,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
         <>
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => editingField ? setEditingField(null) : onClose()}
+            onClick={() => (editingField ? setEditingField(null) : onClose())}
           />
           <motion.div
             ref={modalRef}
@@ -120,7 +137,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                   </h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  {step.type === 'Collect information' && (
+                  {step.type === "Collect information" && (
                     <Tooltip content="Add new field">
                       <motion.button
                         ref={addFieldButtonRef}
@@ -130,8 +147,18 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                         className="inline-flex items-center px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 shadow-sm text-sm"
                         aria-label="Add new field"
                       >
-                        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        <svg
+                          className="w-4 h-4 mr-1.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                          />
                         </svg>
                         Add Field
                       </motion.button>
@@ -143,8 +170,18 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                       className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                       aria-label="Close modal"
                     >
-                      <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-4 h-4 text-gray-500 dark:text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   </Tooltip>
@@ -152,7 +189,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
               </div>
 
               <div className="mt-4 max-h-[calc(100vh-14rem)] overflow-y-auto">
-                {step.type !== 'Collect information' ? (
+                {step.type !== "Collect information" ? (
                   <div className="text-center py-8">
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       This step type does not support custom fields.
@@ -187,13 +224,15 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           <AddFieldModal
             isOpen={isAddFieldOpen}
             onClose={() => setIsAddFieldOpen(false)}
-            onAddField={(field) => onAddField({ ...field, isPrimary: field.isPrimary ?? false })}
+            onAddField={(field) =>
+              onAddField({ ...field, primary: field.primary ?? false })
+            }
             buttonRef={addFieldButtonRef}
             existingFields={fields}
-            stepFieldIds={step.fields.map(f => f.id)}
+            stepFieldIds={step.fields.map((f) => f.name)}
             onAddExistingField={(fieldIds) => {
               if (onAddExistingFieldToStep) {
-                onAddExistingFieldToStep(step.id, fieldIds);
+                onAddExistingFieldToStep(step.name, fieldIds);
               }
             }}
           />
@@ -219,22 +258,16 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                     <input
                       type="text"
                       value={editingField.label}
-                      onChange={(e) => setEditingField({ ...editingField, label: e.target.value })}
+                      onChange={(e) =>
+                        setEditingField({
+                          ...editingField,
+                          label: e.target.value,
+                        })
+                      }
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="required"
-                      checked={editingField?.required ?? false}
-                      onChange={(e) => setEditingField({ ...editingField, required: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                    />
-                    <label htmlFor="required" className="text-sm text-gray-700 dark:text-gray-300">
-                      Required
-                    </label>
-                  </div>
+
                   <div className="flex justify-end gap-2 mt-4">
                     <Tooltip content="Cancel editing">
                       <button
@@ -251,7 +284,6 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                             handleEditSubmit({
                               label: editingField.label,
                               type: editingField.type,
-                              required: editingField.required
                             });
                           }
                         }}
@@ -271,4 +303,4 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   );
 };
 
-export default StepConfigurationModal; 
+export default StepConfigurationModal;

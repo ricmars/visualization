@@ -1,15 +1,29 @@
-import React, { useState } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { Stage, Field, FieldValue } from '../types';
-import AddStepModal from './AddStepModal';
-import EditModal from './EditModal';
-import { v4 as uuidv4 } from 'uuid';
-import { FaClipboardList, FaCheckCircle, FaRobot, FaFolder, FaQuestionCircle, FaTrash, FaGripVertical, FaPencilAlt } from 'react-icons/fa';
-import { IoDocumentText } from 'react-icons/io5';
-import { RiBrainFill } from 'react-icons/ri';
-import { MdNotifications } from 'react-icons/md';
-import { BsGearFill } from 'react-icons/bs';
-import StepConfigurationModal from './StepConfigurationModal';
+import React, { useState } from "react";
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  DropResult,
+} from "@hello-pangea/dnd";
+import { Stage, Field, StepType, FieldReference } from "../types";
+import AddStepModal from "./AddStepModal";
+import EditModal from "./EditModal";
+import { v4 as uuidv4 } from "uuid";
+import {
+  FaClipboardList,
+  FaCheckCircle,
+  FaRobot,
+  FaFolder,
+  FaQuestionCircle,
+  FaTrash,
+  FaGripVertical,
+  FaPencilAlt,
+} from "react-icons/fa";
+import { IoDocumentText } from "react-icons/io5";
+import { RiBrainFill } from "react-icons/ri";
+import { MdNotifications } from "react-icons/md";
+import { BsGearFill } from "react-icons/bs";
+import StepConfigurationModal from "./StepConfigurationModal";
 
 interface WorkflowDiagramProps {
   stages: Stage[];
@@ -20,12 +34,18 @@ interface WorkflowDiagramProps {
   onStepsUpdate: (updatedStages: Stage[]) => void;
   onDeleteStage?: (stageId: string) => void;
   onDeleteStep?: (stageId: string, stepId: string) => void;
-  onAddField: (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => string;
+  onAddField: (field: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+    primary?: boolean;
+  }) => string;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (fieldId: string) => void;
 }
 
-export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
+const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   stages,
   fields,
   onStepSelect,
@@ -36,66 +56,69 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onDeleteStep,
   onAddField,
   onUpdateField,
-  onDeleteField
+  onDeleteField,
 }) => {
   const [_isDragging, setIsDragging] = useState(false);
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<{
-    type: 'stage' | 'step';
+    type: "stage" | "step";
     id: string;
     stageId?: string;
     name: string;
-    stepType?: string;
+    stepType?: StepType;
   } | null>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [selectedStep, setSelectedStep] = useState<{
     stageId: string;
     stepId: string;
     name: string;
-    fields: FieldValue[];
+    fields: Field[];
     type: string;
   } | null>(null);
 
   const _getStageClass = (stage: Stage, index: number) => {
-    const baseClass = 'clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500';
+    const baseClass =
+      "clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500";
     const positionClass = `stage-${index + 1}`;
-    
-    let animationClass = '';
+
+    let animationClass = "";
     if (stage.isNew) {
-      animationClass = 'animate-slide-in';
+      animationClass = "animate-slide-in";
     } else if (stage.isDeleting) {
-      animationClass = 'animate-fade-out';
+      animationClass = "animate-fade-out";
     } else if (stage.isMoving) {
-      animationClass = stage.moveDirection === 'up' ? 'animate-move-up' : 'animate-move-down';
+      animationClass =
+        stage.moveDirection === "up" ? "animate-move-up" : "animate-move-down";
     }
 
-    const activeClass = activeStage === stage.id ? 'ring-2 ring-white ring-opacity-70' : '';
-    
+    const activeClass =
+      activeStage === stage.name ? "ring-2 ring-white ring-opacity-70" : "";
+
     return `${baseClass} ${positionClass} ${animationClass} ${activeClass}`;
   };
 
   const getStepIcon = (stepType: string) => {
     // Map step types to appropriate icons
     switch (stepType) {
-      case 'Collect information':
+      case "Collect information":
         return <FaClipboardList className="text-blue-500" />;
-      case 'Approve/Reject':
+      case "Approve/Reject":
         return <FaCheckCircle className="text-green-500" />;
-      case 'Automation':
+      case "Automation":
         return <BsGearFill className="text-purple-500" />;
-      case 'Create Case':
+      case "Create Case":
         return <FaFolder className="text-yellow-500" />;
-      case 'Decision':
+      case "Decision":
         return <FaQuestionCircle className="text-orange-500" />;
-      case 'Generate Document':
+      case "Generate Document":
         return <IoDocumentText className="text-gray-500" />;
-      case 'Generative AI':
+      case "Generative AI":
         return <RiBrainFill className="text-pink-500" />;
-      case 'Robotic Automation':
+      case "Robotic Automation":
         return <FaRobot className="text-indigo-500" />;
-      case 'Send Notification':
+      case "Send Notification":
         return <MdNotifications className="text-red-500" />;
       default:
         return <BsGearFill className="text-gray-400" />;
@@ -110,11 +133,11 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     e.stopPropagation();
   };
 
-  const _handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+  const _handleAddStepSubmit = (stepData: { name: string; type: StepType }) => {
     if (!selectedStageId) return;
 
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStageId) {
+    const updatedStages = stages.map((stage) => {
+      if (stage.name === selectedStageId) {
         return {
           ...stage,
           steps: [
@@ -122,11 +145,11 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             {
               id: uuidv4(),
               name: stepData.name,
-              type: stepData.type || 'Automation',
-              status: 'pending' as const,
-              fields: []
-            }
-          ]
+              type: stepData.type,
+              status: "pending" as const,
+              fields: [],
+            },
+          ],
         };
       }
       return stage;
@@ -148,7 +171,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return;
     }
 
-    if (result.type === 'stage') {
+    if (result.type === "stage") {
       // Handle stage reordering
       const sourceIndex = result.source.index;
       const destinationIndex = result.destination.index;
@@ -158,8 +181,8 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       updatedStages.splice(destinationIndex, 0, movedStage);
 
       // Save to session storage
-      sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
-      
+      sessionStorage.setItem("workflowStages", JSON.stringify(updatedStages));
+
       onStepsUpdate(updatedStages);
       return;
     }
@@ -171,8 +194,10 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     const destinationIndex = result.destination.index;
 
     const updatedStages = [...stages];
-    const sourceStage = updatedStages.find(s => s.id === sourceStageId);
-    const destinationStage = updatedStages.find(s => s.id === destinationStageId);
+    const sourceStage = updatedStages.find((s) => s.name === sourceStageId);
+    const destinationStage = updatedStages.find(
+      (s) => s.name === destinationStageId,
+    );
 
     if (!sourceStage || !destinationStage) {
       return;
@@ -182,7 +207,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     destinationStage.steps.splice(destinationIndex, 0, movedStep);
 
     // Save to session storage
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
+    sessionStorage.setItem("workflowStages", JSON.stringify(updatedStages));
 
     onStepsUpdate(updatedStages);
   };
@@ -192,102 +217,128 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     setIsAddStepModalOpen(true);
   };
 
-  const handleEditClick = (type: 'stage' | 'step', id: string, stageId?: string) => {
-    if (type === 'stage') {
-      const stage = stages.find(s => s.id === id);
+  const handleEditClick = (
+    type: "stage" | "step",
+    id: string,
+    stageId?: string,
+  ) => {
+    if (type === "stage") {
+      const stage = stages.find((s) => s.name === id);
       if (stage) {
         setEditItem({
-          type: 'stage',
-          id: stage.id,
-          name: stage.name
+          type: "stage",
+          id: stage.name,
+          name: stage.name,
         });
         setIsEditModalOpen(true);
       }
     } else {
-      const stage = stages.find(s => s.id === stageId);
-      const step = stage?.steps.find(s => s.id === id);
+      const stage = stages.find((s) => s.name === stageId);
+      const step = stage?.steps.find((s) => s.name === id);
       if (step) {
         setEditItem({
-          type: 'step',
-          id: step.id,
+          type: "step",
+          id: step.name,
           stageId,
           name: step.name,
-          stepType: step.type
+          stepType: step.type,
         });
         setIsEditModalOpen(true);
       }
     }
   };
 
-  const handleEditSubmit = (data: { name: string; type?: string }) => {
+  const handleEditSubmit = (data: { name: string; type?: StepType }) => {
     if (!editItem) return;
 
-    const updatedStages = stages.map(stage => {
-      if (editItem.type === 'stage' && stage.id === editItem.id) {
+    const updatedStages = stages.map((stage) => {
+      if (editItem.type === "stage" && stage.name === editItem.name) {
         return {
           ...stage,
-          name: data.name
+          name: data.name,
         };
-      } else if (editItem.type === 'step' && stage.id === editItem.stageId) {
+      } else if (editItem.type === "step" && stage.name === editItem.stageId) {
         return {
           ...stage,
-          steps: stage.steps.map(step => 
-            step.id === editItem.id
+          steps: stage.steps.map((step) =>
+            step.name === editItem.name
               ? { ...step, name: data.name, type: data.type || step.type }
-              : step
-          )
+              : step,
+          ),
         };
       }
       return stage;
     });
 
     // Save to session storage
-    sessionStorage.setItem('workflowStages', JSON.stringify(updatedStages));
-    
+    sessionStorage.setItem("workflowStages", JSON.stringify(updatedStages));
+
     onStepsUpdate(updatedStages);
     setIsEditModalOpen(false);
     setEditItem(null);
   };
 
   const handleStepSelect = (stageId: string, stepId: string) => {
-    const stage = stages.find(s => s.id === stageId);
-    const step = stage?.steps.find(s => s.id === stepId);
-    
+    const stage = stages.find((s) => s.name === stageId);
+    const step = stage?.steps.find((s) => s.name === stepId);
+
     if (step) {
+      // Map field references to full field objects
+      const stepFields = (step.fields || []).map((fieldRef): Field => {
+        const fullField = fields.find((f) => f.name === fieldRef.name);
+        if (fullField) {
+          return {
+            ...fullField,
+          };
+        }
+        // If field reference doesn't match any field, create a default field
+        return {
+          name: fieldRef.name,
+          label: fieldRef.name,
+          type: "Text",
+
+          value: undefined,
+        };
+      });
+
       setSelectedStep({
         stageId,
         stepId,
         name: step.name,
-        fields: step.fields,
-        type: step.type
+        fields: stepFields,
+        type: step.type,
       });
       setIsConfigModalOpen(true);
     }
-    
+
     onStepSelect(stageId, stepId);
   };
 
-  const _handleFieldChange = (fieldId: string, value: string | number | boolean) => {
+  const _handleFieldChange = (
+    fieldId: string,
+    value: string | number | boolean,
+  ): void => {
     if (!selectedStep) return;
 
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStep.stageId) {
+    const updatedStages = stages.map((stage) => {
+      if (stage.name === selectedStep.stageId) {
         return {
           ...stage,
-          steps: stage.steps.map(step => {
-            if (step.id === selectedStep.stepId) {
+          steps: stage.steps.map((step) => {
+            if (step.name === selectedStep.stepId) {
               return {
                 ...step,
-                fields: step.fields.map(field => {
-                  if (field.id === fieldId) {
-                    return { ...field, value };
-                  }
-                  return field;
-                })
+                fields:
+                  step.fields?.map((field) => {
+                    if (field.name === fieldId) {
+                      return { ...field, value };
+                    }
+                    return field;
+                  }) || [],
               };
             }
             return step;
-          })
+          }),
         };
       }
       return stage;
@@ -296,83 +347,133 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepsUpdate(updatedStages);
   };
 
-  const handleAddFieldToStep = (field: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => {
-    if (!selectedStep) return '';
+  const handleAddFieldToStep = (field: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+    primary?: boolean;
+  }): string => {
+    if (!selectedStep) return "";
 
     const fieldId = onAddField(field);
-    
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStep.stageId) {
+
+    const updatedStages = stages.map((stage: Stage) => {
+      if (stage.name === selectedStep.stageId) {
         return {
           ...stage,
-          steps: stage.steps.map(step => {
-            if (step.id === selectedStep.stepId) {
-              const updatedFields = [...step.fields, { id: fieldId, value: null }];
-              // Update the selectedStep state with new fields
-              setSelectedStep({
-                ...selectedStep,
-                fields: updatedFields
-              });
+          steps: stage.steps.map((step) => {
+            if (step.name === selectedStep.stepId) {
+              const updatedFields = [
+                ...(step.fields || []),
+                { id: fieldId, value: null },
+              ];
+
               return {
                 ...step,
-                fields: updatedFields
+                fields: updatedFields,
               };
             }
             return step;
-          })
+          }),
         };
       }
       return stage;
     });
 
-    onStepsUpdate(updatedStages);
+    onStepsUpdate(updatedStages as Stage[]);
     return fieldId;
   };
 
-  const handleAddExistingFieldToStep = (stepId: string, fieldIds: string[]) => {
+  const handleAddExistingFieldToStep = (
+    stepId: string,
+    fieldIds: string[],
+  ): void => {
     if (!selectedStep) return;
 
-    const updatedStages = stages.map(stage => {
-      if (stage.id === selectedStep.stageId) {
+    const updatedStages = stages.map((stage: Stage) => {
+      if (stage.name === selectedStep.stageId) {
         return {
           ...stage,
-          steps: stage.steps.map(step => {
-            if (step.id === stepId) {
-              // Get the field objects for all the selected field IDs
-              const fieldsToAdd = fieldIds.map(fieldId => {
-                const field = fields.find(f => f.id === fieldId);
-                return field ? {
-                  id: fieldId,
-                  value: null
-                } : null;
-              }).filter(Boolean) as FieldValue[];
+          steps: stage.steps.map((step) => {
+            if (step.name === stepId) {
+              const fieldsToAdd = fieldIds
+                .map((fieldId) => {
+                  const field = fields.find((f: Field) => f.name === fieldId);
+                  if (!field) return null;
+                  return {
+                    id: fieldId,
+                    name: field.name,
+                    required: false,
+                  } as FieldReference;
+                })
+                .filter((field): field is FieldReference => field !== null);
 
-              const updatedFields = [...step.fields, ...fieldsToAdd];
-              // Update the selectedStep state with new fields
+              const updatedFields = [...(step.fields || []), ...fieldsToAdd];
+
               setSelectedStep({
                 ...selectedStep,
-                fields: updatedFields
+                fields: updatedFields.map((field): Field => {
+                  const existingField = fields.find(
+                    (f) => f.name === field.name,
+                  );
+                  if (existingField) {
+                    return {
+                      ...existingField,
+                      value: isField(field) ? field.value : undefined,
+                    };
+                  }
+                  return {
+                    name: field.name,
+                    label: field.name,
+                    type: "Text",
+                    value: undefined,
+                  } as Field;
+                }),
               });
 
               return {
                 ...step,
-                fields: updatedFields
+                fields: updatedFields,
               };
             }
             return step;
-          })
+          }),
         };
       }
       return stage;
     });
 
-    onStepsUpdate(updatedStages);
+    // Ensure we only keep FieldReference properties in the final stages
+    const sanitizedStages = updatedStages.map((stage: Stage) => ({
+      ...stage,
+      steps: stage.steps.map((step) => ({
+        ...step,
+        fields: (step.fields || []).map(
+          (field): FieldReference => ({
+            name: field.name,
+            required:
+              typeof field.required === "boolean" ? field.required : false,
+          }),
+        ),
+      })),
+    })) as Stage[];
+
+    onStepsUpdate(sanitizedStages);
+  };
+
+  // Type guard to check if a field is a Field type
+  const isField = (field: Field | FieldReference): field is Field => {
+    return "value" in field && "type" in field && "label" in field;
   };
 
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
-        <DragDropContext onDragStart={_handleDragStart} onDragEnd={_handleDragEnd}>
+        <DragDropContext
+          onDragStart={_handleDragStart}
+          onDragEnd={_handleDragEnd}
+        >
           <Droppable droppableId="stages" type="stage" direction="vertical">
             {(provided) => (
               <div
@@ -382,41 +483,54 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
               >
                 {stages.map((stage, index) => (
                   <Draggable
-                    key={stage.id}
-                    draggableId={stage.id}
+                    key={stage.name}
+                    draggableId={stage.name}
                     index={index}
                   >
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        className={`p-6 rounded-xl border transform transition-all duration-500 ease-in-out 
-                          ${stage.isNew ? 'animate-fade-in' : ''}
-                          ${snapshot.isDragging ? 'shadow-2xl ring-2 ring-blue-500/50' : ''}
+                        className={`p-6 rounded-xl border transform transition-all duration-500 ease-in-out
+                          ${stage.isNew ? "animate-fade-in" : ""}
                           ${
-                            activeStage === stage.id
-                              ? 'border-blue-500/50 bg-blue-50/50 dark:bg-blue-900/10 shadow-lg'
-                              : 'border-gray-200/50 dark:border-gray-700/50'
+                            snapshot.isDragging
+                              ? "shadow-2xl ring-2 ring-blue-500/50"
+                              : ""
+                          }
+                          ${
+                            activeStage === stage.name
+                              ? "border-blue-500/50 bg-blue-50/50 dark:bg-blue-900/10 shadow-lg"
+                              : "border-gray-200/50 dark:border-gray-700/50"
                           }
                         `}
                       >
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-3">
-                            <div {...provided.dragHandleProps} className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded">
+                            <div
+                              {...provided.dragHandleProps}
+                              className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded"
+                            >
                               <FaGripVertical className="text-gray-400" />
                             </div>
-                            <div className={`w-1 h-6 rounded stage-${index + 1}`} />
-                            <h3 className="font-semibold text-lg text-gray-700 dark:text-gray-200">{stage.name}</h3>
+                            <div
+                              className={`w-1 h-6 rounded stage-${index + 1}`}
+                            />
+                            <h3 className="font-semibold text-lg text-gray-700 dark:text-gray-200">
+                              {stage.name}
+                            </h3>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleAddStep(stage.id)}
+                              onClick={() => handleAddStep(stage.name)}
                               className="inline-flex items-center px-3 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                             >
                               Add Step
                             </button>
                             <button
-                              onClick={() => handleEditClick('stage', stage.id)}
+                              onClick={() =>
+                                handleEditClick("stage", stage.name)
+                              }
                               className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                               aria-label="Edit stage"
                             >
@@ -424,7 +538,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                             </button>
                             {onDeleteStage && (
                               <button
-                                onClick={() => onDeleteStage(stage.id)}
+                                onClick={() => onDeleteStage(stage.name)}
                                 className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                                 aria-label="Delete stage"
                               >
@@ -434,17 +548,21 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                           </div>
                         </div>
 
-                        <Droppable droppableId={stage.id} type="step">
+                        <Droppable droppableId={stage.name} type="step">
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
                               {...provided.droppableProps}
-                              className={`space-y-2 ${snapshot.isDraggingOver ? 'bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2' : ''}`}
+                              className={`space-y-2 ${
+                                snapshot.isDraggingOver
+                                  ? "bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2"
+                                  : ""
+                              }`}
                             >
                               {stage.steps.map((step, stepIndex) => (
                                 <Draggable
-                                  key={step.id}
-                                  draggableId={step.id}
+                                  key={step.name}
+                                  draggableId={step.name}
                                   index={stepIndex}
                                 >
                                   {(provided, snapshot) => (
@@ -453,18 +571,26 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                       {...provided.draggableProps}
                                       style={{
                                         ...provided.draggableProps.style,
-                                        transform: provided.draggableProps.style?.transform,
-                                        transformOrigin: 'top left'
+                                        transform:
+                                          provided.draggableProps.style
+                                            ?.transform,
+                                        transformOrigin: "top left",
                                       }}
                                       className={`p-3 rounded-lg border transition-all cursor-pointer
-                                        ${snapshot.isDragging ? 'shadow-lg ring-2 ring-blue-500/50' : 'hover:shadow-md'}
                                         ${
-                                          activeStep === step.id
-                                            ? 'border-blue-500/50 bg-blue-50 dark:bg-blue-900/20'
-                                            : 'border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30'
+                                          snapshot.isDragging
+                                            ? "shadow-lg ring-2 ring-blue-500/50"
+                                            : "hover:shadow-md"
+                                        }
+                                        ${
+                                          activeStep === step.name
+                                            ? "border-blue-500/50 bg-blue-50 dark:bg-blue-900/20"
+                                            : "border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30"
                                         }
                                       `}
-                                      onClick={() => handleStepSelect(stage.id, step.id)}
+                                      onClick={() =>
+                                        handleStepSelect(stage.name, step.name)
+                                      }
                                     >
                                       <div className="flex items-center gap-3">
                                         <div
@@ -474,7 +600,9 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                           <FaGripVertical className="w-4 h-4 text-gray-400" />
                                         </div>
                                         <span className="text-xl">
-                                          {getStepIcon(step.type || 'Automation')}
+                                          {getStepIcon(
+                                            step.type || "Automation",
+                                          )}
                                         </span>
                                         <span className="flex-1 font-medium text-gray-700 dark:text-gray-200">
                                           {step.name}
@@ -482,7 +610,11 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleEditClick('step', step.id, stage.id);
+                                            handleEditClick(
+                                              "step",
+                                              step.name,
+                                              stage.name,
+                                            );
                                           }}
                                           className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                                           aria-label="Edit step"
@@ -493,7 +625,10 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              onDeleteStep(stage.id, step.id);
+                                              onDeleteStep(
+                                                stage.name,
+                                                step.name,
+                                              );
                                             }}
                                             className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                                             aria-label="Delete step"
@@ -537,7 +672,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             type={editItem.type}
             initialData={{
               name: editItem.name,
-              type: editItem.stepType
+              type: editItem.stepType,
             }}
           />
         )}
@@ -553,7 +688,7 @@ export const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
               id: selectedStep.stepId,
               name: selectedStep.name,
               type: selectedStep.type,
-              fields: selectedStep.fields
+              fields: selectedStep.fields,
             }}
             fields={fields}
             onAddField={handleAddFieldToStep}

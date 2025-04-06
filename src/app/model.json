@@ -1,167 +1,152 @@
 {
   "fields": [
     {
-      "id": "incidentTitle",
+      "name": "incidentTitle",
       "label": "Incident Title",
-      "type": "text",
+      "type": "Text",
       "primary": true,
       "value": "Unauthorized Access Attempt"
     },
     {
-      "id": "description",
+      "name": "description",
       "label": "Description",
-      "type": "textarea",
+      "type": "TextArea",
       "value": "Multiple failed login attempts detected from unknown IP address"
     },
     {
-      "id": "programId",
+      "name": "programId",
       "label": "Program ID",
-      "type": "text",
+      "type": "Text",
       "value": "PRG-2024-001"
     },
     {
-      "id": "evidence",
+      "name": "evidence",
       "label": "Evidence Details",
-      "type": "textarea",
+      "type": "TextArea",
       "value": "Login attempt logs showing repeated failures from IP 192.168.1.100"
     },
     {
-      "id": "severity",
+      "name": "severity",
       "label": "Severity Level",
-      "type": "select",
-      "options": ["Low", "Medium", "High", "Critical"],
+      "type": "Dropdown",
+      "options": [
+        "Low",
+        "Medium",
+        "High",
+        "Critical"
+      ],
       "value": "High"
     }
   ],
   "stages": [
     {
-      "id": "stage1",
-      "name": "Incident Intake",
+      "name": "stage1",
       "steps": [
         {
-          "id": "step1",
           "name": "Collect Incident Details",
           "type": "Collect information",
           "fields": [
             {
-              "id": "incidentTitle",
+              "name": "incidentTitle",
               "required": true
             },
             {
-              "id": "description"
+              "name": "description"
             },
             {
-              "id": "severity"
+              "name": "severity"
             }
           ]
         },
         {
-          "id": "step2",
           "name": "Determine Incident Severity",
           "type": "Decision"
         },
         {
-          "id": "step3",
           "name": "Trigger Compliance Verification",
           "type": "Automation"
         }
       ]
     },
     {
-      "id": "stage2",
       "name": "Compliance Verification",
       "steps": [
         {
-          "id": "step4",
           "name": "Review Program Records",
           "type": "Collect information",
           "status": "pending",
           "fields": [
             {
-              "id": "programId"
+              "name": "programId"
             }
           ]
         },
         {
-          "id": "step5",
           "name": "Identify Compliance Violations",
           "type": "Decision"
         },
         {
-          "id": "step6",
           "name": "Approve Compliance Findings",
           "type": "Approve/Reject"
         }
       ]
     },
     {
-      "id": "stage3",
       "name": "Risk Assessment",
       "steps": [
         {
-          "id": "step7",
           "name": "Analyze Risk Factors",
           "type": "Generative AI"
         },
         {
-          "id": "step8",
           "name": "Determine Investigation Needed",
           "type": "Decision"
         },
         {
-          "id": "step9",
           "name": "Assign Investigation Team",
           "type": "Create Case"
         }
       ]
     },
     {
-      "id": "stage4",
       "name": "Investigation",
       "status": "pending",
       "steps": [
         {
-          "id": "step10",
           "name": "Gather Additional Evidence",
           "type": "Collect information",
           "fields": [
             {
-              "id": "evidence"
+              "name": "evidence"
             }
           ]
         },
         {
-          "id": "step11",
           "name": "Approve Investigation Findings",
           "type": "Approve/Reject"
         },
         {
-          "id": "step12",
           "name": "Notify Stakeholders",
           "type": "Send Notification"
         }
       ]
     },
     {
-      "id": "stage5",
       "name": "Case Closure",
-       "steps": [
+      "steps": [
         {
-          "id": "step13",
           "name": "Update Case Records",
           "type": "Generate Document"
         },
         {
-          "id": "step14",
           "name": "Notify Stakeholders of Resolution",
           "type": "Send Notification"
         },
         {
-          "id": "step15",
           "name": "Conduct Post-Mortem Review",
           "type": "Generate Document"
         }
       ]
     }
   ]
-} 
+}

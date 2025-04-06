@@ -1,20 +1,40 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useRef, useEffect, MutableRefObject } from 'react';
-import { WorkflowDiagram } from './components/WorkflowDiagram';
-import { ChatInterface } from './components/ChatInterface';
-import { Service, ChatRole } from './services/service';
-import { Stage, Message, Delta, Field } from './types';
-import AddFieldModal from './components/AddFieldModal';
-import { motion } from 'framer-motion';
-import defaultModel from './model.json';
-import { v4 as uuidv4 } from 'uuid';
-import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import AddStageModal from './components/AddStageModal';
-import { FaPencilAlt, FaTrash } from 'react-icons/fa';
-import EditFieldModal from './components/EditFieldModal';
-import { DragDropContext as _DragDropContext, DropResult } from '@hello-pangea/dnd';
-import { default as _StepForm } from './components/StepForm';
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  MutableRefObject,
+} from "react";
+import WorkflowDiagram from "./components/WorkflowDiagram";
+import { ChatInterface } from "./components/ChatInterface";
+import { Service, ChatRole } from "./services/service";
+import {
+  Stage,
+  Message,
+  Delta,
+  Field,
+  StepType,
+  FieldReference,
+} from "./types";
+import AddFieldModal from "./components/AddFieldModal";
+import { motion } from "framer-motion";
+import defaultModel from "./model.json";
+import { v4 as uuidv4 } from "uuid";
+import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
+import AddStageModal from "./components/AddStageModal";
+import { FaPencilAlt, FaTrash } from "react-icons/fa";
+import EditFieldModal from "./components/EditFieldModal";
+import {
+  DragDropContext as _DragDropContext,
+  DropResult,
+} from "@hello-pangea/dnd";
+import { default as _StepForm } from "./components/StepForm";
+import { getFieldTypeDisplayName } from "./utils/fieldTypes";
+import { generateSampleValue } from "./utils/sampleValues";
+import ViewsPanel from "./components/ViewsPanel";
+import WorkflowLifecycleView from "./components/WorkflowLifecycleView";
 
 interface ChatMessage {
   role: ChatRole;
@@ -22,10 +42,10 @@ interface ChatMessage {
 }
 
 interface WorkflowDelta {
-  type: 'add' | 'delete' | 'move' | 'update';
+  type: "add" | "delete" | "move" | "update";
   path: string;
   target: {
-    type: 'stage' | 'step';
+    type: "stage" | "step";
     id?: string;
     name?: string;
     sourceStageId?: string;
@@ -34,12 +54,12 @@ interface WorkflowDelta {
     targetIndex?: number;
   };
   changes: {
-    before?: Stage | Stage['steps'][number];
-    after?: Partial<Stage | Stage['steps'][number]>;
+    before?: Stage | Stage["steps"][number];
+    after?: Partial<Stage | Stage["steps"][number]>;
   };
 }
 
-const SESSION_STORAGE_KEY = 'workflow_stages';
+const SESSION_STORAGE_KEY = "workflow_stages";
 
 export default function Home() {
   const [stages, setStages] = useState<Stage[]>([]);
@@ -57,45 +77,55 @@ export default function Home() {
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [_isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [_isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux' | 'fields'>('workflow');
+  const [activeTab, setActiveTab] = useState<
+    "workflow" | "fields" | "views" | "fields"
+  >("workflow");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
-  const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
+  const addFieldButtonRef = useRef<HTMLButtonElement>(
+    null,
+  ) as MutableRefObject<HTMLButtonElement>;
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  
+  const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
+    "flat",
+  );
+
   // Function to generate the model data structure
-  const generateModelData = (currentFields: Field[], currentStages: Stage[]) => {
+  const generateModelData = (
+    currentFields: Field[],
+    currentStages: Stage[],
+  ) => {
     return {
-      "fullUpdate": true,
-      "appName": "My Application",
-      "channel": "WorkPortal",
-      "industry": "Banking",
-      "userName": "John Smith",
-      "userLocale": "en-EN",
-      "translations": {},
-      "caseName": "Investigation",
-      "stepName": "Present Case",
-      "caseTypes": [
+      fullUpdate: true,
+      appName: "My Application",
+      channel: "WorkPortal",
+      industry: "Banking",
+      userName: "John Smith",
+      userLocale: "en-EN",
+      translations: {},
+      caseName: "Investigation",
+      stepName: "Present Case",
+      caseTypes: [
         {
-          "name": "Investigation",
+          name: "Investigation",
           fields: currentFields,
-          "creationFields": [],
-          stages: currentStages
-        }
-      ]
+          creationFields: [],
+          stages: currentStages,
+        },
+      ],
     };
   };
 
   // Effect to send model updates to iframe when stages or fields change
   useEffect(() => {
     if (isPreviewMode && previewContainerRef.current) {
-      const iframe = previewContainerRef.current.querySelector('iframe');
+      const iframe = previewContainerRef.current.querySelector("iframe");
       if (iframe) {
         const model = generateModelData(fields, stages);
-        iframe.contentWindow?.postMessage(model, '*');
+        iframe.contentWindow?.postMessage(model, "*");
       }
     }
   }, [stages, fields, isPreviewMode]);
@@ -104,33 +134,40 @@ export default function Home() {
   useEffect(() => {
     const loadData = () => {
       const savedStages = sessionStorage.getItem(SESSION_STORAGE_KEY);
-      const savedFields = sessionStorage.getItem('workflow_fields');
-      const initialStages = savedStages ? JSON.parse(savedStages) : defaultModel.stages;
-      const initialFields = savedFields ? JSON.parse(savedFields) : defaultModel.fields || [];
-      
+      const savedFields = sessionStorage.getItem("workflow_fields");
+      const initialStages = savedStages
+        ? JSON.parse(savedStages)
+        : defaultModel.stages;
+      const initialFields = savedFields
+        ? JSON.parse(savedFields)
+        : defaultModel.fields || [];
+
       setStages(initialStages);
       setFields(initialFields);
-      
+
       // Set initial welcome message
-      setMessages([{
-        id: 'welcome',
-        type: 'json',
-        content: {
-          message: 'Welcome! I can help you manage your workflow. Here is your current workflow:',
-          model: {
-            stages: initialStages,
-            fields: initialFields
+      setMessages([
+        {
+          id: "welcome",
+          type: "json",
+          content: {
+            message:
+              "Welcome! I can help you manage your workflow. Here is your current workflow:",
+            model: {
+              stages: initialStages,
+              fields: initialFields,
+            },
+            visualization: {
+              totalStages: initialStages.length,
+              stageBreakdown: initialStages.map((stage: Stage) => ({
+                name: stage.name,
+                stepCount: stage.steps.length,
+              })),
+            },
           },
-          visualization: {
-            totalStages: initialStages.length,
-            stageBreakdown: initialStages.map((stage: Stage) => ({
-              name: stage.name,
-              stepCount: stage.steps.length
-            }))
-          }
+          sender: "ai",
         },
-        sender: 'ai'
-      }]);
+      ]);
     };
 
     loadData();
@@ -143,33 +180,39 @@ export default function Home() {
     }
   }, [stages]);
 
-  const handleAddField = (fieldData: { label: string; type: Field['type']; options?: string[]; required?: boolean; isPrimary?: boolean }) => {
+  const handleAddField = (fieldData: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+    primary?: boolean;
+  }) => {
     const newField: Field = {
-      id: uuidv4(),
+      name: uuidv4(),
       label: fieldData.label,
       type: fieldData.type,
-      required: fieldData.required || false,
-      isPrimary: fieldData.isPrimary || false,
-      ...(fieldData.options && { options: fieldData.options })
+      primary: fieldData.primary || false,
+      value: generateSampleValue(fieldData.type, fieldData.options),
+      ...(fieldData.options && { options: fieldData.options }),
     };
 
-    setFields(prevFields => {
+    setFields((prevFields) => {
       const updatedFields = [...prevFields, newField];
-      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
+      sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
       return updatedFields;
     });
 
-    return newField.id;
+    return newField.name;
   };
 
   const handleUpdateField = (updates: Partial<Field>) => {
     if (!editingField) return;
 
-    setFields(prevFields => {
-      const updatedFields = prevFields.map(field => 
-        field.id === editingField.id ? { ...field, ...updates } : field
+    setFields((prevFields) => {
+      const updatedFields = prevFields.map((field) =>
+        field.name === editingField.name ? { ...field, ...updates } : field,
       );
-      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
+      sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
       return updatedFields;
     });
 
@@ -177,130 +220,135 @@ export default function Home() {
   };
 
   const handleDeleteField = (fieldId: string) => {
-    setFields(prevFields => {
-      const updatedFields = prevFields.filter(field => field.id !== fieldId);
-      sessionStorage.setItem('workflow_fields', JSON.stringify(updatedFields));
-      return updatedFields;
-    });
-
     // Remove references to this field from all steps
-    setStages(prevStages => {
-      const updatedStages = prevStages.map(stage => ({
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => ({
         ...stage,
-        steps: stage.steps.map(step => ({
+        steps: stage.steps.map((step) => ({
           ...step,
-          fields: step.fields.filter(f => f.id !== fieldId)
-        }))
+          fields: (step.fields || []).filter((f) => f.name !== fieldId),
+        })),
       }));
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
       return updatedStages;
     });
   };
 
   const addMessage = (message: Message) => {
-    setMessages(prev => [...prev, message]);
+    setMessages((prev) => [...prev, message]);
   };
 
   const generateDelta = (oldStages: Stage[], newStages: Stage[]): Delta[] => {
     const deltas: WorkflowDelta[] = [];
 
     // Check for added or deleted stages
-    const oldStageIds = new Set(oldStages.map(s => s.id));
-    const newStageIds = new Set(newStages.map(s => s.id));
+    const oldStageIds = new Set(oldStages.map((s) => s.name));
+    const newStageIds = new Set(newStages.map((s) => s.name));
 
     // Added stages
-    newStages.forEach(stage => {
-      if (!oldStageIds.has(stage.id)) {
+    newStages.forEach((stage) => {
+      if (!oldStageIds.has(stage.name)) {
         deltas.push({
-          type: 'add',
-          path: `/stages/${stage.id}`,
+          type: "add",
+          path: `/stages/${stage.name}`,
           target: {
-            type: 'stage',
-            id: stage.id,
-            name: stage.name
+            type: "stage",
+            id: stage.name,
+            name: stage.name,
           },
           changes: {
-            after: stage
-          }
+            after: stage,
+          },
         });
       }
     });
 
     // Deleted stages
-    oldStages.forEach(stage => {
-      if (!newStageIds.has(stage.id)) {
+    oldStages.forEach((stage) => {
+      if (!newStageIds.has(stage.name)) {
         deltas.push({
-          type: 'delete',
-          path: `/stages/${stage.id}`,
+          type: "delete",
+          path: `/stages/${stage.name}`,
           target: {
-            type: 'stage',
-            id: stage.id,
-            name: stage.name
+            type: "stage",
+            id: stage.name,
+            name: stage.name,
           },
           changes: {
-            before: stage
-          }
+            before: stage,
+          },
         });
       }
     });
 
     // Check for moved or updated steps
-    oldStages.forEach(oldStage => {
-      const newStage = newStages.find(s => s.id === oldStage.id);
+    oldStages.forEach((oldStage) => {
+      const newStage = newStages.find((s) => s.name === oldStage.name);
       if (!newStage) return;
 
       // Compare steps
-      const newStepIds = new Set(newStage.steps.map(s => s.id));
+      const newStepIds = new Set(newStage.steps.map((s) => s.name));
 
       // Check for moved steps
       oldStage.steps.forEach((oldStep, oldIndex) => {
-        const newStepIndex = newStage.steps.findIndex(s => s.id === oldStep.id);
+        const newStepIndex = newStage.steps.findIndex(
+          (s) => s.name === oldStep.name,
+        );
         if (newStepIndex !== -1 && newStepIndex !== oldIndex) {
           deltas.push({
-            type: 'move',
-            path: `/stages/${oldStage.id}/steps/${oldStep.id}`,
+            type: "move",
+            path: `/stages/${oldStage.name}/steps/${oldStep.name}`,
             target: {
-              type: 'step',
-              id: oldStep.id,
+              type: "step",
+              id: oldStep.name,
               name: oldStep.name,
-              sourceStageId: oldStage.id,
-              targetStageId: newStage.id,
+              sourceStageId: oldStage.name,
+              targetStageId: newStage.name,
               sourceIndex: oldIndex,
-              targetIndex: newStepIndex
+              targetIndex: newStepIndex,
             },
             changes: {
               before: oldStage.steps[oldIndex],
-              after: { ...newStage.steps[newStepIndex] }
-            }
+              after: { ...newStage.steps[newStepIndex] },
+            },
           });
         }
       });
 
       // Check for steps that moved between stages
-      oldStage.steps.forEach(oldStep => {
-        if (!newStepIds.has(oldStep.id)) {
+      oldStage.steps.forEach((oldStep) => {
+        if (!newStepIds.has(oldStep.name)) {
           // Find which stage this step moved to
-          const targetStage = newStages.find(s => 
-            s.id !== oldStage.id && s.steps.some(step => step.id === oldStep.id)
+          const targetStage = newStages.find(
+            (s) =>
+              s.name !== oldStage.name &&
+              s.steps.some((step) => step.name === oldStep.name),
           );
           if (targetStage) {
-            const newIndex = targetStage.steps.findIndex(s => s.id === oldStep.id);
+            const newIndex = targetStage.steps.findIndex(
+              (s) => s.name === oldStep.name,
+            );
             deltas.push({
-              type: 'move',
-              path: `/stages/${oldStage.id}/steps/${oldStep.id}`,
+              type: "move",
+              path: `/stages/${oldStage.name}/steps/${oldStep.name}`,
               target: {
-                type: 'step',
-                id: oldStep.id,
+                type: "step",
+                id: oldStep.name,
                 name: oldStep.name,
-                sourceStageId: oldStage.id,
-                targetStageId: targetStage.id,
-                sourceIndex: oldStage.steps.findIndex(s => s.id === oldStep.id),
-                targetIndex: newIndex
+                sourceStageId: oldStage.name,
+                targetStageId: targetStage.name,
+                sourceIndex: oldStage.steps.findIndex(
+                  (s) => s.name === oldStep.name,
+                ),
+                targetIndex: newIndex,
               },
               changes: {
                 before: oldStep,
-                after: { id: targetStage.id }
-              }
+                after: { name: targetStage.name },
+              },
             });
           }
         }
@@ -319,68 +367,71 @@ export default function Home() {
     // Add a message showing the changes
     const responseMessage: Message = {
       id: Date.now().toString(),
-      type: 'json',
+      type: "json",
       content: {
-        message: 'Changes applied successfully',
+        message: "Changes applied successfully",
         action: {
-          type: 'update',
-          changes: deltas.map(delta => ({
+          type: "update",
+          changes: deltas.map((delta) => ({
             type: delta.type,
             path: delta.path,
             target: delta.target || {
-              type: 'step',
-              id: '',
-              name: '',
-              sourceStageId: '',
-              targetStageId: '',
+              type: "step",
+              id: "",
+              name: "",
+              sourceStageId: "",
+              targetStageId: "",
               sourceIndex: 0,
-              targetIndex: 0
+              targetIndex: 0,
             },
             value: delta.changes?.after,
-            oldValue: delta.changes?.before
-          }))
+            oldValue: delta.changes?.before,
+          })),
         },
         model: {
           before: oldStages,
-          after: updatedStages
+          after: updatedStages,
         },
         visualization: {
           totalStages: updatedStages.length,
-          stageBreakdown: updatedStages.map(stage => ({
+          stageBreakdown: updatedStages.map((stage) => ({
             name: stage.name,
             stepCount: stage.steps.length,
-            steps: stage.steps.map(step => ({
-              name: step.name
-            }))
-          }))
-        }
+            steps: stage.steps.map((step) => ({
+              name: step.name,
+            })),
+          })),
+        },
       },
-      sender: 'ai'
+      sender: "ai",
     };
     addMessage(responseMessage);
 
     // Apply animation flags
-    const animatedStages = updatedStages.map(stage => {
-      const delta = deltas.find(d => 
-        (d.target?.type === 'stage' && d.target?.id === stage.id) ||
-        (d.target?.type === 'step' && (d.target?.sourceStageId === stage.id || d.target?.targetStageId === stage.id))
+    const animatedStages = updatedStages.map((stage) => {
+      const delta = deltas.find(
+        (d) =>
+          (d.target?.type === "stage" && d.target?.name === stage.name) ||
+          (d.target?.type === "step" &&
+            (d.target?.sourceStageId === stage.name ||
+              d.target?.targetStageId === stage.name)),
       );
 
       if (delta?.target) {
         switch (delta.type) {
-          case 'add':
+          case "add":
             return { ...stage, isNew: true };
-          case 'delete':
+          case "delete":
             return { ...stage, isDeleting: true };
-          case 'move':
-            if (delta.target?.type === 'step') {
-              const isSource = delta.target?.sourceStageId === stage.id;
-              const isTarget = delta.target?.targetStageId === stage.id;
+          case "move":
+            if (delta.target?.type === "step") {
+              const isSource = delta.target?.sourceStageId === stage.name;
+              const isTarget = delta.target?.targetStageId === stage.name;
               if (isSource || isTarget) {
                 return {
                   ...stage,
                   isMoving: true,
-                  moveDirection: isSource ? 'up' as const : 'down' as const
+                  moveDirection: isSource ? ("up" as const) : ("down" as const),
                 };
               }
             }
@@ -397,13 +448,15 @@ export default function Home() {
 
     // Remove animation flags after animation completes
     setTimeout(() => {
-      setStages(updatedStages.map(stage => ({
-        ...stage,
-        isNew: undefined,
-        isDeleting: undefined,
-        isMoving: undefined,
-        moveDirection: undefined
-      })));
+      setStages(
+        updatedStages.map((stage) => ({
+          ...stage,
+          isNew: undefined,
+          isDeleting: undefined,
+          isMoving: undefined,
+          moveDirection: undefined,
+        })),
+      );
     }, 500);
   };
 
@@ -412,85 +465,93 @@ export default function Home() {
     setActiveStep(stepId);
   };
 
-  const _handleFieldChange = (fieldId: string, value: string | number | boolean | null) => {
+  const _handleFieldChange = (
+    fieldId: string,
+    value: string | number | boolean | null,
+  ): void => {
     if (!activeStep || !activeStage) return;
 
-    setStages(prevStages => {
-      const updatedStages = prevStages.map(stage => {
-        if (stage.id === activeStage) {
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => {
+        if (stage.name === activeStage) {
           return {
             ...stage,
-            steps: stage.steps.map(step => {
-              if (step.id === activeStep) {
+            steps: stage.steps.map((step) => {
+              if (step.name === activeStep) {
                 return {
                   ...step,
-                  fields: step.fields.map(field => 
-                    field.id === fieldId ? { ...field, value } : field
-                  )
+                  fields: (step.fields || []).map((field) =>
+                    field.name === fieldId ? { ...field, value } : field,
+                  ),
                 };
               }
               return step;
-            })
+            }),
           };
         }
         return stage;
       });
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
       return updatedStages;
     });
   };
 
-  const _handleWorkflowUpdate = async (workflow: Stage[]) => {
+  const _handleWorkflowUpdate = async (workflow: Stage[]): Promise<void> => {
     setStages(workflow);
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(workflow));
   };
 
-  const _getActiveStepFields = () => {
+  const _getActiveStepFields = (): FieldReference[] => {
     if (!activeStage || !activeStep) return [];
-    const stage = stages.find(s => s.id === activeStage);
-    const step = stage?.steps.find(s => s.id === activeStep);
+    const stage = stages.find((s) => s.name === activeStage);
+    if (!stage) return [];
+    const step = stage.steps.find((s) => s.name === activeStep);
     return step?.fields || [];
   };
 
-  const _handleMouseDown = (_e: React.MouseEvent) => {
-    _e.stopPropagation();
+  const _handleMouseDown = (_event: React.MouseEvent): void => {
+    setIsResizing(true);
+    startX.current = _event.pageX;
+    startWidth.current = chatPanelWidth;
   };
 
-  const _handleAddStepSubmit = (stepData: { name: string; type: string }) => {
+  const _handleAddStepSubmit = (stepData: {
+    name: string;
+    type: StepType;
+  }): void => {
     if (!selectedStageId) return;
 
-    setStages(prevStages => {
-      const updatedStages = prevStages.map(stage => {
-        if (stage.id === selectedStageId) {
+    setStages((prevStages) =>
+      prevStages.map((stage) => {
+        if (stage.name === selectedStageId) {
           return {
             ...stage,
             steps: [
               ...stage.steps,
               {
-                id: uuidv4(),
                 name: stepData.name,
-                type: stepData.type || 'Automation',
-                status: 'pending' as const,
-                fields: []
-              }
-            ]
+                type: stepData.type,
+                fields: [],
+              },
+            ],
           };
         }
         return stage;
-      });
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
-      return updatedStages;
-    });
+      }),
+    );
 
     setIsAddStepModalOpen(false);
     setSelectedStageId(null);
   };
 
-  const _handleDragStart = () => {
+  const _handleDragStart = (): void => {
     setIsDragging(true);
   };
 
-  const _handleDragEnd = (result: DropResult) => {
+  const _handleDragEnd = (result: DropResult): void => {
     setIsDragging(false);
 
     if (!result.destination) {
@@ -498,8 +559,12 @@ export default function Home() {
     }
 
     const updatedStages = [...stages];
-    const sourceStage = updatedStages.find(s => s.id === result.source.droppableId);
-    const destinationStage = updatedStages.find(s => s.id === result.destination!.droppableId);
+    const sourceStage = updatedStages.find(
+      (s) => s.name === result.source.droppableId,
+    );
+    const destinationStage = updatedStages.find(
+      (s) => s.name === result.destination!.droppableId,
+    );
 
     if (!sourceStage || !destinationStage) {
       return;
@@ -514,38 +579,40 @@ export default function Home() {
 
   const handleAddStage = (stageData: { name: string }) => {
     const newStage: Stage = {
-      id: uuidv4(),
       name: stageData.name,
       steps: [],
-      isNew: true
+      isNew: true,
     };
 
-    setStages(prevStages => {
+    setStages((prevStages) => {
       const updatedStages = [...prevStages, newStage];
-      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
       return updatedStages;
     });
     setIsAddStageModalOpen(false);
   };
 
   const handleEditField = (fieldId: string) => {
-    const field = fields.find(f => f.id === fieldId);
+    const field = fields.find((f) => f.name === fieldId);
     if (field) {
       setEditingField(field);
     }
   };
 
   const handleDeleteStage = (stageId: string) => {
-    const updatedStages = stages.filter(stage => stage.id !== stageId);
+    const updatedStages = stages.filter((stage) => stage.name !== stageId);
     handleStepsUpdate(updatedStages);
   };
 
   const handleDeleteStep = (stageId: string, stepId: string) => {
-    const updatedStages = stages.map(stage => {
-      if (stage.id === stageId) {
+    const updatedStages = stages.map((stage) => {
+      if (stage.name === stageId) {
         return {
           ...stage,
-          steps: stage.steps.filter(step => step.id !== stepId)
+          steps: stage.steps.filter((step) => step.name !== stepId),
         };
       }
       return stage;
@@ -559,17 +626,17 @@ export default function Home() {
       // Add user message immediately
       addMessage({
         id: uuidv4(),
-        type: 'text',
+        type: "text",
         content: message,
-        sender: 'user'
+        sender: "user",
       });
-      
+
       const currentModel = {
         stages: stages,
-        fields: fields
+        fields: fields,
       };
       const response = await Service.generateResponse(message, currentModel);
-      
+
       // Try to parse the response as JSON
       let parsedResponse;
       try {
@@ -577,7 +644,7 @@ export default function Home() {
       } catch {
         // If parsing fails, use the raw response as a message
         parsedResponse = {
-          message: response
+          message: response,
         };
       }
 
@@ -589,36 +656,42 @@ export default function Home() {
         if (parsedResponse.model.fields) {
           setFields(parsedResponse.model.fields);
           // Save updated fields to session storage
-          sessionStorage.setItem('workflow_fields', JSON.stringify(parsedResponse.model.fields));
+          sessionStorage.setItem(
+            "workflow_fields",
+            JSON.stringify(parsedResponse.model.fields),
+          );
         }
       }
 
       // Add the message to the chat
       addMessage({
         id: uuidv4(),
-        type: 'json',
+        type: "json",
         content: parsedResponse,
-        sender: 'ai'
+        sender: "ai",
       });
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       addMessage({
         id: uuidv4(),
-        type: 'text',
-        content: 'Sorry, there was an error processing your request.',
-        sender: 'ai'
+        type: "text",
+        content: "Sorry, there was an error processing your request.",
+        sender: "ai",
       });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const _handleMouseMove = useCallback((_e: MouseEvent) => {
-    if (!isResizing) return;
-    const delta = _e.clientX - startX.current;
-    const newWidth = Math.max(300, Math.min(800, startWidth.current + delta));
-    setChatPanelWidth(newWidth);
-  }, [isResizing]);
+  const _handleMouseMove = useCallback(
+    (_e: MouseEvent) => {
+      if (!isResizing) return;
+      const delta = _e.clientX - startX.current;
+      const newWidth = Math.max(300, Math.min(800, startWidth.current + delta));
+      setChatPanelWidth(newWidth);
+    },
+    [isResizing],
+  );
 
   const _handleMouseUp = useCallback(() => {
     setIsResizing(false);
@@ -635,7 +708,9 @@ export default function Home() {
       <button
         onClick={() => setIsChatPanelExpanded(!isChatPanelExpanded)}
         className="fixed right-0 top-4 p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-sm z-50"
-        aria-label={isChatPanelExpanded ? "Collapse AI Assistant" : "Expand AI Assistant"}
+        aria-label={
+          isChatPanelExpanded ? "Collapse AI Assistant" : "Expand AI Assistant"
+        }
       >
         {isChatPanelExpanded ? (
           <FaChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
@@ -650,37 +725,37 @@ export default function Home() {
         <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
           <div className="flex">
             <button
-              onClick={() => setActiveTab('workflow')}
+              onClick={() => setActiveTab("workflow")}
               className={`px-4 py-2 text-sm font-medium ${
-                activeTab === 'workflow' && !isPreviewMode
-                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                activeTab === "workflow" && !isPreviewMode
+                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
               Workflow
             </button>
             <button
-              onClick={() => setActiveTab('data')}
+              onClick={() => setActiveTab("fields")}
               className={`px-4 py-2 text-sm font-medium ${
-                activeTab === 'data' && !isPreviewMode
-                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                activeTab === "fields" && !isPreviewMode
+                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
-              Data
+              Fields
             </button>
             <button
-              onClick={() => setActiveTab('ux')}
+              onClick={() => setActiveTab("views")}
               className={`px-4 py-2 text-sm font-medium ${
-                activeTab === 'ux' && !isPreviewMode
-                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                activeTab === "views" && !isPreviewMode
+                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               }`}
             >
-              UX
+              Views
             </button>
           </div>
-          
+
           <div className="flex items-center px-4">
             <label className="flex items-center cursor-pointer">
               <div className="relative">
@@ -691,7 +766,11 @@ export default function Home() {
                   onChange={() => setIsPreviewMode(!isPreviewMode)}
                 />
                 <div className="block bg-gray-300 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
-                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition transform ${isPreviewMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                <div
+                  className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition transform ${
+                    isPreviewMode ? "translate-x-6" : "translate-x-0"
+                  }`}
+                ></div>
               </div>
               <div className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
                 Preview
@@ -699,37 +778,67 @@ export default function Home() {
             </label>
           </div>
         </div>
-        
+
         {/* Tab Content */}
         <main className="flex-1 overflow-auto">
           {isPreviewMode ? (
-            <div className="w-full h-full" ref={(container) => {
-              // Store the ref for later use
-              previewContainerRef.current = container;
-              
-              if (container && isPreviewMode) {
-                const iframe = document.createElement('iframe');
-                iframe.src = "https://blueprint2024-8b147.web.app/blueprint-preview.html";
-                iframe.className = "w-full h-full border-0";
-                iframe.title = "Blueprint Preview";
+            <div
+              className="w-full h-full"
+              ref={(container) => {
+                // Store the ref for later use
+                previewContainerRef.current = container;
 
-                // Once the iframe loads, send the model data
-                iframe.onload = () => {
-                  const model = generateModelData(fields, stages);
-                  iframe.contentWindow?.postMessage(model, '*');
-                };
+                if (container && isPreviewMode) {
+                  const iframe = document.createElement("iframe");
+                  iframe.src =
+                    "https://blueprint2024-8b147.web.app/blueprint-preview.html";
+                  iframe.className = "w-full h-full border-0";
+                  iframe.title = "Blueprint Preview";
 
-                // Clear container and add iframe
-                container.innerHTML = '';
-                container.appendChild(iframe);
-              }
-            }} />
+                  // Once the iframe loads, send the model data
+                  iframe.onload = () => {
+                    const model = generateModelData(fields, stages);
+                    iframe.contentWindow?.postMessage(model, "*");
+                  };
+
+                  // Clear container and add iframe
+                  container.innerHTML = "";
+                  container.appendChild(iframe);
+                }
+              }}
+            />
           ) : (
             <>
-              {activeTab === 'workflow' && (
+              {activeTab === "workflow" && (
                 <>
                   <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Workflow</h1>
+                    <div className="flex items-center gap-4">
+                      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                        Workflow
+                      </h1>
+                      <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                        <button
+                          onClick={() => setWorkflowView("flat")}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                            workflowView === "flat"
+                              ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                          }`}
+                        >
+                          Flat View
+                        </button>
+                        <button
+                          onClick={() => setWorkflowView("lifecycle")}
+                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                            workflowView === "lifecycle"
+                              ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                          }`}
+                        >
+                          Lifecycle View
+                        </button>
+                      </div>
+                    </div>
                     <button
                       onClick={() => setIsAddStageModalOpen(true)}
                       className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
@@ -737,19 +846,28 @@ export default function Home() {
                       Add Stage
                     </button>
                   </div>
-                  <WorkflowDiagram
-                    stages={stages}
-                    fields={fields}
-                    onStepSelect={handleStepSelect}
-                    activeStage={activeStage}
-                    activeStep={activeStep}
-                    onStepsUpdate={handleStepsUpdate}
-                    onDeleteStage={handleDeleteStage}
-                    onDeleteStep={handleDeleteStep}
-                    onAddField={handleAddField}
-                    onUpdateField={handleUpdateField}
-                    onDeleteField={handleDeleteField}
-                  />
+                  {workflowView === "flat" ? (
+                    <WorkflowDiagram
+                      stages={stages}
+                      fields={fields}
+                      onStepSelect={handleStepSelect}
+                      activeStage={activeStage}
+                      activeStep={activeStep}
+                      onStepsUpdate={handleStepsUpdate}
+                      onDeleteStage={handleDeleteStage}
+                      onDeleteStep={handleDeleteStep}
+                      onAddField={handleAddField}
+                      onUpdateField={handleUpdateField}
+                      onDeleteField={handleDeleteField}
+                    />
+                  ) : (
+                    <WorkflowLifecycleView
+                      stages={stages}
+                      onStepSelect={handleStepSelect}
+                      activeStage={activeStage}
+                      activeStep={activeStep}
+                    />
+                  )}
                   <AddStageModal
                     isOpen={isAddStageModalOpen}
                     onClose={() => setIsAddStageModalOpen(false)}
@@ -757,16 +875,17 @@ export default function Home() {
                   />
                 </>
               )}
-              {activeTab === 'ux' && (
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">UX</h2>
-                  <p className="text-gray-600 dark:text-gray-400">UX tab content coming soon...</p>
+              {activeTab === "views" && (
+                <div className="h-full">
+                  <ViewsPanel stages={stages} fields={fields} />
                 </div>
               )}
-              {activeTab === 'data' && (
+              {activeTab === "fields" && (
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Data</h2>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                      Fields
+                    </h2>
                     <button
                       ref={addFieldButtonRef}
                       onClick={() => setIsAddFieldModalOpen(true)}
@@ -776,15 +895,17 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {fields.map(field => (
+                    {fields.map((field) => (
                       <div
-                        key={field.id}
+                        key={field.name}
                         className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
-                            {field.isPrimary && (
+                            <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                              {field.label}
+                            </h3>
+                            {field.primary && (
                               <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
                                 Primary
                               </span>
@@ -792,20 +913,22 @@ export default function Home() {
                           </div>
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => handleEditField(field.id)}
+                              onClick={() => handleEditField(field.name)}
                               className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                             >
                               <FaPencilAlt className="w-4 h-4 text-gray-500" />
                             </button>
                             <button
-                              onClick={() => handleDeleteField(field.id)}
+                              onClick={() => handleDeleteField(field.name)}
                               className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                             >
                               <FaTrash className="w-4 h-4 text-gray-500" />
                             </button>
                           </div>
                         </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Type: {field.type}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Type: {getFieldTypeDisplayName(field.type)}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -824,16 +947,16 @@ export default function Home() {
       </div>
 
       {/* Chat Panel */}
-      <motion.div 
+      <motion.div
         className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden"
-        animate={{ 
-          width: isChatPanelExpanded ? `${chatPanelWidth}px` : '0px',
-          opacity: isChatPanelExpanded ? 1 : 0
+        animate={{
+          width: isChatPanelExpanded ? `${chatPanelWidth}px` : "0px",
+          opacity: isChatPanelExpanded ? 1 : 0,
         }}
         transition={{ duration: 0.3 }}
-        style={{ 
-          minWidth: isChatPanelExpanded ? '300px' : '0px',
-          maxWidth: '800px'
+        style={{
+          minWidth: isChatPanelExpanded ? "300px" : "0px",
+          maxWidth: "800px",
         }}
       >
         <div className="flex-1 overflow-hidden">

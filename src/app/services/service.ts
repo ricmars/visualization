@@ -1,7 +1,7 @@
-import { Stage, Field } from '../types';
+import { Stage, Field } from "../types";
 
-export type ChatRole = 'system' | 'user' | 'assistant';
-export type LLMProvider = 'ollama' | 'gemini';
+export type ChatRole = "system" | "user" | "assistant";
+export type LLMProvider = "ollama" | "gemini";
 
 export interface ChatMessage {
   role: ChatRole;
@@ -13,9 +13,9 @@ export interface Response {
 }
 
 export class Service {
-  private static readonly OLLAMA_BASE_URL = 'http://localhost:11434/api';
-  private static readonly OLLAMA_MODEL = 'gemma3:27b';
-  private static currentProvider: LLMProvider = 'gemini';
+  private static readonly OLLAMA_BASE_URL = "http://localhost:11434/api";
+  private static readonly OLLAMA_MODEL = "gemma3:27b";
+  private static currentProvider: LLMProvider = "gemini";
   private static readonly SYSTEM_MESSAGE = `You are a workflow assistant that helps users modify and understand their workflow model.
 The workflow model consists of two main components:
 
@@ -23,7 +23,13 @@ The workflow model consists of two main components:
 - Reusable data points that can be referenced across the workflow
 - Each field has: id, label, type, value, and optional configuration (like options for select fields)
 - Fields can be assigned to steps where data needs to be collected or processed
-- Each field can have a default value that is used when the field is first displayed
+- Each field MUST have a sample value that is appropriate for its type
+- Sample values should be realistic and contextually appropriate
+- For example:
+  - Text fields should have relevant sample text
+  - Dates should be in proper format
+  - Numbers should be reasonable for the field's purpose
+  - Dropdowns/RadioButtons should use one of the provided options
 
 2. Stages and Steps:
 - Stages: Sequential phases in the workflow, each containing steps
@@ -46,26 +52,25 @@ Format your response as JSON with the following structure:
   "model": {
     "fields": [
       {
-        "id": "field_id",
+        "name": "unique id for the field",
         "label": "Field Label",
         "type": "text|select|number|etc",
+        "primary": "indicate if the field is more important than the other fields and should be more highlighted - several fields can be primary",
         "options": ["option1", "option2"], // if applicable
-        "value": "default value" // The field's current value
+        "value": "default value" // REQUIRED: Always include an appropriate sample value based on the field type
       }
     ],
     "stages": [
       {
-        "id": "stage_id",
         "name": "Stage Name",
         "steps": [
           {
-            "id": "step_id",
             "name": "Step Name",
             "type": "Step Type",
             "fields": [
               {
-                "id": "field_id"
-                // other field properties when needed
+                "name": "map to the name in the fields array",
+                "required": "boolean to indicate if the field is required in the form or not"
               }
             ]
           }
@@ -101,40 +106,52 @@ Format your response as JSON with the following structure:
     this.currentProvider = provider;
   }
 
-  static async generateResponse(prompt: string, currentModel?: { stages: Stage[]; fields: Field[] }): Promise<string> {
+  static async generateResponse(
+    prompt: string,
+    currentModel?: { stages: Stage[]; fields: Field[] },
+  ): Promise<string> {
     try {
-      const systemContext = currentModel ? 
-        `${this.SYSTEM_MESSAGE}\n\nCurrent workflow model:\n${JSON.stringify(currentModel, null, 2)}` :
-        this.SYSTEM_MESSAGE;
+      const systemContext = currentModel
+        ? `${this.SYSTEM_MESSAGE}\n\nCurrent workflow model:\n${JSON.stringify(
+            currentModel,
+            null,
+            2,
+          )}`
+        : this.SYSTEM_MESSAGE;
 
-      if (this.currentProvider === 'ollama') {
+      if (this.currentProvider === "ollama") {
         return await this.generateOllamaResponse(prompt, systemContext);
       } else {
         return await this.generateGeminiResponse(prompt, systemContext);
       }
     } catch (error) {
       console.error(`Error calling ${this.currentProvider}:`, error);
-      throw new Error(`Failed to generate response from ${this.currentProvider}`);
+      throw new Error(
+        `Failed to generate response from ${this.currentProvider}`,
+      );
     }
   }
 
-  private static async generateOllamaResponse(prompt: string, systemContext: string): Promise<string> {
+  private static async generateOllamaResponse(
+    prompt: string,
+    systemContext: string,
+  ): Promise<string> {
     const response = await fetch(`${this.OLLAMA_BASE_URL}/generate`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: this.OLLAMA_MODEL,
         messages: [
           {
-            role: 'system',
-            content: systemContext
+            role: "system",
+            content: systemContext,
           },
           {
-            role: 'user',
-            content: prompt
-          }
+            role: "user",
+            content: prompt,
+          },
         ],
       }),
     });
@@ -147,21 +164,28 @@ Format your response as JSON with the following structure:
     return JSON.stringify(data.message.content);
   }
 
-  private static async generateGeminiResponse(prompt: string, systemContext: string): Promise<string> {
-    const response = await fetch('/api/gemini', {
-      method: 'POST',
+  private static async generateGeminiResponse(
+    prompt: string,
+    systemContext: string,
+  ): Promise<string> {
+    const response = await fetch("/api/gemini", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         prompt,
-        systemContext
+        systemContext,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
-      throw new Error(`API error (${response.status}): ${JSON.stringify(errorData) || response.statusText}`);
+      throw new Error(
+        `API error (${response.status}): ${
+          JSON.stringify(errorData) || response.statusText
+        }`,
+      );
     }
 
     const data = await response.json();
@@ -173,9 +197,9 @@ Format your response as JSON with the following structure:
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
-          content: `Processed: ${message}`
+          content: `Processed: ${message}`,
         });
       }, 1000);
     });
   }
-} 
+}

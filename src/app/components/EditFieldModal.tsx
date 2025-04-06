@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Field } from '../types';
-import Tooltip from './Tooltip';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Field } from "../types";
+import Tooltip from "./Tooltip";
+import { getAllFieldTypes, getFieldTypeDisplayName } from "../utils/fieldTypes";
 
 interface EditFieldModalProps {
   isOpen: boolean;
@@ -10,53 +11,55 @@ interface EditFieldModalProps {
   field: Field;
 }
 
-const FIELD_TYPES = ['text', 'number', 'select', 'checkbox', 'email', 'textarea'] as const;
-type FieldType = typeof FIELD_TYPES[number];
-
-const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubmit, field }) => {
+const EditFieldModal: React.FC<EditFieldModalProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  field,
+}) => {
   const [label, setLabel] = useState(field.label);
-  const [type, setType] = useState<FieldType>(field.type as FieldType);
-  const [isPrimary, setIsPrimary] = useState(field.isPrimary || false);
-  const [error, setError] = useState('');
+  const [type, setType] = useState(field.type);
+  const [isPrimary, setIsPrimary] = useState(field.primary || false);
+  const [error, setError] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
       setTimeout(() => {
         labelInputRef.current?.focus();
       }, 100);
       // Set initial values when modal opens
       setLabel(field.label);
-      setType(field.type as FieldType);
-      setIsPrimary(field.isPrimary || false);
+      setType(field.type);
+      setIsPrimary(field.primary || false);
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen, field]);
 
   const handleSubmit = () => {
     if (!label.trim()) {
-      setError('Field label is required');
+      setError("Field label is required");
       return;
     }
-    onSubmit({ 
+    onSubmit({
       label: label.trim(),
       type,
-      isPrimary
+      primary: isPrimary,
     });
-    setError('');
+    setError("");
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       onClose();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
@@ -93,17 +96,23 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   aria-label="Close modal"
                 >
-                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
-              {error && (
-                <p className="text-sm text-red-500">
-                  {error}
-                </p>
-              )}
+              {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="space-y-4">
                 <div>
@@ -126,12 +135,12 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value as FieldType)}
+                    onChange={(e) => setType(e.target.value as Field["type"])}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
-                    {FIELD_TYPES.map(type => (
-                      <option key={type} value={type}>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                    {getAllFieldTypes().map((fieldType) => (
+                      <option key={fieldType} value={fieldType}>
+                        {getFieldTypeDisplayName(fieldType)}
                       </option>
                     ))}
                   </select>
@@ -145,13 +154,26 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
                     onChange={(e) => setIsPrimary(e.target.checked)}
                     className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
                   />
-                  <label htmlFor="isPrimary" className="text-sm text-gray-700 dark:text-gray-300">
+                  <label
+                    htmlFor="isPrimary"
+                    className="text-sm text-gray-700 dark:text-gray-300"
+                  >
                     Primary Field
                   </label>
                   <Tooltip content="Primary fields are used as identifiers and are displayed prominently in the workflow">
                     <span className="text-gray-400 hover:text-gray-500 cursor-help">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       </svg>
                     </span>
                   </Tooltip>
@@ -184,4 +206,4 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({ isOpen, onClose, onSubm
   );
 };
 
-export default EditFieldModal; 
+export default EditFieldModal;

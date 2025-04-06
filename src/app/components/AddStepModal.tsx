@@ -1,125 +1,137 @@
-import React, { useState, useEffect, JSX, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FaClipboardList, FaCheckCircle, FaRobot, FaFolder, FaQuestionCircle } from 'react-icons/fa';
-import { IoDocumentText } from 'react-icons/io5';
-import { RiBrainFill } from 'react-icons/ri';
-import { MdNotifications } from 'react-icons/md';
-import { BsGearFill } from 'react-icons/bs';
+import React, { useState, useEffect, JSX, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  FaClipboardList,
+  FaCheckCircle,
+  FaRobot,
+  FaFolder,
+  FaQuestionCircle,
+} from "react-icons/fa";
+import { IoDocumentText } from "react-icons/io5";
+import { RiBrainFill } from "react-icons/ri";
+import { MdNotifications } from "react-icons/md";
+import { BsGearFill } from "react-icons/bs";
+import { StepType } from "../types";
 
 interface AddStepModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStep: (stepData: { name: string; type: string }) => void;
+  onAddStep: (stepData: { name: string; type: StepType }) => void;
 }
 
 export interface StepTypeOption {
-  type: string;
+  type: StepType;
   icon: JSX.Element;
   color: string;
 }
 
 export const stepTypes: StepTypeOption[] = [
   {
-    type: 'Collect information',
+    type: "Collect information",
     icon: <FaClipboardList />,
-    color: 'text-blue-500'
+    color: "text-blue-500",
   },
   {
-    type: 'Approve/Reject',
+    type: "Approve/Reject",
     icon: <FaCheckCircle />,
-    color: 'text-green-500'
+    color: "text-green-500",
   },
   {
-    type: 'Automation',
+    type: "Automation",
     icon: <BsGearFill />,
-    color: 'text-purple-500'
+    color: "text-purple-500",
   },
   {
-    type: 'Create Case',
+    type: "Create Case",
     icon: <FaFolder />,
-    color: 'text-yellow-500'
+    color: "text-yellow-500",
   },
   {
-    type: 'Decision',
+    type: "Decision",
     icon: <FaQuestionCircle />,
-    color: 'text-orange-500'
+    color: "text-orange-500",
   },
   {
-    type: 'Generate Document',
+    type: "Generate Document",
     icon: <IoDocumentText />,
-    color: 'text-gray-500'
+    color: "text-gray-500",
   },
   {
-    type: 'Generative AI',
+    type: "Generative AI",
     icon: <RiBrainFill />,
-    color: 'text-pink-500'
+    color: "text-pink-500",
   },
   {
-    type: 'Robotic Automation',
+    type: "Robotic Automation",
     icon: <FaRobot />,
-    color: 'text-indigo-500'
+    color: "text-indigo-500",
   },
   {
-    type: 'Send Notification',
+    type: "Send Notification",
     icon: <MdNotifications />,
-    color: 'text-red-500'
-  }
+    color: "text-red-500",
+  },
 ];
 
-const AddStepModal: React.FC<AddStepModalProps> = ({ isOpen, onClose, onAddStep }) => {
-  const [name, setName] = useState('');
+const AddStepModal: React.FC<AddStepModalProps> = ({
+  isOpen,
+  onClose,
+  onAddStep,
+}) => {
+  const [name, setName] = useState("");
   const [type, setType] = useState(stepTypes[0].type);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
       setTimeout(() => {
         nameInputRef.current?.focus();
       }, 100);
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError('Step name is required');
+      setError("Step name is required");
       return;
     }
     onAddStep({ name: name.trim(), type });
-    setName('');
+    setName("");
     setType(stepTypes[0].type);
-    setError('');
+    setError("");
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       onClose();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
-    } else if (e.key === 'Tab') {
+    } else if (e.key === "Tab") {
       const focusableElements = modalRef.current?.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
-      
+
       if (!focusableElements) return;
-      
+
       const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-      
+      const lastElement = focusableElements[
+        focusableElements.length - 1
+      ] as HTMLElement;
+
       if (e.shiftKey && document.activeElement === firstElement) {
         e.preventDefault();
         lastElement.focus();
-      }
-      else if (!e.shiftKey && document.activeElement === lastElement) {
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
         e.preventDefault();
         firstElement.focus();
       }
@@ -157,17 +169,23 @@ const AddStepModal: React.FC<AddStepModalProps> = ({ isOpen, onClose, onAddStep 
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   aria-label="Close modal"
                 >
-                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
-              {error && (
-                <p className="text-sm text-red-500">
-                  {error}
-                </p>
-              )}
+              {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="space-y-4">
                 <div>
@@ -190,7 +208,7 @@ const AddStepModal: React.FC<AddStepModalProps> = ({ isOpen, onClose, onAddStep 
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value)}
+                    onChange={(e) => setType(e.target.value as StepType)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
                     {stepTypes.map((stepType) => (
@@ -205,8 +223,12 @@ const AddStepModal: React.FC<AddStepModalProps> = ({ isOpen, onClose, onAddStep 
                   </select>
                   <div className="mt-2 p-2 border border-gray-200 dark:border-gray-600 rounded-lg">
                     <div className="flex items-center gap-2">
-                      <span className={`text-xl ${stepTypes.find(st => st.type === type)?.color}`}>
-                        {stepTypes.find(st => st.type === type)?.icon}
+                      <span
+                        className={`text-xl ${
+                          stepTypes.find((st) => st.type === type)?.color
+                        }`}
+                      >
+                        {stepTypes.find((st) => st.type === type)?.icon}
                       </span>
                       <span className="text-sm text-gray-600 dark:text-gray-300">
                         Selected: {type}
@@ -238,4 +260,4 @@ const AddStepModal: React.FC<AddStepModalProps> = ({ isOpen, onClose, onAddStep 
   );
 };
 
-export default AddStepModal; 
+export default AddStepModal;

@@ -1,28 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { stepTypes, StepTypeOption } from './AddStepModal';
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { stepTypes, StepTypeOption } from "./AddStepModal";
+import { StepType } from "../types";
 
 interface EditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { name: string; type?: string }) => void;
-  type: 'stage' | 'step';
+  onSubmit: (data: { name: string; type?: StepType }) => void;
+  type: "stage" | "step";
   initialData: {
     name: string;
-    type?: string;
+    type?: StepType;
   };
 }
 
-const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, initialData }) => {
+const EditModal: React.FC<EditModalProps> = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  type,
+  initialData,
+}) => {
   const [name, setName] = useState(initialData.name);
-  const [stepType, setStepType] = useState(initialData.type || stepTypes[0].type);
-  const [error, setError] = useState('');
+  const [stepType, setStepType] = useState<StepType>(
+    initialData.type || stepTypes[0].type,
+  );
+  const [error, setError] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
       setTimeout(() => {
         nameInputRef.current?.focus();
       }, 100);
@@ -32,47 +41,48 @@ const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, 
         setStepType(initialData.type);
       }
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen, initialData]);
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError(`${type === 'stage' ? 'Stage' : 'Step'} name is required`);
+      setError(`${type === "stage" ? "Stage" : "Step"} name is required`);
       return;
     }
-    onSubmit({ 
-      name: name.trim(), 
-      ...(type === 'step' ? { type: stepType } : {})
+    onSubmit({
+      name: name.trim(),
+      ...(type === "step" ? { type: stepType } : {}),
     });
-    setError('');
+    setError("");
     onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       onClose();
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
-    } else if (e.key === 'Tab') {
+    } else if (e.key === "Tab") {
       const focusableElements = modalRef.current?.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
-      
+
       if (!focusableElements) return;
-      
+
       const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-      
+      const lastElement = focusableElements[
+        focusableElements.length - 1
+      ] as HTMLElement;
+
       if (e.shiftKey && document.activeElement === firstElement) {
         e.preventDefault();
         lastElement.focus();
-      }
-      else if (!e.shiftKey && document.activeElement === lastElement) {
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
         e.preventDefault();
         firstElement.focus();
       }
@@ -103,29 +113,35 @@ const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Edit {type === 'stage' ? 'Stage' : 'Step'}
+                  Edit {type === "stage" ? "Stage" : "Step"}
                 </h3>
                 <button
                   onClick={onClose}
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   aria-label="Close modal"
                 >
-                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
-              {error && (
-                <p className="text-sm text-red-500">
-                  {error}
-                </p>
-              )}
+              {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {type === 'stage' ? 'Stage' : 'Step'} Name
+                    {type === "stage" ? "Stage" : "Step"} Name
                   </label>
                   <input
                     ref={nameInputRef}
@@ -137,14 +153,14 @@ const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, 
                   />
                 </div>
 
-                {type === 'step' && (
+                {type === "step" && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Step Type
                     </label>
                     <select
                       value={stepType}
-                      onChange={(e) => setStepType(e.target.value)}
+                      onChange={(e) => setStepType(e.target.value as StepType)}
                       className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                     >
                       {stepTypes.map((stepTypeOption: StepTypeOption) => (
@@ -159,8 +175,18 @@ const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, 
                     </select>
                     <div className="mt-2 p-2 border border-gray-200 dark:border-gray-600 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <span className={`text-xl ${stepTypes.find((st: StepTypeOption) => st.type === stepType)?.color}`}>
-                          {stepTypes.find((st: StepTypeOption) => st.type === stepType)?.icon}
+                        <span
+                          className={`text-xl ${
+                            stepTypes.find(
+                              (st: StepTypeOption) => st.type === stepType,
+                            )?.color
+                          }`}
+                        >
+                          {
+                            stepTypes.find(
+                              (st: StepTypeOption) => st.type === stepType,
+                            )?.icon
+                          }
                         </span>
                         <span className="text-sm text-gray-600 dark:text-gray-300">
                           Selected: {stepType}
@@ -193,4 +219,4 @@ const EditModal: React.FC<EditModalProps> = ({ isOpen, onClose, onSubmit, type, 
   );
 };
 
-export default EditModal; 
+export default EditModal;

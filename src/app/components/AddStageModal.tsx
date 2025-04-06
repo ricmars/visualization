@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface AddStageModalProps {
   isOpen: boolean;
@@ -7,15 +7,19 @@ interface AddStageModalProps {
   onAddStage: (stageData: { name: string }) => void;
 }
 
-const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddStage }) => {
-  const [name, setName] = useState('');
+const AddStageModal: React.FC<AddStageModalProps> = ({
+  isOpen,
+  onClose,
+  onAddStage,
+}) => {
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = useCallback(() => {
     if (!name.trim()) {
-      setError('Stage name is required');
+      setError("Stage name is required");
       return;
     }
 
@@ -25,7 +29,7 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
 
   useEffect(() => {
     if (isOpen) {
-      setName('');
+      setName("");
       setError(null);
       nameInputRef.current?.focus();
     }
@@ -35,17 +39,19 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!modalRef.current || !isOpen) return;
 
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
-      } else if (e.key === 'Enter' && !e.shiftKey) {
+      } else if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
-      } else if (e.key === 'Tab') {
+      } else if (e.key === "Tab") {
         const focusableElements = modalRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         const firstElement = focusableElements[0] as HTMLElement;
-        const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+        const lastElement = focusableElements[
+          focusableElements.length - 1
+        ] as HTMLElement;
 
         if (!e.shiftKey && document.activeElement === lastElement) {
           firstElement.focus();
@@ -59,8 +65,8 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose, handleSubmit]);
 
   return (
@@ -93,21 +99,30 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
                   className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   aria-label="Close modal"
                 >
-                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    className="w-5 h-5 text-gray-500 dark:text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                 </button>
               </div>
 
-              {error && (
-                <p className="text-sm text-red-500">
-                  {error}
-                </p>
-              )}
+              {error && <p className="text-sm text-red-500">{error}</p>}
 
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="stageName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label
+                    htmlFor="stageName"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
                     Stage Name
                   </label>
                   <input
@@ -144,4 +159,4 @@ const AddStageModal: React.FC<AddStageModalProps> = ({ isOpen, onClose, onAddSta
   );
 };
 
-export default AddStageModal; 
+export default AddStageModal;
