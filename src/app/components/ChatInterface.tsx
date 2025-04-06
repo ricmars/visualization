@@ -5,19 +5,25 @@ import Prism from 'prismjs';
 import 'prismjs/themes/prism-tomorrow.css';
 import 'prismjs/components/prism-json';
 import { Service, LLMProvider } from '../services/service';
+import { FaEllipsisH, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 
 // Client-side only component for code highlighting
-const CodeBlock = ({ code }: { code: string }) => {
+const CodeBlock = ({ code, isExpanded }: { code: string; isExpanded: boolean }) => {
   const codeRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
-    if (codeRef.current) {
+    if (codeRef.current && isExpanded) {
       Prism.highlightElement(codeRef.current);
     }
-  }, [code]);
+  }, [code, isExpanded]);
 
   return (
-    <pre ref={codeRef} className="text-sm bg-gray-800 rounded-lg p-4 overflow-x-auto">
+    <pre 
+      ref={codeRef} 
+      className={`text-xs bg-gray-800 rounded-lg p-4 overflow-x-auto transition-all duration-300 ${
+        isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+      }`}
+    >
       <code className="language-json">
         {code}
       </code>
@@ -34,13 +40,15 @@ interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   onClear: () => void;
+  isProcessing: boolean;
 }
 
-export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfaceProps) {
+export function ChatInterface({ messages, onSendMessage, onClear, isProcessing }: ChatInterfaceProps) {
   const [input, setInput] = useState('');
   const [provider, setProvider] = useState<LLMProvider>('gemini');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [expandedTechnicalDetails, setExpandedTechnicalDetails] = useState<{ [key: string]: boolean }>({});
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -100,6 +108,8 @@ export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfac
         ? JSON.parse(message.content) 
         : message.content;
 
+      const isExpanded = expandedTechnicalDetails[message.id] || false;
+
       return (
         <div className="space-y-4">
           {content.message && (
@@ -156,8 +166,17 @@ export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfac
 
           {content.model && (
             <div className="space-y-2">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100">Technical Details:</h4>
-              <DynamicCodeBlock code={JSON.stringify(content.model, null, 2)} />
+              <button
+                onClick={() => setExpandedTechnicalDetails(prev => ({
+                  ...prev,
+                  [message.id]: !prev[message.id]
+                }))}
+                className="flex items-center gap-2 w-full text-left font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 p-2 rounded-lg transition-colors"
+              >
+                {isExpanded ? <FaChevronDown className="w-4 h-4" /> : <FaChevronRight className="w-4 h-4" />}
+                Technical Details
+              </button>
+              <DynamicCodeBlock code={JSON.stringify(content.model, null, 2)} isExpanded={isExpanded} />
             </div>
           )}
         </div>
@@ -211,20 +230,33 @@ export function ChatInterface({ messages, onSendMessage, onClear }: ChatInterfac
             </div>
           </div>
         ))}
+        {isProcessing && (
+          <div className="flex justify-start">
+            <div className="rounded-lg p-2 bg-gray-50 dark:bg-gray-800/50">
+              <FaEllipsisH className="w-5 h-5 text-gray-500 dark:text-gray-400 animate-pulse" />
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
       <form onSubmit={handleSubmit} className="p-2 border-t dark:border-gray-700 bg-white dark:bg-gray-900">
         <div className="flex space-x-2">
-          <input
-            type="text"
+          <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
             placeholder="Type a command or ask a question..."
-            className="flex-1 p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            className="flex-1 p-2 rounded-lg border dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 resize-none h-[72px] min-h-[72px] overflow-y-auto"
+            rows={3}
           />
           <button
             type="submit"
-            className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors h-[72px]"
           >
             Send
           </button>

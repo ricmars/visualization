@@ -14,15 +14,16 @@ export interface Response {
 
 export class Service {
   private static readonly OLLAMA_BASE_URL = 'http://localhost:11434/api';
-  private static readonly OLLAMA_MODEL = 'mistral';
+  private static readonly OLLAMA_MODEL = 'gemma3:27b';
   private static currentProvider: LLMProvider = 'gemini';
   private static readonly SYSTEM_MESSAGE = `You are a workflow assistant that helps users modify and understand their workflow model.
 The workflow model consists of two main components:
 
 1. Fields (Global Data Fields):
 - Reusable data points that can be referenced across the workflow
-- Each field has: id, label, type, and optional configuration (like options for select fields)
+- Each field has: id, label, type, value, and optional configuration (like options for select fields)
 - Fields can be assigned to steps where data needs to be collected or processed
+- Each field can have a default value that is used when the field is first displayed
 
 2. Stages and Steps:
 - Stages: Sequential phases in the workflow, each containing steps
@@ -48,7 +49,8 @@ Format your response as JSON with the following structure:
         "id": "field_id",
         "label": "Field Label",
         "type": "text|select|number|etc",
-        "options": ["option1", "option2"] // if applicable
+        "options": ["option1", "option2"], // if applicable
+        "value": "default value" // The field's current value
       }
     ],
     "stages": [
@@ -119,7 +121,6 @@ Format your response as JSON with the following structure:
   private static async generateOllamaResponse(prompt: string, systemContext: string): Promise<string> {
     const response = await fetch(`${this.OLLAMA_BASE_URL}/generate`, {
       method: 'POST',
-      mode: "cors" as RequestMode,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -135,7 +136,6 @@ Format your response as JSON with the following structure:
             content: prompt
           }
         ],
-        stream: false
       }),
     });
 
@@ -143,8 +143,8 @@ Format your response as JSON with the following structure:
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json() as Response;
-    return data.content;
+    const data = await response.json();
+    return JSON.stringify(data.message.content);
   }
 
   private static async generateGeminiResponse(prompt: string, systemContext: string): Promise<string> {

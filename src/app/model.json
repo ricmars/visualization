@@ -4,28 +4,33 @@
       "id": "incidentTitle",
       "label": "Incident Title",
       "type": "text",
-      "primary": true
+      "primary": true,
+      "value": "Unauthorized Access Attempt"
     },
     {
       "id": "description",
       "label": "Description",
-      "type": "textarea"
+      "type": "textarea",
+      "value": "Multiple failed login attempts detected from unknown IP address"
     },
     {
       "id": "programId",
       "label": "Program ID",
-      "type": "text"
+      "type": "text",
+      "value": "PRG-2024-001"
     },
     {
       "id": "evidence",
       "label": "Evidence Details",
-      "type": "textarea"
+      "type": "textarea",
+      "value": "Login attempt logs showing repeated failures from IP 192.168.1.100"
     },
     {
       "id": "severity",
       "label": "Severity Level",
       "type": "select",
-      "options": ["Low", "Medium", "High", "Critical"]
+      "options": ["Low", "Medium", "High", "Critical"],
+      "value": "High"
     }
   ],
   "stages": [

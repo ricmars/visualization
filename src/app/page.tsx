@@ -58,11 +58,48 @@ export default function Home() {
   const [_isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [_isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'workflow' | 'data' | 'ux' | 'fields'>('workflow');
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const addFieldButtonRef = useRef<HTMLButtonElement>(null) as MutableRefObject<HTMLButtonElement>;
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   
+  // Function to generate the model data structure
+  const generateModelData = (currentFields: Field[], currentStages: Stage[]) => {
+    return {
+      "fullUpdate": true,
+      "appName": "My Application",
+      "channel": "WorkPortal",
+      "industry": "Banking",
+      "userName": "John Smith",
+      "userLocale": "en-EN",
+      "translations": {},
+      "caseName": "Investigation",
+      "stepName": "Present Case",
+      "caseTypes": [
+        {
+          "name": "Investigation",
+          fields: currentFields,
+          "creationFields": [],
+          stages: currentStages
+        }
+      ]
+    };
+  };
+
+  // Effect to send model updates to iframe when stages or fields change
+  useEffect(() => {
+    if (isPreviewMode && previewContainerRef.current) {
+      const iframe = previewContainerRef.current.querySelector('iframe');
+      if (iframe) {
+        const model = generateModelData(fields, stages);
+        iframe.contentWindow?.postMessage(model, '*');
+      }
+    }
+  }, [stages, fields, isPreviewMode]);
+
   // Load stages and fields from session storage or default model
   useEffect(() => {
     const loadData = () => {
@@ -518,7 +555,15 @@ export default function Home() {
 
   const handleChatMessage = async (message: string) => {
     try {
-      // Service.setProvider('gemini');
+      setIsProcessing(true);
+      // Add user message immediately
+      addMessage({
+        id: uuidv4(),
+        type: 'text',
+        content: message,
+        sender: 'user'
+      });
+      
       const currentModel = {
         stages: stages,
         fields: fields
@@ -563,6 +608,8 @@ export default function Home() {
         content: 'Sorry, there was an error processing your request.',
         sender: 'ai'
       });
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -600,133 +647,178 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
-          <button
-            onClick={() => setActiveTab('workflow')}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeTab === 'workflow'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-            }`}
-          >
-            Workflow
-          </button>
-          <button
-            onClick={() => setActiveTab('data')}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeTab === 'data'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-            }`}
-          >
-            Data
-          </button>
-          <button
-            onClick={() => setActiveTab('ux')}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeTab === 'ux'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
-            }`}
-          >
-            UX
-          </button>
-         
+        <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab('workflow')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'workflow' && !isPreviewMode
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              Workflow
+            </button>
+            <button
+              onClick={() => setActiveTab('data')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'data' && !isPreviewMode
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              Data
+            </button>
+            <button
+              onClick={() => setActiveTab('ux')}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'ux' && !isPreviewMode
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
+            >
+              UX
+            </button>
+          </div>
+          
+          <div className="flex items-center px-4">
+            <label className="flex items-center cursor-pointer">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={isPreviewMode}
+                  onChange={() => setIsPreviewMode(!isPreviewMode)}
+                />
+                <div className="block bg-gray-300 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
+                <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition transform ${isPreviewMode ? 'translate-x-6' : 'translate-x-0'}`}></div>
+              </div>
+              <div className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Preview
+              </div>
+            </label>
+          </div>
         </div>
         
         {/* Tab Content */}
         <main className="flex-1 overflow-auto">
-          {activeTab === 'workflow' && (
+          {isPreviewMode ? (
+            <div className="w-full h-full" ref={(container) => {
+              // Store the ref for later use
+              previewContainerRef.current = container;
+              
+              if (container && isPreviewMode) {
+                const iframe = document.createElement('iframe');
+                iframe.src = "https://blueprint2024-8b147.web.app/blueprint-preview.html";
+                iframe.className = "w-full h-full border-0";
+                iframe.title = "Blueprint Preview";
+
+                // Once the iframe loads, send the model data
+                iframe.onload = () => {
+                  const model = generateModelData(fields, stages);
+                  iframe.contentWindow?.postMessage(model, '*');
+                };
+
+                // Clear container and add iframe
+                container.innerHTML = '';
+                container.appendChild(iframe);
+              }
+            }} />
+          ) : (
             <>
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Workflow</h1>
-                <button
-                  onClick={() => setIsAddStageModalOpen(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                >
-                  Add Stage
-                </button>
-              </div>
-              <WorkflowDiagram
-                stages={stages}
-                fields={fields}
-                onStepSelect={handleStepSelect}
-                activeStage={activeStage}
-                activeStep={activeStep}
-                onStepsUpdate={handleStepsUpdate}
-                onDeleteStage={handleDeleteStage}
-                onDeleteStep={handleDeleteStep}
-                onAddField={handleAddField}
-                onUpdateField={handleUpdateField}
-                onDeleteField={handleDeleteField}
-              />
-              <AddStageModal
-                isOpen={isAddStageModalOpen}
-                onClose={() => setIsAddStageModalOpen(false)}
-                onAddStage={handleAddStage}
-              />
-            </>
-          )}
-          {activeTab === 'ux' && (
-            <div className="p-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">UX</h2>
-              <p className="text-gray-600 dark:text-gray-400">UX tab content coming soon...</p>
-            </div>
-          )}
-          {activeTab === 'data' && (
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Data</h2>
-                <button
-                  ref={addFieldButtonRef}
-                  onClick={() => setIsAddFieldModalOpen(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                >
-                  Add Field
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {fields.map(field => (
-                  <div
-                    key={field.id}
-                    className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
-                        {field.isPrimary && (
-                          <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
-                            Primary
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEditField(field.id)}
-                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        >
-                          <FaPencilAlt className="w-4 h-4 text-gray-500" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteField(field.id)}
-                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        >
-                          <FaTrash className="w-4 h-4 text-gray-500" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Type: {field.type}</p>
+              {activeTab === 'workflow' && (
+                <>
+                  <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                    <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Workflow</h1>
+                    <button
+                      onClick={() => setIsAddStageModalOpen(true)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                    >
+                      Add Stage
+                    </button>
                   </div>
-                ))}
-              </div>
-              <AddFieldModal
-                isOpen={isAddFieldModalOpen}
-                onClose={() => setIsAddFieldModalOpen(false)}
-                onAddField={handleAddField}
-                buttonRef={addFieldButtonRef}
-                allowExistingFields={false}
-              />
-            </div>
+                  <WorkflowDiagram
+                    stages={stages}
+                    fields={fields}
+                    onStepSelect={handleStepSelect}
+                    activeStage={activeStage}
+                    activeStep={activeStep}
+                    onStepsUpdate={handleStepsUpdate}
+                    onDeleteStage={handleDeleteStage}
+                    onDeleteStep={handleDeleteStep}
+                    onAddField={handleAddField}
+                    onUpdateField={handleUpdateField}
+                    onDeleteField={handleDeleteField}
+                  />
+                  <AddStageModal
+                    isOpen={isAddStageModalOpen}
+                    onClose={() => setIsAddStageModalOpen(false)}
+                    onAddStage={handleAddStage}
+                  />
+                </>
+              )}
+              {activeTab === 'ux' && (
+                <div className="p-6">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">UX</h2>
+                  <p className="text-gray-600 dark:text-gray-400">UX tab content coming soon...</p>
+                </div>
+              )}
+              {activeTab === 'data' && (
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Data</h2>
+                    <button
+                      ref={addFieldButtonRef}
+                      onClick={() => setIsAddFieldModalOpen(true)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                    >
+                      Add Field
+                    </button>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {fields.map(field => (
+                      <div
+                        key={field.id}
+                        className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-gray-900 dark:text-gray-100">{field.label}</h3>
+                            {field.isPrimary && (
+                              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
+                                Primary
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleEditField(field.id)}
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            >
+                              <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteField(field.id)}
+                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            >
+                              <FaTrash className="w-4 h-4 text-gray-500" />
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Type: {field.type}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <AddFieldModal
+                    isOpen={isAddFieldModalOpen}
+                    onClose={() => setIsAddFieldModalOpen(false)}
+                    onAddField={handleAddField}
+                    buttonRef={addFieldButtonRef}
+                    allowExistingFields={false}
+                  />
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
@@ -749,6 +841,7 @@ export default function Home() {
             messages={messages}
             onSendMessage={handleChatMessage}
             onClear={handleClearChat}
+            isProcessing={isProcessing}
           />
         </div>
       </motion.div>

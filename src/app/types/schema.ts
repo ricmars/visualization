@@ -19,7 +19,11 @@ export const workflowSchema = {
             items: { type: 'string' }
           },
           required: { type: 'boolean', default: false },
-          isPrimary: { type: 'boolean', default: false }
+          isPrimary: { type: 'boolean', default: false },
+          value: {
+            type: ['string', 'number', 'boolean', 'null'],
+            description: "The current value of the field"
+          }
         }
       }
     },
