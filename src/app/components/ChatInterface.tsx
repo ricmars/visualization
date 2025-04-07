@@ -54,7 +54,7 @@ export function ChatInterface({
   isProcessing,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
-  const [provider, setProvider] = useState<LLMProvider>("gemini");
+  const [provider, setProvider] = useState<LLMProvider>("openai");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [expandedTechnicalDetails, setExpandedTechnicalDetails] = useState<{
@@ -258,6 +258,7 @@ export function ChatInterface({
             onChange={handleProviderChange}
             className="px-3 py-1 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-500"
           >
+            <option value="openai">OpenAI</option>
             <option value="ollama">Ollama</option>
             <option value="gemini">Gemini</option>
           </select>

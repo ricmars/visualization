@@ -22,15 +22,10 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
 ) => {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [frameBody, setFrameBody] = useState<HTMLElement | null>(null);
-  const [isFrameReady, setIsFrameReady] = useState(false);
 
   const containerStyle: React.CSSProperties = {
-    width: "100%",
-    height: "100%",
-    position: "relative",
-    minHeight: "400px",
-    opacity: isFrameReady ? 1 : 0, // Hide content until frame is ready
-    transition: "opacity 0.2s ease-in-out",
+    height: "calc(100vh - 130px)",
+    overflow: "auto",
   };
 
   const frameStyle: React.CSSProperties = {
@@ -49,7 +44,6 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
         const body = frame.contentDocument?.body;
         if (body && body !== frameBody) {
           setFrameBody(body);
-          setIsFrameReady(true);
         }
       };
 
@@ -103,15 +97,11 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
         <style>
           html, body {
             margin: 0;
-            padding: 0;
+            padding: 6px;
             height: 100%;
             overflow: auto;
           }
-          .frame-root {
-            min-height: 400px;
-            opacity: 1;
-            transition: opacity 0.2s ease-in-out;
-          }
+
         </style>
       </head>
       <body>
@@ -124,23 +114,21 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
   const frameContent = useMemo(
     () => (
       <Configuration styleSheetTarget={frameBody || undefined}>
-        <div className="p-6">
-          <LiveLog maxLength={50}>
-            <PopoverManager>
-              <Toaster dismissAfter={5000}>
-                <ModalManager>
-                  <LifeCycle
-                    items={mappedStages}
-                    stages={props.stages}
-                    onStepSelect={props.onStepSelect}
-                    activeStage={props.activeStage}
-                    activeStep={props.activeStep}
-                  />
-                </ModalManager>
-              </Toaster>
-            </PopoverManager>
-          </LiveLog>
-        </div>
+        <LiveLog maxLength={50}>
+          <PopoverManager>
+            <Toaster dismissAfter={5000}>
+              <ModalManager>
+                <LifeCycle
+                  items={mappedStages}
+                  stages={props.stages}
+                  onStepSelect={props.onStepSelect}
+                  activeStage={props.activeStage}
+                  activeStep={props.activeStep}
+                />
+              </ModalManager>
+            </Toaster>
+          </PopoverManager>
+        </LiveLog>
       </Configuration>
     ),
     [
@@ -155,20 +143,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
 
   return (
     <div style={containerStyle}>
-      <Frame
-        ref={frameRef}
-        style={frameStyle}
-        initialContent={initialContent}
-        head={
-          <style>
-            {`
-              .p-6 {
-                padding: 1.5rem;
-              }
-            `}
-          </style>
-        }
-      >
+      <Frame ref={frameRef} style={frameStyle} initialContent={initialContent}>
         {frameContent}
       </Frame>
     </div>

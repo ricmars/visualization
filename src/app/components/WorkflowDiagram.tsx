@@ -569,13 +569,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                     <div
                                       ref={provided.innerRef}
                                       {...provided.draggableProps}
-                                      style={{
-                                        ...provided.draggableProps.style,
-                                        transform:
-                                          provided.draggableProps.style
-                                            ?.transform,
-                                        transformOrigin: "top left",
-                                      }}
+                                      style={provided.draggableProps.style}
                                       className={`p-3 rounded-lg border transition-all cursor-pointer
                                         ${
                                           snapshot.isDragging

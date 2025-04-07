@@ -1,7 +1,7 @@
 import { Stage, Field } from "../types";
 
 export type ChatRole = "system" | "user" | "assistant";
-export type LLMProvider = "ollama" | "gemini";
+export type LLMProvider = "ollama" | "gemini" | "openai";
 
 export interface ChatMessage {
   role: ChatRole;
@@ -15,7 +15,7 @@ export interface Response {
 export class Service {
   private static readonly OLLAMA_BASE_URL = "http://localhost:11434/api";
   private static readonly OLLAMA_MODEL = "gemma3:27b";
-  private static currentProvider: LLMProvider = "gemini";
+  private static currentProvider: LLMProvider = "openai";
   private static readonly SYSTEM_MESSAGE = `You are a workflow assistant that helps users modify and understand their workflow model.
 The workflow model consists of two main components:
 
@@ -121,8 +121,10 @@ Format your response as JSON with the following structure:
 
       if (this.currentProvider === "ollama") {
         return await this.generateOllamaResponse(prompt, systemContext);
-      } else {
+      } else if (this.currentProvider === "gemini") {
         return await this.generateGeminiResponse(prompt, systemContext);
+      } else {
+        return await this.generateOpenAIResponse(prompt, systemContext);
       }
     } catch (error) {
       console.error(`Error calling ${this.currentProvider}:`, error);
@@ -169,6 +171,34 @@ Format your response as JSON with the following structure:
     systemContext: string,
   ): Promise<string> {
     const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        systemContext,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      throw new Error(
+        `API error (${response.status}): ${
+          JSON.stringify(errorData) || response.statusText
+        }`,
+      );
+    }
+
+    const data = await response.json();
+    return JSON.stringify(data);
+  }
+
+  private static async generateOpenAIResponse(
+    prompt: string,
+    systemContext: string,
+  ): Promise<string> {
+    const response = await fetch("/api/openai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

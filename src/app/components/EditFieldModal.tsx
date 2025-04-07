@@ -48,6 +48,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       return;
     }
     onSubmit({
+      name: field.name,
       label: label.trim(),
       type,
       primary: isPrimary,

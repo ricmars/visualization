@@ -206,31 +206,35 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {availableFields.map((field) => (
-                          <label
-                            key={field.name}
-                            className={`flex items-center p-3 rounded-lg border ${
-                              selectedFieldIds.includes(field.name)
-                                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                                : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
-                            } cursor-pointer transition-colors`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedFieldIds.includes(field.name)}
-                              onChange={() => toggleFieldSelection(field.name)}
-                              className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 mr-3"
-                            />
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900 dark:text-gray-100">
-                                {field.label}
+                        {availableFields
+                          .sort((a, b) => a.label.localeCompare(b.label))
+                          .map((field) => (
+                            <label
+                              key={field.name}
+                              className={`flex items-center p-3 rounded-lg border ${
+                                selectedFieldIds.includes(field.name)
+                                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                                  : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              } cursor-pointer transition-colors`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedFieldIds.includes(field.name)}
+                                onChange={() =>
+                                  toggleFieldSelection(field.name)
+                                }
+                                className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 mr-3"
+                              />
+                              <div className="flex-1">
+                                <div className="font-medium text-gray-900 dark:text-gray-100">
+                                  {field.label}
+                                </div>
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  Type: {getFieldTypeDisplayName(field.type)}
+                                </div>
                               </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                Type: {getFieldTypeDisplayName(field.type)}
-                              </div>
-                            </div>
-                          </label>
-                        ))}
+                            </label>
+                          ))}
                       </div>
                     )}
                   </div>

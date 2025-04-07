@@ -60,6 +60,7 @@ interface WorkflowDelta {
 }
 
 const SESSION_STORAGE_KEY = "workflow_stages";
+const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 
 export default function Home() {
   const [stages, setStages] = useState<Stage[]>([]);
@@ -92,6 +93,23 @@ export default function Home() {
   const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
     "flat",
   );
+
+  // Load saved tab from localStorage after initial render
+  useEffect(() => {
+    const savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) as
+      | "workflow"
+      | "fields"
+      | "views"
+      | "fields";
+    if (savedTab) {
+      setActiveTab(savedTab);
+    }
+  }, []);
+
+  // Save tab to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   // Function to generate the model data structure
   const generateModelData = (
@@ -206,20 +224,48 @@ export default function Home() {
   };
 
   const handleUpdateField = (updates: Partial<Field>) => {
-    if (!editingField) return;
+    if (!updates.name) return; // Ensure we have a field name to update
 
+    // First update the field in the fields array
     setFields((prevFields) => {
       const updatedFields = prevFields.map((field) =>
-        field.name === editingField.name ? { ...field, ...updates } : field,
+        field.name === updates.name ? { ...field, ...updates } : field,
       );
       sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
       return updatedFields;
     });
 
-    setEditingField(null);
+    // Then update all references to this field in all steps
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => ({
+        ...stage,
+        steps: stage.steps.map((step) => ({
+          ...step,
+          fields: (step.fields || []).map((field) => ({
+            ...field,
+            // Only update the name if it matches
+            name: field.name === updates.name ? updates.name : field.name,
+          })),
+        })),
+      }));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
+      return updatedStages;
+    });
   };
 
   const handleDeleteField = (fieldId: string) => {
+    // Remove the field from the fields array
+    setFields((prevFields) => {
+      const updatedFields = prevFields.filter(
+        (field) => field.name !== fieldId,
+      );
+      sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
+      return updatedFields;
+    });
+
     // Remove references to this field from all steps
     setStages((prevStages) => {
       const updatedStages = prevStages.map((stage) => ({
@@ -702,6 +748,65 @@ export default function Home() {
     setChatHistory([]);
   };
 
+  const handleAddExistingFieldToStep = (stepId: string, fieldIds: string[]) => {
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => ({
+        ...stage,
+        steps: stage.steps.map((step) => {
+          if (step.name === stepId) {
+            const existingFieldIds = new Set(
+              (step.fields || []).map((f) => f.name),
+            );
+            const newFields = fieldIds
+              .filter((id) => !existingFieldIds.has(id))
+              .map((fieldId) => ({
+                name: fieldId,
+                required: false,
+              }));
+
+            return {
+              ...step,
+              fields: [...(step.fields || []), ...newFields],
+            };
+          }
+          return step;
+        }),
+      }));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
+      return updatedStages;
+    });
+  };
+
+  const handleFieldsReorder = (stepId: string, fieldIds: string[]) => {
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => ({
+        ...stage,
+        steps: stage.steps.map((step) => {
+          if (step.name === stepId) {
+            return {
+              ...step,
+              fields: fieldIds.map((fieldId) => ({
+                name: fieldId,
+                required:
+                  step.fields?.find((f) => f.name === fieldId)?.required ??
+                  false,
+              })),
+            };
+          }
+          return step;
+        }),
+      }));
+      sessionStorage.setItem(
+        SESSION_STORAGE_KEY,
+        JSON.stringify(updatedStages),
+      );
+      return updatedStages;
+    });
+  };
+
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
       {/* Toggle Button */}
@@ -877,7 +982,15 @@ export default function Home() {
               )}
               {activeTab === "views" && (
                 <div className="h-full">
-                  <ViewsPanel stages={stages} fields={fields} />
+                  <ViewsPanel
+                    stages={stages}
+                    fields={fields}
+                    onAddField={handleAddField}
+                    onUpdateField={handleUpdateField}
+                    onDeleteField={handleDeleteField}
+                    onAddExistingFieldToStep={handleAddExistingFieldToStep}
+                    onFieldsReorder={handleFieldsReorder}
+                  />
                 </div>
               )}
               {activeTab === "fields" && (
@@ -894,43 +1007,45 @@ export default function Home() {
                       Add Field
                     </button>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {fields.map((field) => (
-                      <div
-                        key={field.name}
-                        className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                              {field.label}
-                            </h3>
-                            {field.primary && (
-                              <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
-                                Primary
-                              </span>
-                            )}
+                  <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4">
+                    {fields
+                      .sort((a, b) => a.label.localeCompare(b.label))
+                      .map((field) => (
+                        <div
+                          key={field.name}
+                          className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                                {field.label}
+                              </h3>
+                              {field.primary && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
+                                  Primary
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => handleEditField(field.name)}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              >
+                                <FaPencilAlt className="w-4 h-4 text-gray-500" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteField(field.name)}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              >
+                                <FaTrash className="w-4 h-4 text-gray-500" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => handleEditField(field.name)}
-                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            >
-                              <FaPencilAlt className="w-4 h-4 text-gray-500" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteField(field.name)}
-                              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                            >
-                              <FaTrash className="w-4 h-4 text-gray-500" />
-                            </button>
-                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Type: {getFieldTypeDisplayName(field.type)}
+                          </p>
                         </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Type: {getFieldTypeDisplayName(field.type)}
-                        </p>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                   <AddFieldModal
                     isOpen={isAddFieldModalOpen}
