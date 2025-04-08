@@ -54,7 +54,7 @@ export function ChatInterface({
   isProcessing,
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("");
-  const [provider, setProvider] = useState<LLMProvider>("openai");
+  const [provider, setProvider] = useState<LLMProvider>("gemini");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [expandedTechnicalDetails, setExpandedTechnicalDetails] = useState<{

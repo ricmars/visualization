@@ -15,7 +15,7 @@ export interface Response {
 export class Service {
   private static readonly OLLAMA_BASE_URL = "http://localhost:11434/api";
   private static readonly OLLAMA_MODEL = "gemma3:27b";
-  private static currentProvider: LLMProvider = "openai";
+  private static currentProvider: LLMProvider = "gemini";
   private static readonly SYSTEM_MESSAGE = `You are a workflow assistant that helps users modify and understand their workflow model.
 The workflow model consists of two main components:
 
