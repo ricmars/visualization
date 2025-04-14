@@ -38,6 +38,7 @@ import { generateSampleValue } from "./utils/sampleValues";
 import ViewsPanel from "./components/ViewsPanel";
 import WorkflowLifecycleView from "./components/WorkflowLifecycleView";
 import AddProcessModal from "./components/AddProcessModal";
+import DatabasePanel from "./components/DatabasePanel";
 
 interface ChatMessage {
   role: ChatRole;
@@ -85,7 +86,7 @@ export default function Home() {
   const [_isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [_isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "workflow" | "fields" | "views" | "fields"
+    "workflow" | "fields" | "views" | "database"
   >("workflow");
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
@@ -119,7 +120,7 @@ export default function Home() {
       | "workflow"
       | "fields"
       | "views"
-      | "fields";
+      | "database";
     if (savedTab) {
       setActiveTab(savedTab);
     }
@@ -1398,6 +1399,16 @@ export default function Home() {
               >
                 Views
               </button>
+              <button
+                onClick={() => setActiveTab("database")}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === "database"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+              >
+                Database
+              </button>
             </div>
           </div>
         )}
@@ -1556,6 +1567,7 @@ export default function Home() {
                   />
                 </div>
               )}
+              {activeTab === "database" && <DatabasePanel />}
             </>
           )}
         </main>

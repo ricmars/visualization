@@ -7,6 +7,7 @@ const nextConfig = {
     AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
     AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    DATABASE_URL: process.env.DATABASE_URL,
   },
   // Ensure environment variables are available at build time
   serverRuntimeConfig: {
@@ -16,6 +17,7 @@ const nextConfig = {
     AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
     AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    DATABASE_URL: process.env.DATABASE_URL,
   },
   // Validate required environment variables
   webpack: (config, { isServer }) => {
@@ -26,6 +28,8 @@ const nextConfig = {
         "AZURE_TENANT_ID",
         "AZURE_CLIENT_ID",
         "AZURE_CLIENT_SECRET",
+        "GEMINI_API_KEY",
+        "DATABASE_URL",
       ];
 
       const missingVars = requiredEnvVars.filter((name) => !process.env[name]);
@@ -40,6 +44,10 @@ const nextConfig = {
       }
     }
     return config;
+  },
+  // Ensure environment variables are available at build time
+  publicRuntimeConfig: {
+    // Add any public runtime configs here
   },
 };
 
