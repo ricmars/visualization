@@ -17,6 +17,8 @@ import {
   Field,
   StepType,
   FieldReference,
+  Process,
+  Step,
 } from "./types";
 import AddFieldModal from "./components/AddFieldModal";
 import { motion } from "framer-motion";
@@ -35,6 +37,7 @@ import { getFieldTypeDisplayName } from "./utils/fieldTypes";
 import { generateSampleValue } from "./utils/sampleValues";
 import ViewsPanel from "./components/ViewsPanel";
 import WorkflowLifecycleView from "./components/WorkflowLifecycleView";
+import AddProcessModal from "./components/AddProcessModal";
 
 interface ChatMessage {
   role: ChatRole;
@@ -54,8 +57,8 @@ interface WorkflowDelta {
     targetIndex?: number;
   };
   changes: {
-    before?: Stage | Stage["steps"][number];
-    after?: Partial<Stage | Stage["steps"][number]>;
+    before?: Record<string, unknown> | null;
+    after?: Record<string, unknown> | null;
   };
 }
 
@@ -64,8 +67,10 @@ const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 
 export default function Home() {
   const [stages, setStages] = useState<Stage[]>([]);
-  const [activeStage, setActiveStage] = useState<string | undefined>();
-  const [activeStep, setActiveStep] = useState<string | undefined>();
+  const [workflowName, setWorkflowName] = useState<string>("Investigation");
+  const [activeStage, setActiveStage] = useState<string>();
+  const [activeProcess, setActiveProcess] = useState<string>();
+  const [activeStep, setActiveStep] = useState<string>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [_chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatPanelWidth, setChatPanelWidth] = useState(500);
@@ -93,6 +98,19 @@ export default function Home() {
   const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
     "flat",
   );
+  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(
+    null,
+  );
+  const [_selectedStep, _setSelectedStep] = useState<{
+    stageId: string;
+    processId: string;
+    stepId: string;
+    name: string;
+    fields: Field[];
+    type: StepType;
+  } | null>(null);
+  const [_isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [isAddProcessModalOpen, setIsAddProcessModalOpen] = useState(false);
 
   // Load saved tab from localStorage after initial render
   useEffect(() => {
@@ -116,6 +134,20 @@ export default function Home() {
     currentFields: Field[],
     currentStages: Stage[],
   ) => {
+    const tmpStages = [];
+    /* Iterate over currentStages - iterate over processes and steps - processes is not needed */
+    for (const stage of currentStages) {
+      const tmpSteps = [];
+      for (const process of stage.processes) {
+        for (const step of process.steps) {
+          tmpSteps.push(step);
+        }
+      }
+      tmpStages.push({
+        ...stage,
+        steps: tmpSteps,
+      });
+    }
     return {
       fullUpdate: true,
       appName: "My Application",
@@ -123,15 +155,13 @@ export default function Home() {
       industry: "Banking",
       userName: "John Smith",
       userLocale: "en-EN",
-      translations: {},
-      caseName: "Investigation",
-      stepName: "Present Case",
+      caseName: workflowName,
       caseTypes: [
         {
-          name: "Investigation",
+          name: workflowName,
           fields: currentFields,
           creationFields: [],
-          stages: currentStages,
+          stages: tmpStages,
         },
       ],
     };
@@ -146,6 +176,7 @@ export default function Home() {
         iframe.contentWindow?.postMessage(model, "*");
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stages, fields, isPreviewMode]);
 
   // Load stages and fields from session storage or default model
@@ -153,15 +184,23 @@ export default function Home() {
     const loadData = () => {
       const savedStages = sessionStorage.getItem(SESSION_STORAGE_KEY);
       const savedFields = sessionStorage.getItem("workflow_fields");
+      const savedWorkflowName = sessionStorage.getItem("workflow_name");
       const initialStages = savedStages
         ? JSON.parse(savedStages)
         : defaultModel.stages;
       const initialFields = savedFields
         ? JSON.parse(savedFields)
         : defaultModel.fields || [];
+      const initialWorkflowName = savedWorkflowName || defaultModel.name;
 
       setStages(initialStages);
       setFields(initialFields);
+      setWorkflowName(initialWorkflowName);
+
+      // Save workflow name to session storage if not already present
+      if (!savedWorkflowName) {
+        sessionStorage.setItem("workflow_name", defaultModel.name);
+      }
 
       // Set initial welcome message
       setMessages([
@@ -172,6 +211,7 @@ export default function Home() {
             message:
               "Welcome! I can help you manage your workflow. Here is your current workflow:",
             model: {
+              name: initialWorkflowName,
               stages: initialStages,
               fields: initialFields,
             },
@@ -179,7 +219,16 @@ export default function Home() {
               totalStages: initialStages.length,
               stageBreakdown: initialStages.map((stage: Stage) => ({
                 name: stage.name,
-                stepCount: stage.steps.length,
+                stepCount: stage.processes.reduce(
+                  (total, process) => total + process.steps.length,
+                  0,
+                ),
+                processes: stage.processes.map((process) => ({
+                  name: process.name,
+                  steps: process.steps.map((step) => ({
+                    name: step.name,
+                  })),
+                })),
               })),
             },
           },
@@ -239,12 +288,15 @@ export default function Home() {
     setStages((prevStages) => {
       const updatedStages = prevStages.map((stage) => ({
         ...stage,
-        steps: stage.steps.map((step) => ({
-          ...step,
-          fields: (step.fields || []).map((field) => ({
-            ...field,
-            // Only update the name if it matches
-            name: field.name === updates.name ? updates.name : field.name,
+        processes: stage.processes.map((process) => ({
+          ...process,
+          steps: process.steps.map((step) => ({
+            ...step,
+            fields: (step.fields || []).map((field) => ({
+              ...field,
+              // Only update the name if it matches
+              name: field.name === updates.name ? updates.name : field.name,
+            })),
           })),
         })),
       }));
@@ -254,6 +306,11 @@ export default function Home() {
       );
       return updatedStages;
     });
+  };
+
+  const handleUpdateWorkflowName = (newName: string) => {
+    setWorkflowName(newName);
+    sessionStorage.setItem("workflow_name", newName);
   };
 
   const handleDeleteField = (fieldId: string) => {
@@ -270,9 +327,12 @@ export default function Home() {
     setStages((prevStages) => {
       const updatedStages = prevStages.map((stage) => ({
         ...stage,
-        steps: stage.steps.map((step) => ({
-          ...step,
-          fields: (step.fields || []).filter((f) => f.name !== fieldId),
+        processes: stage.processes.map((process) => ({
+          ...process,
+          steps: process.steps.map((step) => ({
+            ...step,
+            fields: (step.fields || []).filter((f) => f.name !== fieldId),
+          })),
         })),
       }));
       sessionStorage.setItem(
@@ -306,7 +366,7 @@ export default function Home() {
             name: stage.name,
           },
           changes: {
-            after: stage,
+            after: stage as unknown as Record<string, unknown>,
           },
         });
       }
@@ -324,80 +384,104 @@ export default function Home() {
             name: stage.name,
           },
           changes: {
-            before: stage,
+            before: stage as unknown as Record<string, unknown>,
           },
         });
       }
     });
 
-    // Check for moved or updated steps
+    // Check for moved or updated steps within processes
     oldStages.forEach((oldStage) => {
       const newStage = newStages.find((s) => s.name === oldStage.name);
       if (!newStage) return;
 
-      // Compare steps
-      const newStepIds = new Set(newStage.steps.map((s) => s.name));
-
-      // Check for moved steps
-      oldStage.steps.forEach((oldStep, oldIndex) => {
-        const newStepIndex = newStage.steps.findIndex(
-          (s) => s.name === oldStep.name,
+      oldStage.processes.forEach((oldProcess) => {
+        const newProcess = newStage.processes.find(
+          (p) => p.name === oldProcess.name,
         );
-        if (newStepIndex !== -1 && newStepIndex !== oldIndex) {
-          deltas.push({
-            type: "move",
-            path: `/stages/${oldStage.name}/steps/${oldStep.name}`,
-            target: {
-              type: "step",
-              id: oldStep.name,
-              name: oldStep.name,
-              sourceStageId: oldStage.name,
-              targetStageId: newStage.name,
-              sourceIndex: oldIndex,
-              targetIndex: newStepIndex,
-            },
-            changes: {
-              before: oldStage.steps[oldIndex],
-              after: { ...newStage.steps[newStepIndex] },
-            },
-          });
-        }
-      });
+        if (!newProcess) return;
 
-      // Check for steps that moved between stages
-      oldStage.steps.forEach((oldStep) => {
-        if (!newStepIds.has(oldStep.name)) {
-          // Find which stage this step moved to
-          const targetStage = newStages.find(
-            (s) =>
-              s.name !== oldStage.name &&
-              s.steps.some((step) => step.name === oldStep.name),
+        // Compare steps
+        const newStepIds = new Set(newProcess.steps.map((step) => step.name));
+
+        // Check for moved steps within the same process
+        oldProcess.steps.forEach((oldStep, oldIndex) => {
+          const newStepIndex = newProcess.steps.findIndex(
+            (step) => step.name === oldStep.name,
           );
-          if (targetStage) {
-            const newIndex = targetStage.steps.findIndex(
-              (s) => s.name === oldStep.name,
-            );
+          if (newStepIndex !== -1 && newStepIndex !== oldIndex) {
             deltas.push({
               type: "move",
-              path: `/stages/${oldStage.name}/steps/${oldStep.name}`,
+              path: `/stages/${oldStage.name}/processes/${oldProcess.name}/steps/${oldStep.name}`,
               target: {
                 type: "step",
                 id: oldStep.name,
                 name: oldStep.name,
                 sourceStageId: oldStage.name,
-                targetStageId: targetStage.name,
-                sourceIndex: oldStage.steps.findIndex(
-                  (s) => s.name === oldStep.name,
-                ),
-                targetIndex: newIndex,
+                targetStageId: newStage.name,
+                sourceIndex: oldIndex,
+                targetIndex: newStepIndex,
               },
               changes: {
-                before: oldStep,
-                after: { name: targetStage.name },
+                before: oldProcess.steps[oldIndex] as unknown as Record<
+                  string,
+                  unknown
+                >,
+                after: {
+                  ...newProcess.steps[newStepIndex],
+                } as unknown as Record<string, unknown>,
               },
             });
           }
-        }
+        });
+
+        // Check for steps that moved between processes
+        oldProcess.steps.forEach((oldStep) => {
+          if (!newStepIds.has(oldStep.name)) {
+            // Find which process this step moved to
+            let targetProcess: Process | undefined;
+            let targetStage: Stage | undefined;
+
+            for (const s of newStages) {
+              for (const p of s.processes) {
+                if (p.steps.some((step) => step.name === oldStep.name)) {
+                  targetProcess = p;
+                  targetStage = s;
+                  break;
+                }
+              }
+              if (targetProcess) break;
+            }
+
+            if (targetProcess && targetStage) {
+              const newIndex = targetProcess.steps.findIndex(
+                (step) => step.name === oldStep.name,
+              );
+              deltas.push({
+                type: "move",
+                path: `/stages/${oldStage.name}/processes/${oldProcess.name}/steps/${oldStep.name}`,
+                target: {
+                  type: "step",
+                  id: oldStep.name,
+                  name: oldStep.name,
+                  sourceStageId: oldStage.name,
+                  targetStageId: targetStage.name,
+                  sourceIndex: oldProcess.steps.findIndex(
+                    (step) => step.name === oldStep.name,
+                  ),
+                  targetIndex: newIndex,
+                },
+                changes: {
+                  before: oldStep as unknown as Record<string, unknown>,
+                  after: { name: targetStage.name } as unknown as Record<
+                    string,
+                    unknown
+                  >,
+                },
+              });
+            }
+          }
+        });
       });
     });
 
@@ -430,8 +514,8 @@ export default function Home() {
               sourceIndex: 0,
               targetIndex: 0,
             },
-            value: delta.changes?.after,
-            oldValue: delta.changes?.before,
+            value: delta.changes?.after as Partial<Stage | Step> | null,
+            oldValue: delta.changes?.before as Stage | Step | null,
           })),
         },
         model: {
@@ -442,9 +526,15 @@ export default function Home() {
           totalStages: updatedStages.length,
           stageBreakdown: updatedStages.map((stage) => ({
             name: stage.name,
-            stepCount: stage.steps.length,
-            steps: stage.steps.map((step) => ({
-              name: step.name,
+            stepCount: stage.processes.reduce(
+              (total, process) => total + process.steps.length,
+              0,
+            ),
+            processes: stage.processes.map((process) => ({
+              name: process.name,
+              steps: process.steps.map((step) => ({
+                name: step.name,
+              })),
             })),
           })),
         },
@@ -506,32 +596,78 @@ export default function Home() {
     }, 500);
   };
 
-  const handleStepSelect = (stageId: string, stepId: string) => {
+  const handleStepSelect = (
+    stageId: string,
+    processId: string,
+    stepId: string,
+  ) => {
     setActiveStage(stageId);
+    setActiveProcess(processId);
     setActiveStep(stepId);
+
+    const stage = stages.find((s) => s.name === stageId);
+    const process = stage?.processes.find((p) => p.name === processId);
+    const step = process?.steps.find((s) => s.name === stepId);
+
+    if (step) {
+      const stepFields = (step.fields || []).map(
+        (fieldRef: FieldReference): Field => {
+          const fullField = fields.find((f) => f.name === fieldRef.name);
+          if (fullField) {
+            return {
+              ...fullField,
+            };
+          }
+          return {
+            name: fieldRef.name,
+            label: fieldRef.name,
+            type: "Text" as const,
+            value: undefined,
+          };
+        },
+      );
+
+      _setSelectedStep({
+        stageId,
+        processId,
+        stepId,
+        name: step.name,
+        fields: stepFields,
+        type: step.type,
+      });
+      setIsConfigModalOpen(true);
+    }
   };
 
   const _handleFieldChange = (
     fieldId: string,
     value: string | number | boolean | null,
   ): void => {
-    if (!activeStep || !activeStage) return;
+    if (!activeStep || !activeStage || !activeProcess) return;
 
     setStages((prevStages) => {
       const updatedStages = prevStages.map((stage) => {
         if (stage.name === activeStage) {
           return {
             ...stage,
-            steps: stage.steps.map((step) => {
-              if (step.name === activeStep) {
+            processes: stage.processes.map((process) => {
+              if (process.name === activeProcess) {
                 return {
-                  ...step,
-                  fields: (step.fields || []).map((field) =>
-                    field.name === fieldId ? { ...field, value } : field,
-                  ),
+                  ...process,
+                  steps: process.steps.map((step) => {
+                    if (step.name === activeStep) {
+                      return {
+                        ...step,
+                        fields: (step.fields || []).map((field) =>
+                          field.name === fieldId ? { ...field, value } : field,
+                        ),
+                      };
+                    }
+                    return step;
+                  }),
                 };
               }
-              return step;
+              return process;
             }),
           };
         }
@@ -551,10 +687,12 @@ export default function Home() {
   };
 
   const _getActiveStepFields = (): FieldReference[] => {
-    if (!activeStage || !activeStep) return [];
+    if (!activeStage || !activeStep || !activeProcess) return [];
     const stage = stages.find((s) => s.name === activeStage);
     if (!stage) return [];
-    const step = stage.steps.find((s) => s.name === activeStep);
+    const process = stage.processes.find((p) => p.name === activeProcess);
+    if (!process) return [];
+    const step = process.steps.find((s) => s.name === activeStep);
     return step?.fields || [];
   };
 
@@ -568,21 +706,29 @@ export default function Home() {
     name: string;
     type: StepType;
   }): void => {
-    if (!selectedStageId) return;
+    if (!selectedStageId || !selectedProcessId) return;
 
     setStages((prevStages) =>
       prevStages.map((stage) => {
         if (stage.name === selectedStageId) {
           return {
             ...stage,
-            steps: [
-              ...stage.steps,
-              {
-                name: stepData.name,
-                type: stepData.type,
-                fields: [],
-              },
-            ],
+            processes: stage.processes.map((process) => {
+              if (process.name === selectedProcessId) {
+                return {
+                  ...process,
+                  steps: [
+                    ...process.steps,
+                    {
+                      name: stepData.name,
+                      type: stepData.type,
+                      fields: [],
+                    },
+                  ],
+                };
+              }
+              return process;
+            }),
           };
         }
         return stage;
@@ -591,6 +737,7 @@ export default function Home() {
 
     setIsAddStepModalOpen(false);
     setSelectedStageId(null);
+    setSelectedProcessId(null);
   };
 
   const _handleDragStart = (): void => {
@@ -604,20 +751,28 @@ export default function Home() {
       return;
     }
 
+    const [sourceStageId, sourceProcessId] =
+      result.source.droppableId.split("-");
+    const [destStageId, destProcessId] =
+      result.destination.droppableId.split("-");
+
     const updatedStages = [...stages];
-    const sourceStage = updatedStages.find(
-      (s) => s.name === result.source.droppableId,
+    const sourceStage = updatedStages.find((s) => s.name === sourceStageId);
+    const destStage = updatedStages.find((s) => s.name === destStageId);
+
+    if (!sourceStage || !destStage) return;
+
+    const sourceProcess = sourceStage.processes.find(
+      (p) => p.name === sourceProcessId,
     );
-    const destinationStage = updatedStages.find(
-      (s) => s.name === result.destination!.droppableId,
+    const destProcess = destStage.processes.find(
+      (p) => p.name === destProcessId,
     );
 
-    if (!sourceStage || !destinationStage) {
-      return;
-    }
+    if (!sourceProcess || !destProcess) return;
 
-    const [movedStep] = sourceStage.steps.splice(result.source.index, 1);
-    destinationStage.steps.splice(result.destination.index, 0, movedStep);
+    const [movedStep] = sourceProcess.steps.splice(result.source.index, 1);
+    destProcess.steps.splice(result.destination.index, 0, movedStep);
 
     sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updatedStages));
     setStages(updatedStages);
@@ -626,7 +781,7 @@ export default function Home() {
   const handleAddStage = (stageData: { name: string }) => {
     const newStage: Stage = {
       name: stageData.name,
-      steps: [],
+      processes: [],
       isNew: true,
     };
 
@@ -653,12 +808,14 @@ export default function Home() {
     handleStepsUpdate(updatedStages);
   };
 
-  const handleDeleteStep = (stageId: string, stepId: string) => {
+  const handleDeleteProcess = (stageId: string, processId: string) => {
     const updatedStages = stages.map((stage) => {
       if (stage.name === stageId) {
         return {
           ...stage,
-          steps: stage.steps.filter((step) => step.name !== stepId),
+          processes: stage.processes.filter(
+            (process) => process.name !== processId,
+          ),
         };
       }
       return stage;
@@ -666,64 +823,133 @@ export default function Home() {
     handleStepsUpdate(updatedStages);
   };
 
-  const handleChatMessage = async (message: string) => {
-    try {
-      setIsProcessing(true);
-      // Add user message immediately
-      addMessage({
-        id: uuidv4(),
-        type: "text",
-        content: message,
-        sender: "user",
-      });
-
-      const currentModel = {
-        stages: stages,
-        fields: fields,
-      };
-      const response = await Service.generateResponse(message, currentModel);
-
-      // Try to parse the response as JSON
-      let parsedResponse;
-      try {
-        parsedResponse = JSON.parse(response);
-      } catch {
-        // If parsing fails, use the raw response as a message
-        parsedResponse = {
-          message: response,
+  const handleDeleteStep = (
+    stageId: string,
+    processId: string,
+    stepId: string,
+  ) => {
+    const updatedStages = stages.map((stage) => {
+      if (stage.name === stageId) {
+        return {
+          ...stage,
+          processes: stage.processes.map((process) => {
+            if (process.name === processId) {
+              return {
+                ...process,
+                steps: process.steps.filter((step) => step.name !== stepId),
+              };
+            }
+            return process;
+          }),
         };
       }
+      return stage;
+    });
+    handleStepsUpdate(updatedStages);
+  };
 
-      // Update both stages and fields if the response includes a new model
-      if (parsedResponse.model) {
-        if (parsedResponse.model.stages) {
-          setStages(parsedResponse.model.stages);
-        }
-        if (parsedResponse.model.fields) {
-          setFields(parsedResponse.model.fields);
-          // Save updated fields to session storage
-          sessionStorage.setItem(
-            "workflow_fields",
-            JSON.stringify(parsedResponse.model.fields),
+  const handleSendMessage = async (message: string) => {
+    try {
+      setIsProcessing(true);
+
+      // Add user message immediately
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          type: "text",
+          content: message,
+          sender: "user",
+        },
+      ]);
+
+      // Add a placeholder AI message that will be updated with streaming content
+      const aiMessageId = uuidv4();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: aiMessageId,
+          type: "text",
+          content: "",
+          sender: "ai",
+        },
+      ]);
+
+      // Handle streaming updates
+      const updateAiMessage = (chunk: string) => {
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const aiMessageIndex = newMessages.findIndex(
+            (msg) => msg.id === aiMessageId,
           );
-        }
+          if (aiMessageIndex !== -1) {
+            newMessages[aiMessageIndex] = {
+              ...newMessages[aiMessageIndex],
+              content: newMessages[aiMessageIndex].content + chunk,
+            };
+          }
+          return newMessages;
+        });
+      };
+
+      const response = await Service.generateResponse(
+        message,
+        {
+          name: workflowName,
+          stages,
+          fields,
+        },
+        updateAiMessage,
+      );
+
+      const parsedResponse = JSON.parse(response);
+
+      if (
+        parsedResponse.model?.name &&
+        parsedResponse.model.name !== workflowName
+      ) {
+        handleUpdateWorkflowName(parsedResponse.model.name);
       }
 
-      // Add the message to the chat
-      addMessage({
-        id: uuidv4(),
-        type: "json",
-        content: parsedResponse,
-        sender: "ai",
+      if (parsedResponse.model?.stages) {
+        _handleWorkflowUpdate(parsedResponse.model.stages);
+      }
+
+      if (parsedResponse.model?.fields) {
+        setFields(parsedResponse.model.fields);
+        sessionStorage.setItem(
+          "workflow_fields",
+          JSON.stringify(parsedResponse.model.fields),
+        );
+      }
+
+      // Update the AI message with the final structured response
+      setMessages((prev) => {
+        const newMessages = [...prev];
+        const aiMessageIndex = newMessages.findIndex(
+          (msg) => msg.id === aiMessageId,
+        );
+        if (aiMessageIndex !== -1) {
+          newMessages[aiMessageIndex] = {
+            id: aiMessageId,
+            type: "json",
+            content: parsedResponse,
+            sender: "ai",
+          };
+        }
+        return newMessages;
       });
     } catch (error) {
-      console.error("Error:", error);
-      addMessage({
-        id: uuidv4(),
-        type: "text",
-        content: "Sorry, there was an error processing your request.",
-        sender: "ai",
-      });
+      console.error("Error sending message:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: uuidv4(),
+          type: "text",
+          content: "Sorry, there was an error processing your request.",
+          sender: "ai",
+        },
+      ]);
     } finally {
       setIsProcessing(false);
     }
@@ -749,29 +975,111 @@ export default function Home() {
   };
 
   const handleAddExistingFieldToStep = (stepId: string, fieldIds: string[]) => {
-    setStages((prevStages) => {
-      const updatedStages = prevStages.map((stage) => ({
-        ...stage,
-        steps: stage.steps.map((step) => {
-          if (step.name === stepId) {
-            const existingFieldIds = new Set(
-              (step.fields || []).map((f) => f.name),
-            );
-            const newFields = fieldIds
-              .filter((id) => !existingFieldIds.has(id))
-              .map((fieldId) => ({
-                name: fieldId,
-                required: false,
-              }));
+    // For views tab
+    if (activeTab === "views") {
+      setStages((prevStages) => {
+        const updatedStages = prevStages.map((stage) => ({
+          ...stage,
+          processes: stage.processes.map((process) => ({
+            ...process,
+            steps: process.steps.map((step) => {
+              if (step.name === stepId && step.type === "Collect information") {
+                // Get existing fields
+                const existingFields = step.fields || [];
 
-            return {
-              ...step,
-              fields: [...(step.fields || []), ...newFields],
-            };
-          }
-          return step;
-        }),
-      }));
+                // Create a map to store unique field references
+                const uniqueFieldsMap = new Map<FieldReference, boolean>();
+
+                // First, add existing fields to the map
+                existingFields.forEach((field) => {
+                  uniqueFieldsMap.set(field, true);
+                });
+
+                // Then add new fields, ensuring uniqueness
+                const newFields = fieldIds.map((fieldId) => ({
+                  name: fieldId,
+                  required:
+                    existingFields.find((f) => f.name === fieldId)?.required ??
+                    false,
+                }));
+
+                newFields.forEach((field) => {
+                  uniqueFieldsMap.set(field, true);
+                });
+
+                return {
+                  ...step,
+                  fields: Array.from(uniqueFieldsMap.keys()),
+                };
+              }
+              return step;
+            }),
+          })),
+        }));
+        sessionStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify(updatedStages),
+        );
+        return updatedStages;
+      });
+      return;
+    }
+
+    // For workflow tab
+    if (!_selectedStep) return;
+
+    setStages((prevStages) => {
+      const updatedStages = prevStages.map((stage) => {
+        if (stage.name === _selectedStep.stageId) {
+          return {
+            ...stage,
+            processes: stage.processes.map((process) => {
+              if (process.name === _selectedStep.processId) {
+                return {
+                  ...process,
+                  steps: process.steps.map((step) => {
+                    if (step.name === stepId) {
+                      // Get existing fields
+                      const existingFields = step.fields || [];
+
+                      // Create a map to store unique field references
+                      const uniqueFieldsMap = new Map<
+                        FieldReference,
+                        boolean
+                      >();
+
+                      // First, add existing fields to the map
+                      existingFields.forEach((field) => {
+                        uniqueFieldsMap.set(field, true);
+                      });
+
+                      // Then add new fields, ensuring uniqueness
+                      const newFields = fieldIds.map((fieldId) => ({
+                        name: fieldId,
+                        required:
+                          existingFields.find((f) => f.name === fieldId)
+                            ?.required ?? false,
+                      }));
+
+                      newFields.forEach((field) => {
+                        uniqueFieldsMap.set(field, true);
+                      });
+
+                      return {
+                        ...step,
+                        fields: Array.from(uniqueFieldsMap.keys()),
+                      };
+                    }
+                    return step;
+                  }),
+                };
+              }
+              return process;
+            }),
+          };
+        }
+        return stage;
+      });
       sessionStorage.setItem(
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
@@ -781,30 +1089,123 @@ export default function Home() {
   };
 
   const handleFieldsReorder = (stepId: string, fieldIds: string[]) => {
+    // For views tab
+    if (activeTab === "views") {
+      setStages((prevStages) => {
+        const updatedStages = prevStages.map((stage) => ({
+          ...stage,
+          processes: stage.processes.map((process) => ({
+            ...process,
+            steps: process.steps.map((step) => {
+              if (step.name === stepId && step.type === "Collect information") {
+                // Ensure unique field references
+                const uniqueFieldIds = Array.from(new Set(fieldIds));
+                return {
+                  ...step,
+                  fields: uniqueFieldIds.map((fieldId) => ({
+                    name: fieldId,
+                    required:
+                      step.fields?.find((f) => f.name === fieldId)?.required ??
+                      false,
+                  })),
+                };
+              }
+              return step;
+            }),
+          })),
+        }));
+        sessionStorage.setItem(
+          SESSION_STORAGE_KEY,
+          JSON.stringify(updatedStages),
+        );
+        return updatedStages;
+      });
+      return;
+    }
+
+    // For workflow tab
+    if (!_selectedStep) return;
+
+    // Only allow reordering fields in "Collect information" steps
+    const stage = stages.find((s) => s.name === _selectedStep.stageId);
+    const process = stage?.processes.find(
+      (p) => p.name === _selectedStep.processId,
+    );
+    const step = process?.steps.find((s) => s.name === stepId);
+
+    if (!step || step.type !== "Collect information") {
+      return;
+    }
+
     setStages((prevStages) => {
-      const updatedStages = prevStages.map((stage) => ({
-        ...stage,
-        steps: stage.steps.map((step) => {
-          if (step.name === stepId) {
-            return {
-              ...step,
-              fields: fieldIds.map((fieldId) => ({
-                name: fieldId,
-                required:
-                  step.fields?.find((f) => f.name === fieldId)?.required ??
-                  false,
-              })),
-            };
-          }
-          return step;
-        }),
-      }));
+      const updatedStages = prevStages.map((stage) => {
+        if (stage.name === _selectedStep.stageId) {
+          return {
+            ...stage,
+            processes: stage.processes.map((process) => {
+              if (process.name === _selectedStep.processId) {
+                return {
+                  ...process,
+                  steps: process.steps.map((step) => {
+                    if (step.name === stepId) {
+                      // Ensure unique field references
+                      const uniqueFieldIds = Array.from(new Set(fieldIds));
+                      return {
+                        ...step,
+                        fields: uniqueFieldIds.map((fieldId) => ({
+                          name: fieldId,
+                          required:
+                            step.fields?.find((f) => f.name === fieldId)
+                              ?.required ?? false,
+                        })),
+                      };
+                    }
+                    return step;
+                  }),
+                };
+              }
+              return process;
+            }),
+          };
+        }
+        return stage;
+      });
       sessionStorage.setItem(
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
       return updatedStages;
     });
+  };
+
+  const handleAddProcess = (stageId: string) => {
+    setSelectedStageId(stageId);
+    setIsAddProcessModalOpen(true);
+  };
+
+  const handleAddProcessSubmit = (data: { name: string }) => {
+    if (!selectedStageId) return;
+
+    setStages((prevStages) =>
+      prevStages.map((stage) => {
+        if (stage.name === selectedStageId) {
+          return {
+            ...stage,
+            processes: [
+              ...stage.processes,
+              {
+                name: data.name,
+                steps: [],
+              },
+            ],
+          };
+        }
+        return stage;
+      }),
+    );
+
+    setIsAddProcessModalOpen(false);
+    setSelectedStageId(null);
   };
 
   return (
@@ -826,63 +1227,87 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Tabs */}
-        <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
-          <div className="flex">
+        {/* Header row with title and preview switch */}
+        <div className="flex justify-between items-center p-6 pb-3 pr-[200px]">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            {workflowName}
             <button
-              onClick={() => setActiveTab("workflow")}
-              className={`px-4 py-2 text-sm font-medium ${
-                activeTab === "workflow" && !isPreviewMode
-                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+              onClick={() => {
+                const newName = prompt(
+                  "Enter new workflow name:",
+                  workflowName,
+                );
+                if (newName) {
+                  handleUpdateWorkflowName(newName);
+                }
+              }}
+              className="ml-2 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 inline-flex items-center"
+              aria-label="Edit workflow name"
+            >
+              <FaPencilAlt className="w-4 h-4 text-gray-500" />
+            </button>
+          </h1>
+          <label className="flex items-center cursor-pointer group">
+            <div className="relative">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={isPreviewMode}
+                onChange={() => setIsPreviewMode(!isPreviewMode)}
+              />
+              <div className="block bg-gray-200 dark:bg-gray-700 w-14 h-8 rounded-full transition-colors duration-200 ease-in-out peer-checked:bg-blue-600 dark:peer-checked:bg-blue-500 group-hover:bg-gray-300 dark:group-hover:bg-gray-600 peer-checked:group-hover:bg-blue-700 dark:peer-checked:group-hover:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-500 peer-focus:ring-offset-2 dark:peer-focus:ring-offset-gray-900"></div>
+              <div
+                className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-all duration-200 ease-in-out shadow-sm peer-checked:translate-x-6 peer-checked:bg-white group-hover:scale-95`}
+              ></div>
+            </div>
+            <div
+              className={`ml-3 text-sm font-medium transition-colors duration-200 ${
+                isPreviewMode
+                  ? "text-blue-600 dark:text-blue-400"
+                  : "text-gray-700 dark:text-gray-300"
               }`}
             >
-              Workflow
-            </button>
-            <button
-              onClick={() => setActiveTab("fields")}
-              className={`px-4 py-2 text-sm font-medium ${
-                activeTab === "fields" && !isPreviewMode
-                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-              }`}
-            >
-              Fields
-            </button>
-            <button
-              onClick={() => setActiveTab("views")}
-              className={`px-4 py-2 text-sm font-medium ${
-                activeTab === "views" && !isPreviewMode
-                  ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-              }`}
-            >
-              Views
-            </button>
-          </div>
-
-          <div className="flex items-center px-4">
-            <label className="flex items-center cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={isPreviewMode}
-                  onChange={() => setIsPreviewMode(!isPreviewMode)}
-                />
-                <div className="block bg-gray-300 dark:bg-gray-600 w-14 h-8 rounded-full"></div>
-                <div
-                  className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition transform ${
-                    isPreviewMode ? "translate-x-6" : "translate-x-0"
-                  }`}
-                ></div>
-              </div>
-              <div className="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-                Preview
-              </div>
-            </label>
-          </div>
+              Preview
+            </div>
+          </label>
         </div>
+        {/* Tabs - Only show when not in preview mode */}
+        {!isPreviewMode && (
+          <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab("workflow")}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === "workflow"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+              >
+                Workflow
+              </button>
+              <button
+                onClick={() => setActiveTab("fields")}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === "fields"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+              >
+                Fields
+              </button>
+              <button
+                onClick={() => setActiveTab("views")}
+                className={`px-4 py-2 text-sm font-medium ${
+                  activeTab === "views"
+                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                }`}
+              >
+                Views
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Tab Content */}
         <main className="flex-1 overflow-auto">
@@ -918,9 +1343,6 @@ export default function Home() {
                 <>
                   <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center gap-4">
-                      <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                        Workflow
-                      </h1>
                       <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
                         <button
                           onClick={() => setWorkflowView("flat")}
@@ -957,19 +1379,23 @@ export default function Home() {
                       fields={fields}
                       onStepSelect={handleStepSelect}
                       activeStage={activeStage}
+                      activeProcess={activeProcess}
                       activeStep={activeStep}
                       onStepsUpdate={handleStepsUpdate}
                       onDeleteStage={handleDeleteStage}
+                      onDeleteProcess={handleDeleteProcess}
                       onDeleteStep={handleDeleteStep}
                       onAddField={handleAddField}
                       onUpdateField={handleUpdateField}
                       onDeleteField={handleDeleteField}
+                      onAddProcess={handleAddProcess}
                     />
                   ) : (
                     <WorkflowLifecycleView
                       stages={stages}
                       onStepSelect={handleStepSelect}
                       activeStage={activeStage}
+                      activeProcess={activeProcess}
                       activeStep={activeStep}
                     />
                   )}
@@ -977,6 +1403,11 @@ export default function Home() {
                     isOpen={isAddStageModalOpen}
                     onClose={() => setIsAddStageModalOpen(false)}
                     onAddStage={handleAddStage}
+                  />
+                  <AddProcessModal
+                    isOpen={isAddProcessModalOpen}
+                    onClose={() => setIsAddProcessModalOpen(false)}
+                    onAddProcess={handleAddProcessSubmit}
                   />
                 </>
               )}
@@ -1077,7 +1508,7 @@ export default function Home() {
         <div className="flex-1 overflow-hidden">
           <ChatInterface
             messages={messages}
-            onSendMessage={handleChatMessage}
+            onSendMessage={handleSendMessage}
             onClear={handleClearChat}
             isProcessing={isProcessing}
           />

@@ -10,14 +10,16 @@
     "gen-schema": "./node_modules/.bin/ts-json-schema-generator --no-type-check --type 'Application' --path 'src/app/types.ts' -o 'public/model.schema'"
   },
   "dependencies": {
-    "@headlessui/react": "^2.2.0",
+    "@google/generative-ai": "^0.24.0",
+    "@headlessui/react": "^2.2.1",
     "@hello-pangea/dnd": "^18.0.1",
-    "@pega/cosmos-react-build": "^8.0.0-build.35.1",
-    "@pega/cosmos-react-core": "^8.0.0-build.35.1",
+    "@pega/cosmos-react-build": "^8.0.0-build.35.6",
+    "@pega/cosmos-react-core": "^8.0.0-build.35.6",
     "@types/prismjs": "^1.26.5",
     "@types/uuid": "^10.0.0",
-    "framer-motion": "^12.6.2",
-    "next": "15.2.4",
+    "framer-motion": "^12.6.5",
+    "next": "15.3.0",
+    "openai": "^4.93.0",
     "prismjs": "^1.30.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -32,9 +34,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.2.4",
+    "eslint-config-next": "15.3.0",
     "tailwindcss": "^4",
-    "ts-json-schema-generator": "^2.3.0",
+    "ts-json-schema-generator": "^2.4.0",
     "typescript": "^5"
   }
 }

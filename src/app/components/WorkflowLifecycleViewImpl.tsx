@@ -12,14 +12,19 @@ import { Stage } from "../types";
 
 interface WorkflowLifecycleViewProps {
   stages: Stage[];
-  onStepSelect: (stageId: string, stepId: string) => void;
+  onStepSelect: (stageId: string, processId: string, stepId: string) => void;
   activeStage?: string;
+  activeProcess?: string;
   activeStep?: string;
 }
 
-const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
-  props,
-) => {
+const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
+  stages,
+  onStepSelect,
+  activeStage,
+  activeProcess,
+  activeStep,
+}) => {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [frameBody, setFrameBody] = useState<HTMLElement | null>(null);
 
@@ -64,7 +69,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
   // Memoize the stages mapping to prevent unnecessary recalculations
   const mappedStages = useMemo(
     () =>
-      props.stages.map(
+      stages.map(
         (stage: Stage): StageItemProps => ({
           id: stage.name,
           label: stage.name,
@@ -74,19 +79,31 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
             {
               id: stage.name,
               categoryId: stage.name,
-              tasks: stage.steps.map((task) => ({
-                id: task.name,
-                label: task.name,
-                visual: {
-                  imgSrc: "",
-                },
-                steps: [],
+              tasks: stage.processes.map((process) => ({
+                id: process.name,
+                label: process.name,
+                visual: { imgSrc: "" },
+                steps: process.steps.map((step) => ({
+                  status: {
+                    type: "",
+                    label: step.name,
+                  },
+                  id: step.name,
+                  label: step.name,
+                  visual: {
+                    imgSrc: "",
+                    name: "user-document",
+                    label: "review",
+                    category: "task",
+                    inverted: false,
+                  },
+                })),
               })),
             },
           ],
         }),
       ),
-    [props.stages],
+    [stages],
   );
   console.log(mappedStages);
 
@@ -120,10 +137,11 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
               <ModalManager>
                 <LifeCycle
                   items={mappedStages}
-                  stages={props.stages}
-                  onStepSelect={props.onStepSelect}
-                  activeStage={props.activeStage}
-                  activeStep={props.activeStep}
+                  stages={stages}
+                  onStepSelect={onStepSelect}
+                  activeStage={activeStage}
+                  activeProcess={activeProcess}
+                  activeStep={activeStep}
                 />
               </ModalManager>
             </Toaster>
@@ -134,10 +152,11 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = (
     [
       frameBody,
       mappedStages,
-      props.stages,
-      props.activeStage,
-      props.activeStep,
-      props.onStepSelect,
+      stages,
+      activeStage,
+      activeProcess,
+      activeStep,
+      onStepSelect,
     ],
   );
 

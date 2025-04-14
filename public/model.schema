@@ -84,12 +84,6 @@
           "description": "if type is embeddded data, data reference or case reference, set this value to the object name",
           "type": "string"
         },
-        "required": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
         "source": {
           "description": "source of the field - if not set will default to 'User input'",
           "enum": [
@@ -140,15 +134,32 @@
           "type": "string"
         },
         "required": {
-          "description": "set to true or \"true\" if the field is required",
-          "type": [
-            "boolean",
-            "string"
-          ]
+          "description": "set to true if the field is required",
+          "type": "boolean"
         }
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "Process": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "Unique name of the process",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/definitions/Step"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "steps"
       ],
       "type": "object"
     },
@@ -175,17 +186,17 @@
           "description": "Unique name of the stage",
           "type": "string"
         },
-        "steps": {
-          "description": "List of fields assigned to the step",
+        "processes": {
+          "description": "List of processes in this stage",
           "items": {
-            "$ref": "#/definitions/Step"
+            "$ref": "#/definitions/Process"
           },
           "type": "array"
         }
       },
       "required": [
         "name",
-        "steps"
+        "processes"
       ],
       "type": "object"
     },

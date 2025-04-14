@@ -1,20 +1,39 @@
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
-const GEMINI_MODEL = "gemini-2.0-flash-001";
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const generativeModel = genAI.getGenerativeModel({
+  model: "	gemini-2.0-flash-001",
+});
 
 export async function POST(request: Request) {
   try {
     const { prompt, systemContext } = await request.json();
+    console.error("Received request with prompt length:", prompt.length);
 
-    const response = await fetch(
-      `${GEMINI_BASE_URL}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+    // Create a new TransformStream for streaming
+    const encoder = new TextEncoder();
+    const stream = new TransformStream();
+    const writer = stream.writable.getWriter();
+
+    // Start the response stream
+    const streamResponse = new Response(stream.readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+
+    // Process the stream in the background
+    (async () => {
+      try {
+        // Send initial message to keep connection alive
+        await writer.write(encoder.encode('data: {"init":true}\n\n'));
+        console.error("Sent initial message");
+
+        // Make the API call
+        const requestPayload = {
           contents: [
             {
               role: "user",
@@ -25,60 +44,97 @@ export async function POST(request: Request) {
               ],
             },
           ],
-        }),
-      },
-    );
+        };
+        console.error("Sending request to Gemini");
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(
-        `Gemini API error (${response.status}): ${
-          JSON.stringify(errorData) || response.statusText
-        }`,
-      );
-    }
+        const streamingResp = await generativeModel.generateContentStream(
+          requestPayload,
+        );
+        let accumulatedText = "";
 
-    const data = await response.json();
+        for await (const chunk of streamingResp.stream) {
+          const chunkText = chunk.text();
+          if (chunkText) {
+            accumulatedText += chunkText;
+            await writer.write(
+              encoder.encode(
+                `data: ${JSON.stringify({ text: chunkText })}\n\n`,
+              ),
+            );
+          }
+        }
 
-    if (!data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      throw new Error("Invalid response format from Gemini API");
-    }
+        console.error("Final accumulated text:", accumulatedText);
 
-    let text = data.candidates[0].content.parts[0].text.trim();
+        try {
+          // Clean the text by removing markdown code block formatting
+          accumulatedText = accumulatedText
+            .replace(/^```json\n/, "")
+            .replace(/\n```$/, "");
 
-    // Remove any markdown code block formatting
-    if (text.startsWith("```")) {
-      const matches = text.match(/```(?:json)?\n?([\s\S]*?)\n?```$/);
-      if (matches) {
-        text = matches[1].trim();
+          // Parse and validate the complete JSON
+          const modelData = JSON.parse(accumulatedText);
+
+          if (
+            !modelData.model ||
+            (!modelData.model.stages && !modelData.model.fields)
+          ) {
+            throw new Error("Response missing required model data");
+          }
+
+          const validatedResponse = {
+            message: modelData.message || "",
+            model: {
+              name: modelData.model.name || "",
+              stages: Array.isArray(modelData.model.stages)
+                ? modelData.model.stages
+                : [],
+              fields: Array.isArray(modelData.model.fields)
+                ? modelData.model.fields
+                : [],
+            },
+            action: modelData.action || { changes: [] },
+            visualization: modelData.visualization || {
+              totalStages: modelData.model.stages?.length || 0,
+              stageBreakdown: [],
+            },
+          };
+
+          // Send the final validated response
+          await writer.write(
+            encoder.encode(
+              `data: ${JSON.stringify({ final: validatedResponse })}\n\n`,
+            ),
+          );
+        } catch (error) {
+          console.error("Error parsing model data:", error);
+          throw new Error("Invalid JSON structure in response text");
+        }
+
+        await writer.close();
+      } catch (error) {
+        console.error("Stream processing error:", error);
+        try {
+          await writer.write(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Stream processing error",
+              })}\n\n`,
+            ),
+          );
+          await writer.close();
+        } catch (e) {
+          console.error("Error while handling stream error:", e);
+        }
       }
-    }
+    })();
 
-    try {
-      const parsed = JSON.parse(text);
-
-      if (!parsed.model || (!parsed.model.stages && !parsed.model.fields)) {
-        throw new Error("Response missing required model data");
-      }
-
-      const validatedResponse = {
-        message: parsed.message || "",
-        model: {
-          stages: Array.isArray(parsed.model.stages) ? parsed.model.stages : [],
-          fields: Array.isArray(parsed.model.fields) ? parsed.model.fields : [],
-        },
-        action: parsed.action || { changes: [] },
-        visualization: parsed.visualization || {
-          totalStages: parsed.model.stages?.length || 0,
-          stageBreakdown: [],
-        },
-      };
-
-      return NextResponse.json(validatedResponse);
-    } catch (error) {
-      console.error("Invalid JSON:", error);
-      throw new Error("Invalid or malformed JSON in Gemini response");
-    }
+    // Return the stream response immediately
+    console.error("Returning stream response");
+    return streamResponse;
   } catch (error) {
     console.error("API route error:", error);
     return NextResponse.json(

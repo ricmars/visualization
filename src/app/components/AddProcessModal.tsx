@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { StepType } from "../types";
 
-interface AddStepModalProps {
+interface AddProcessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStep: (data: { name: string; type: StepType }) => void;
+  onAddProcess: (data: { name: string }) => void;
 }
 
 interface ModalProps {
@@ -29,13 +28,12 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   );
 };
 
-const AddStepModal: React.FC<AddStepModalProps> = ({
+const AddProcessModal: React.FC<AddProcessModalProps> = ({
   isOpen,
   onClose,
-  onAddStep,
+  onAddProcess,
 }) => {
   const [name, setName] = useState("");
-  const [stepType, setStepType] = useState<StepType>("Collect information");
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -48,13 +46,11 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    onAddStep({
+    onAddProcess({
       name: name.trim(),
-      type: stepType,
     });
 
     setName("");
-    setStepType("Collect information");
   };
 
   return (
@@ -62,45 +58,22 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
         <div className="p-6">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Add New Step
+            Add New Process
           </h3>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Step Name
+                  Process Name
                 </label>
                 <input
                   ref={nameInputRef}
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter step name"
+                  placeholder="Enter process name"
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Step Type
-                </label>
-                <select
-                  value={stepType}
-                  onChange={(e) => setStepType(e.target.value as StepType)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
-                >
-                  <option value="Collect information">
-                    Collect Information
-                  </option>
-                  <option value="Approve/Reject">Approve/Reject</option>
-                  <option value="Automation">Automation</option>
-                  <option value="Create Case">Create Case</option>
-                  <option value="Decision">Decision</option>
-                  <option value="Generate Document">Generate Document</option>
-                  <option value="Generative AI">Generative AI</option>
-                  <option value="Robotic Automation">Robotic Automation</option>
-                  <option value="Send Notification">Send Notification</option>
-                </select>
               </div>
             </div>
 
@@ -116,7 +89,7 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
                 type="submit"
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
               >
-                Add Step
+                Add Process
               </button>
             </div>
           </form>
@@ -126,4 +99,4 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
   );
 };
 
-export default AddStepModal;
+export default AddProcessModal;

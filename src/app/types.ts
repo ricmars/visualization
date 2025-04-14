@@ -60,14 +60,20 @@ export interface Step {
   fields?: FieldReference[];
 }
 
+export interface Process {
+  /** Unique name of the process */
+  name: string;
+  steps: Step[];
+}
+
 export interface Stage {
   /** Unique name of the stage */
   name: string;
-  /** List of fields assigned to the step */
-  steps: Step[];
+  /** List of processes in this stage */
+  processes: Process[];
   isNew?: boolean;
-  isMoving?: boolean;
   isDeleting?: boolean;
+  isMoving?: boolean;
   moveDirection?: "up" | "down";
 }
 
@@ -88,29 +94,39 @@ export interface Message {
   content:
     | string
     | {
-        message?: string;
-        model?: {
-          stages?: Stage[];
-          fields?: Field[];
-          before?: Stage[];
-          after?: Stage[];
-        };
+        message: string;
+        model: WorkflowModel;
         action?: {
           type?: "add" | "delete" | "move" | "update";
           changes: MessageDelta[];
         };
-        visualization?: {
+        visualization: {
           totalStages: number;
           stageBreakdown: {
             name: string;
             stepCount: number;
-            steps?: {
+            processes: {
               name: string;
+              steps: {
+                name: string;
+              }[];
             }[];
           }[];
         };
       };
   sender: "user" | "ai";
+}
+
+export interface WorkflowModel {
+  name?: string;
+  stages?: Stage[];
+  fields?: Field[];
+  before?: Stage[];
+  after?: Stage[];
+  action?: {
+    type?: "add" | "delete" | "move" | "update";
+    changes: MessageDelta[];
+  };
 }
 
 export interface WorkflowDelta {
@@ -143,8 +159,8 @@ export interface Delta {
     targetIndex?: number;
   };
   changes?: {
-    before?: Stage | Stage["steps"][number] | null;
-    after?: Partial<Stage | Stage["steps"][number]> | null;
+    before?: Record<string, unknown> | null;
+    after?: Partial<Record<string, unknown>> | null;
   };
 }
 

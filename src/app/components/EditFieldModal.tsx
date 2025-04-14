@@ -52,6 +52,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       label: label.trim(),
       type,
       primary: isPrimary,
+      options: field.options,
     });
     setError("");
     onClose();

@@ -70,14 +70,16 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   const collectSteps = useMemo(() => {
     const steps: CollectStep[] = [];
     stages.forEach((stage) => {
-      stage.steps.forEach((step) => {
-        if (step.type === "Collect information") {
-          steps.push({
-            name: step.name,
-            stageName: stage.name,
-            fields: step.fields || [],
-          });
-        }
+      stage.processes.forEach((process) => {
+        process.steps.forEach((step) => {
+          if (step.type === "Collect information") {
+            steps.push({
+              name: step.name,
+              stageName: stage.name,
+              fields: step.fields || [],
+            });
+          }
+        });
       });
     });
     return steps.sort((a, b) => a.name.localeCompare(b.name));
@@ -89,12 +91,20 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     const step = collectSteps.find((s) => s.name === selectedView);
     if (!step) return [];
 
-    return step.fields
-      .map((fieldRef) => {
+    // Create a map to store unique fields by name
+    const uniqueFieldsMap = new Map<string, Field>();
+
+    step.fields.forEach((fieldRef) => {
+      // Only add the field if it hasn't been added yet
+      if (!uniqueFieldsMap.has(fieldRef.name)) {
         const field = fields.find((f) => f.name === fieldRef.name);
-        return field ? { ...field, ...fieldRef } : null;
-      })
-      .filter((f): f is Field => f !== null);
+        if (field) {
+          uniqueFieldsMap.set(fieldRef.name, { ...field, ...fieldRef });
+        }
+      }
+    });
+
+    return Array.from(uniqueFieldsMap.values());
   }, [selectedView, collectSteps, fields]);
 
   // Get the field IDs that are already in the selected view
@@ -132,7 +142,18 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   const handleReorderFields = (startIndex: number, endIndex: number) => {
     if (!onFieldsReorder || !selectedView) return;
 
-    const reorderedFields = Array.from(selectedViewFields);
+    // Create a new array with unique field references
+    const uniqueFieldsMap = new Map<string, Field>();
+
+    // First, add all fields to the map to ensure uniqueness
+    selectedViewFields.forEach((field) => {
+      if (!uniqueFieldsMap.has(field.name)) {
+        uniqueFieldsMap.set(field.name, field);
+      }
+    });
+
+    const uniqueFields = Array.from(uniqueFieldsMap.values());
+    const reorderedFields = Array.from(uniqueFields);
     const [removed] = reorderedFields.splice(startIndex, 1);
     reorderedFields.splice(endIndex, 0, removed);
 

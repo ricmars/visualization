@@ -1,4 +1,5 @@
 {
+  "name": "Investigation",
   "fields": [
     {
       "name": "incidentTitle",
@@ -40,111 +41,86 @@
   ],
   "stages": [
     {
-      "name": "stage1",
-      "steps": [
+      "name": "Create",
+      "processes": [
         {
-          "name": "Collect Incident Details",
-          "type": "Collect information",
-          "fields": [
+          "name": "Collect",
+          "steps": [
             {
-              "name": "incidentTitle",
-              "required": true
+              "name": "Collect Incident Details",
+              "type": "Collect information",
+              "fields": [
+                {
+                  "name": "incidentTitle",
+                  "required": true
+                },
+                {
+                  "name": "description"
+                },
+                {
+                  "name": "severity"
+                }
+              ]
             },
             {
-              "name": "description"
+              "name": "Determine Incident Severity",
+              "type": "Decision"
             },
             {
-              "name": "severity"
+              "name": "Trigger Compliance Verification",
+              "type": "Automation"
             }
           ]
-        },
-        {
-          "name": "Determine Incident Severity",
-          "type": "Decision"
-        },
-        {
-          "name": "Trigger Compliance Verification",
-          "type": "Automation"
         }
       ]
     },
     {
       "name": "Compliance Verification",
-      "steps": [
+      "processes": [
         {
-          "name": "Review Program Records",
-          "type": "Collect information",
-          "status": "pending",
-          "fields": [
+          "name": "Comply",
+          "steps": [
             {
-              "name": "programId"
+              "name": "Review Program Records",
+              "type": "Collect information",
+              "status": "pending",
+              "fields": [
+                {
+                  "name": "programId"
+                }
+              ]
+            },
+            {
+              "name": "Identify Compliance Violations",
+              "type": "Decision"
+            },
+            {
+              "name": "Approve Compliance Findings",
+              "type": "Approve/Reject"
             }
           ]
-        },
-        {
-          "name": "Identify Compliance Violations",
-          "type": "Decision"
-        },
-        {
-          "name": "Approve Compliance Findings",
-          "type": "Approve/Reject"
         }
       ]
     },
     {
       "name": "Risk Assessment",
-      "steps": [
+      "processes": [
         {
-          "name": "Analyze Risk Factors",
-          "type": "Generative AI"
-        },
-        {
-          "name": "Determine Investigation Needed",
-          "type": "Decision"
-        },
-        {
-          "name": "Assign Investigation Team",
-          "type": "Create Case"
-        }
-      ]
-    },
-    {
-      "name": "Investigation",
-      "status": "pending",
-      "steps": [
-        {
-          "name": "Gather Additional Evidence",
-          "type": "Collect information",
-          "fields": [
+          "name": "Analyze",
+          "steps": [
             {
-              "name": "evidence"
+              "name": "Analyze Risk Factors",
+              "type": "Generative AI"
+            },
+            {
+              "name": "Determine Investigation Needed",
+              "type": "Decision"
+            },
+            {
+              "name": "Assign Investigation Team",
+              "type": "Create Case"
             }
           ]
-        },
-        {
-          "name": "Approve Investigation Findings",
-          "type": "Approve/Reject"
-        },
-        {
-          "name": "Notify Stakeholders",
-          "type": "Send Notification"
-        }
-      ]
-    },
-    {
-      "name": "Case Closure",
-      "steps": [
-        {
-          "name": "Update Case Records",
-          "type": "Generate Document"
-        },
-        {
-          "name": "Notify Stakeholders of Resolution",
-          "type": "Send Notification"
-        },
-        {
-          "name": "Conduct Post-Mortem Review",
-          "type": "Generate Document"
         }
       ]
     }
