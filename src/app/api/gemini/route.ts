@@ -3,7 +3,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const generativeModel = genAI.getGenerativeModel({
-  model: "	gemini-2.0-flash-001",
+  model: "gemini-2.0-flash-001",
+  generationConfig: {
+    maxOutputTokens: 8192,
+  },
 });
 
 export async function POST(request: Request) {
@@ -70,10 +73,29 @@ export async function POST(request: Request) {
           // Clean the text by removing markdown code block formatting
           accumulatedText = accumulatedText
             .replace(/^```json\n/, "")
-            .replace(/\n```$/, "");
+            .replace(/\n```$/, "")
+            .trim();
+
+          // Add debug logging
+          console.error(
+            "Attempting to parse JSON:",
+            accumulatedText.substring(0, 100) + "...",
+          );
 
           // Parse and validate the complete JSON
-          const modelData = JSON.parse(accumulatedText);
+          let modelData;
+          try {
+            modelData = JSON.parse(accumulatedText);
+          } catch (parseError: unknown) {
+            if (parseError instanceof Error) {
+              console.error("JSON Parse Error:", parseError);
+              console.error("Problematic JSON text:", accumulatedText);
+              throw new Error(
+                `Failed to parse JSON response: ${parseError.message}`,
+              );
+            }
+            throw new Error("Failed to parse JSON response: Unknown error");
+          }
 
           if (
             !modelData.model ||

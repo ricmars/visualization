@@ -64,6 +64,7 @@ interface WorkflowDelta {
 
 const SESSION_STORAGE_KEY = "workflow_stages";
 const ACTIVE_TAB_STORAGE_KEY = "active_tab";
+const MODEL_UPDATED_EVENT = "modelUpdated";
 
 export default function Home() {
   const [stages, setStages] = useState<Stage[]>([]);
@@ -130,54 +131,62 @@ export default function Home() {
   }, [activeTab]);
 
   // Function to generate the model data structure
-  const generateModelData = (
-    currentFields: Field[],
-    currentStages: Stage[],
-  ) => {
-    const tmpStages = [];
-    /* Iterate over currentStages - iterate over processes and steps - processes is not needed */
-    for (const stage of currentStages) {
-      const tmpSteps = [];
-      for (const process of stage.processes) {
-        for (const step of process.steps) {
-          tmpSteps.push(step);
+  const generateModelData = useCallback(
+    (currentFields: Field[], currentStages: Stage[]) => {
+      const tmpStages = [];
+      /* Iterate over currentStages - iterate over processes and steps - processes is not needed */
+      for (const stage of currentStages) {
+        const tmpSteps = [];
+        for (const process of stage.processes) {
+          for (const step of process.steps) {
+            tmpSteps.push(step);
+          }
+        }
+        tmpStages.push({
+          ...stage,
+          steps: tmpSteps,
+        });
+      }
+      return {
+        fullUpdate: true,
+        appName: "My Application",
+        channel: "WorkPortal",
+        industry: "Banking",
+        userName: "John Smith",
+        userLocale: "en-EN",
+        caseName: workflowName,
+        caseTypes: [
+          {
+            name: workflowName,
+            fields: currentFields,
+            creationFields: [],
+            stages: tmpStages,
+          },
+        ],
+      };
+    },
+    [workflowName],
+  );
+
+  // Effect to send model updates to iframe when the model is updated
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      if (isPreviewMode && previewContainerRef.current) {
+        const iframe = previewContainerRef.current.querySelector("iframe");
+        if (iframe) {
+          const model = generateModelData(fields, stages);
+          iframe.contentWindow?.postMessage(model, "*");
         }
       }
-      tmpStages.push({
-        ...stage,
-        steps: tmpSteps,
-      });
-    }
-    return {
-      fullUpdate: true,
-      appName: "My Application",
-      channel: "WorkPortal",
-      industry: "Banking",
-      userName: "John Smith",
-      userLocale: "en-EN",
-      caseName: workflowName,
-      caseTypes: [
-        {
-          name: workflowName,
-          fields: currentFields,
-          creationFields: [],
-          stages: tmpStages,
-        },
-      ],
     };
-  };
 
-  // Effect to send model updates to iframe when stages or fields change
-  useEffect(() => {
-    if (isPreviewMode && previewContainerRef.current) {
-      const iframe = previewContainerRef.current.querySelector("iframe");
-      if (iframe) {
-        const model = generateModelData(fields, stages);
-        iframe.contentWindow?.postMessage(model, "*");
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stages, fields, isPreviewMode]);
+    // Add custom event listener
+    window.addEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+
+    return () => {
+      window.removeEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+    };
+  }, [isPreviewMode, generateModelData, fields, stages]);
 
   // Load stages and fields from session storage or default model
   useEffect(() => {
@@ -238,12 +247,15 @@ export default function Home() {
     };
 
     loadData();
+    // This effect should only run once on mount to initialize data from storage
   }, []);
 
   // Save stages to session storage whenever they change
   useEffect(() => {
     if (stages.length > 0) {
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(stages));
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
     }
   }, [stages]);
 
@@ -266,6 +278,8 @@ export default function Home() {
     setFields((prevFields) => {
       const updatedFields = [...prevFields, newField];
       sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedFields;
     });
 
@@ -281,6 +295,8 @@ export default function Home() {
         field.name === updates.name ? { ...field, ...updates } : field,
       );
       sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedFields;
     });
 
@@ -304,6 +320,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
   };
@@ -320,6 +338,8 @@ export default function Home() {
         (field) => field.name !== fieldId,
       );
       sessionStorage.setItem("workflow_fields", JSON.stringify(updatedFields));
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedFields;
     });
 
@@ -339,6 +359,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
   };
@@ -677,6 +699,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
   };
@@ -791,6 +815,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
     setIsAddStageModalOpen(false);
@@ -875,8 +901,12 @@ export default function Home() {
         },
       ]);
 
+      // Accumulate the complete response during streaming
+      let completeResponse = "";
+
       // Handle streaming updates
       const updateAiMessage = (chunk: string) => {
+        completeResponse += chunk;
         setMessages((prev) => {
           const newMessages = [...prev];
           const aiMessageIndex = newMessages.findIndex(
@@ -885,14 +915,14 @@ export default function Home() {
           if (aiMessageIndex !== -1) {
             newMessages[aiMessageIndex] = {
               ...newMessages[aiMessageIndex],
-              content: newMessages[aiMessageIndex].content + chunk,
+              content: completeResponse,
             };
           }
           return newMessages;
         });
       };
 
-      const response = await Service.generateResponse(
+      await Service.generateResponse(
         message,
         {
           name: workflowName,
@@ -902,25 +932,45 @@ export default function Home() {
         updateAiMessage,
       );
 
-      const parsedResponse = JSON.parse(response);
+      // Only parse and update the model once streaming is complete
+      const cleanedResponse = completeResponse
+        .replace(/^```json\n/, "")
+        .replace(/\n```$/, "")
+        .trim();
+      const parsedResponse = JSON.parse(cleanedResponse);
 
-      if (
-        parsedResponse.model?.name &&
-        parsedResponse.model.name !== workflowName
-      ) {
-        handleUpdateWorkflowName(parsedResponse.model.name);
+      // Batch all model updates together
+      const updatedFields = parsedResponse.model?.fields
+        ? [...parsedResponse.model.fields]
+        : null;
+      const updatedStages = parsedResponse.model?.stages
+        ? [...parsedResponse.model.stages]
+        : null;
+      const updatedName =
+        parsedResponse.model?.name !== workflowName
+          ? parsedResponse.model.name
+          : null;
+
+      // Apply all updates at once
+      if (updatedName) {
+        handleUpdateWorkflowName(updatedName);
       }
 
-      if (parsedResponse.model?.stages) {
-        _handleWorkflowUpdate(parsedResponse.model.stages);
+      if (updatedStages) {
+        await _handleWorkflowUpdate(updatedStages);
       }
 
-      if (parsedResponse.model?.fields) {
-        setFields(parsedResponse.model.fields);
+      if (updatedFields) {
+        setFields(updatedFields);
         sessionStorage.setItem(
           "workflow_fields",
-          JSON.stringify(parsedResponse.model.fields),
+          JSON.stringify(updatedFields),
         );
+      }
+
+      // Only dispatch model update event once at the end if any updates occurred
+      if (updatedName || updatedStages || updatedFields) {
+        window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       }
 
       // Update the AI message with the final structured response
@@ -1020,6 +1070,8 @@ export default function Home() {
           SESSION_STORAGE_KEY,
           JSON.stringify(updatedStages),
         );
+        // Dispatch custom event after model update
+        window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
         return updatedStages;
       });
       return;
@@ -1084,6 +1136,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
   };
@@ -1118,6 +1172,8 @@ export default function Home() {
           SESSION_STORAGE_KEY,
           JSON.stringify(updatedStages),
         );
+        // Dispatch custom event after model update
+        window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
         return updatedStages;
       });
       return;
@@ -1174,6 +1230,8 @@ export default function Home() {
         SESSION_STORAGE_KEY,
         JSON.stringify(updatedStages),
       );
+      // Dispatch custom event after model update
+      window.dispatchEvent(new Event(MODEL_UPDATED_EVENT));
       return updatedStages;
     });
   };
@@ -1207,6 +1265,41 @@ export default function Home() {
     setIsAddProcessModalOpen(false);
     setSelectedStageId(null);
   };
+
+  // Handle iframe creation and cleanup
+  useEffect(() => {
+    let iframe: HTMLIFrameElement | null = null;
+    // Capture the ref value at the start of the effect
+    const container = previewContainerRef.current;
+
+    if (isPreviewMode && container) {
+      iframe = container.querySelector("iframe");
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.src =
+          "https://blueprint2024-8b147.web.app/blueprint-preview.html";
+        iframe.className = "w-full h-full border-0";
+        iframe.title = "Blueprint Preview";
+
+        // Once the iframe loads, send the model data
+        iframe.onload = () => {
+          if (iframe) {
+            const model = generateModelData(fields, stages);
+            iframe.contentWindow?.postMessage(model, "*");
+          }
+        };
+
+        container.appendChild(iframe);
+      }
+    }
+
+    // Cleanup function to remove iframe when preview mode is disabled
+    return () => {
+      if (container && iframe) {
+        container.removeChild(iframe);
+      }
+    };
+  }, [isPreviewMode, fields, stages, generateModelData]); // Add missing dependencies
 
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
@@ -1312,31 +1405,7 @@ export default function Home() {
         {/* Tab Content */}
         <main className="flex-1 overflow-auto">
           {isPreviewMode ? (
-            <div
-              className="w-full h-full"
-              ref={(container) => {
-                // Store the ref for later use
-                previewContainerRef.current = container;
-
-                if (container && isPreviewMode) {
-                  const iframe = document.createElement("iframe");
-                  iframe.src =
-                    "https://blueprint2024-8b147.web.app/blueprint-preview.html";
-                  iframe.className = "w-full h-full border-0";
-                  iframe.title = "Blueprint Preview";
-
-                  // Once the iframe loads, send the model data
-                  iframe.onload = () => {
-                    const model = generateModelData(fields, stages);
-                    iframe.contentWindow?.postMessage(model, "*");
-                  };
-
-                  // Clear container and add iframe
-                  container.innerHTML = "";
-                  container.appendChild(iframe);
-                }
-              }}
-            />
+            <div className="w-full h-full" ref={previewContainerRef} />
           ) : (
             <>
               {activeTab === "workflow" && (

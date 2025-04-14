@@ -108,10 +108,29 @@ export async function POST(request: Request) {
           // Clean the text by removing markdown code block formatting if present
           accumulatedText = accumulatedText
             .replace(/^```json\n/, "")
-            .replace(/\n```$/, "");
+            .replace(/\n```$/, "")
+            .trim();
+
+          // Add debug logging
+          console.log(
+            "Attempting to parse JSON:",
+            accumulatedText.substring(0, 100) + "...",
+          );
 
           // Parse and validate the complete JSON
-          const modelData = JSON.parse(accumulatedText);
+          let modelData;
+          try {
+            modelData = JSON.parse(accumulatedText);
+          } catch (parseError: unknown) {
+            if (parseError instanceof Error) {
+              console.error("JSON Parse Error:", parseError);
+              console.error("Problematic JSON text:", accumulatedText);
+              throw new Error(
+                `Failed to parse JSON response: ${parseError.message}`,
+              );
+            }
+            throw new Error("Failed to parse JSON response: Unknown error");
+          }
 
           if (
             !modelData.model ||
@@ -146,7 +165,11 @@ export async function POST(request: Request) {
           );
         } catch (error) {
           console.error("Error parsing model data:", error);
-          throw new Error("Invalid JSON structure in response text");
+          throw new Error(
+            error instanceof Error
+              ? `Invalid JSON structure: ${error.message}`
+              : "Invalid JSON structure in response text",
+          );
         }
 
         await writer.close();
@@ -165,7 +188,10 @@ export async function POST(request: Request) {
           );
           await writer.close();
         } catch (e) {
-          console.error("Error while handling stream error:", e);
+          console.error(
+            "Error while handling stream error:",
+            e instanceof Error ? e.message : e,
+          );
         }
       }
     })();
