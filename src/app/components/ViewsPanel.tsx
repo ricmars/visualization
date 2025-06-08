@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useMemo,
-  useRef,
-  MutableRefObject,
-  useEffect,
-} from "react";
+import React, { useState, useMemo, useRef, MutableRefObject } from "react";
 import { Stage, Field, FieldReference } from "../types";
 import AddFieldModal from "./AddFieldModal";
 import StepForm from "./StepForm";
@@ -18,13 +12,15 @@ interface ViewsPanelProps {
     label: string;
     type: Field["type"];
     options?: string[];
-    required: boolean;
+    required?: boolean;
     primary?: boolean;
   }) => string;
   onUpdateField?: (updates: Partial<Field>) => void;
-  onDeleteField?: (fieldId: string) => void;
+  onDeleteField?: (field: Field) => void;
   onAddExistingFieldToStep?: (stepId: string, fieldIds: string[]) => void;
   onFieldsReorder?: (stepId: string, fieldIds: string[]) => void;
+  selectedView?: string | null;
+  onViewSelect?: (view: string | null) => void;
 }
 
 interface CollectStep {
@@ -41,30 +37,14 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   onDeleteField,
   onAddExistingFieldToStep,
   onFieldsReorder,
+  selectedView,
+  onViewSelect,
 }) => {
-  const [selectedView, setSelectedView] = useState<string | null>(null);
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const addFieldButtonRef = useRef<HTMLButtonElement>(
     null,
   ) as MutableRefObject<HTMLButtonElement>;
-
-  // Load saved view from localStorage after initial render
-  useEffect(() => {
-    const savedView = localStorage.getItem("selectedView");
-    if (savedView) {
-      setSelectedView(savedView);
-    }
-  }, []);
-
-  // Save view to localStorage when it changes
-  useEffect(() => {
-    if (selectedView) {
-      localStorage.setItem("selectedView", selectedView);
-    } else {
-      localStorage.removeItem("selectedView");
-    }
-  }, [selectedView]);
 
   // Get all steps of type 'Collect information' and sort them alphabetically
   const collectSteps = useMemo(() => {
@@ -163,6 +143,25 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     );
   };
 
+  // Update the click handler to use the prop
+  const handleViewSelect = (viewName: string) => {
+    if (onViewSelect) {
+      onViewSelect(viewName);
+    }
+  };
+
+  const handleFieldChange = (id: string, value: string) => {
+    // Implementation of onFieldChange
+  };
+
+  const handleFieldsReorder = (startIndex: number, endIndex: number) => {
+    // Implementation of onFieldsReorder
+  };
+
+  const onEditField = (field: Field) => {
+    // Implementation of onEditField
+  };
+
   return (
     <div className="flex h-full">
       {/* Master View - List of Collect Information Steps */}
@@ -175,7 +174,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
             {collectSteps.map((step) => (
               <button
                 key={step.name}
-                onClick={() => setSelectedView(step.name)}
+                onClick={() => handleViewSelect(step.name)}
                 className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
                   selectedView === step.name
                     ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
@@ -239,12 +238,10 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
               <div className="relative">
                 <StepForm
                   fields={selectedViewFields}
-                  onFieldChange={(_id, _value) => {
-                    // Implementation of onFieldChange
-                  }}
+                  onFieldChange={handleFieldChange}
                   onDeleteField={onDeleteField}
-                  onEditField={handleEditField}
-                  onReorderFields={handleReorderFields}
+                  onEditField={onEditField}
+                  onReorderFields={handleFieldsReorder}
                 />
               </div>
             )}

@@ -58,18 +58,16 @@
     "typescriptreact"
   ],
 
-  "json.schemas": [
-    {
-      "fileMatch": [" /src/app/model.json"],
-      "url": "./public/model.schema"
-    }
-  ],
   "cSpell.words": [
+    "caseid",
+    "dbname",
+    "fkey",
     "headlessui",
-    "ollama",
     "pangea",
     "pega",
+    "pkey",
     "turbopack",
-    "uuidv"
+    "uuidv",
+    "VARCHAR"
   ]
 }

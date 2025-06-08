@@ -49,6 +49,9 @@ const nextConfig = {
   publicRuntimeConfig: {
     // Add any public runtime configs here
   },
+  experimental: {
+    // Enable any experimental features here
+  },
 };
 
 module.exports = nextConfig;

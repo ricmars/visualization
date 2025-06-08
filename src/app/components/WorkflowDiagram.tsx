@@ -15,7 +15,6 @@ import {
 } from "../types";
 import AddStepModal from "./AddStepModal";
 import EditModal from "./EditModal";
-import { v4 as uuidv4 } from "uuid";
 import {
   FaClipboardList,
   FaCheckCircle,
@@ -31,18 +30,20 @@ import { RiBrainFill } from "react-icons/ri";
 import { MdNotifications } from "react-icons/md";
 import { BsGearFill } from "react-icons/bs";
 import StepConfigurationModal from "./StepConfigurationModal";
+import AddProcessModal from "./AddProcessModal";
+import StepForm from "./StepForm";
 
 interface WorkflowDiagramProps {
   stages: Stage[];
   fields: Field[];
-  onStepSelect: (stageId: string, processId: string, stepId: string) => void;
-  activeStage?: string;
-  activeProcess?: string;
-  activeStep?: string;
+  onStepSelect: (stageId: number, processId: number, stepId: number) => void;
+  activeStage?: number;
+  activeProcess?: number;
+  activeStep?: number;
   onStepsUpdate: (updatedStages: Stage[]) => void;
-  onDeleteStage?: (stageId: string) => void;
-  onDeleteProcess?: (stageId: string, processId: string) => void;
-  onDeleteStep?: (stageId: string, processId: string, stepId: string) => void;
+  onDeleteStage?: (stageId: number) => void;
+  onDeleteProcess?: (stageId: number, processId: number) => void;
+  onDeleteStep?: (stageId: number, processId: number, stepId: number) => void;
   onAddField: (field: {
     label: string;
     type: Field["type"];
@@ -51,18 +52,36 @@ interface WorkflowDiagramProps {
     primary?: boolean;
   }) => string;
   onUpdateField: (updates: Partial<Field>) => void;
-  onDeleteField: (fieldId: string) => void;
-  onAddProcess: (stageId: string) => void;
+  onDeleteField: (field: Field) => void;
+  onAddProcess: (stageId: string, processName: string) => void;
+  onAddStep: (
+    stageId: string,
+    processId: string,
+    stepName: string,
+    stepType: StepType,
+  ) => void;
+  onStageReorder: (startIndex: number, endIndex: number) => void;
+  onProcessReorder: (
+    stageId: number,
+    startIndex: number,
+    endIndex: number,
+  ) => void;
+  onStepReorder: (
+    stageId: number,
+    processId: number,
+    startIndex: number,
+    endIndex: number,
+  ) => void;
 }
 
 interface _StepConfigurationModalProps {
   isOpen: boolean;
   onClose: () => void;
   step: {
-    id: string;
-    stageId: string;
-    processId: string;
-    stepId: string;
+    id: number;
+    stageId: number;
+    processId: number;
+    stepId: number;
     name: string;
     fields: Field[];
     type: string;
@@ -76,9 +95,18 @@ interface _StepConfigurationModalProps {
     required?: boolean;
     primary?: boolean;
   }) => string;
-  onAddExistingField: (stepId: string, fieldIds: string[]) => void;
+  onAddExistingField: (stepId: number, fieldIds: string[]) => void;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (fieldId: string) => void;
+}
+
+interface EditItem {
+  type: "stage" | "process" | "step";
+  id: number;
+  stageId?: number;
+  processId?: number;
+  name: string;
+  stepType?: StepType;
 }
 
 const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
@@ -96,29 +124,26 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onUpdateField,
   onDeleteField,
   onAddProcess,
+  onAddStep,
+  onStageReorder,
+  onProcessReorder,
+  onStepReorder,
 }) => {
   const [_isDragging, setIsDragging] = useState(false);
-  const [_isAddProcessModalOpen, _setIsAddProcessModalOpen] = useState(false);
-  const [_selectedProcessId, setSelectedProcessId] = useState<string | null>(
+  const [_isAddProcessModalOpen, setIsAddProcessModalOpen] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
+  const [selectedProcessId, setSelectedProcessId] = useState<number | null>(
     null,
   );
   const [isAddStepModalOpen, setIsAddStepModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
-  const [editItem, setEditItem] = useState<{
-    type: "stage" | "process" | "step";
-    id: string;
-    stageId?: string;
-    processId?: string;
-    name: string;
-    stepType?: StepType;
-  } | null>(null);
+  const [editItem, setEditItem] = useState<EditItem | null>(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [selectedStep, setSelectedStep] = useState<{
-    id: string;
-    stageId: string;
-    processId: string;
-    stepId: string;
+    id: number;
+    stageId: number;
+    processId: number;
+    stepId: number;
     name: string;
     fields: Field[];
     type: string;
@@ -140,7 +165,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     }
 
     const activeClass =
-      activeStage === stage.name ? "ring-2 ring-white ring-opacity-70" : "";
+      activeStage === stage.id ? "ring-2 ring-white ring-opacity-70" : "";
 
     return `${baseClass} ${positionClass} ${animationClass} ${activeClass}`;
   };
@@ -179,37 +204,35 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     e.stopPropagation();
   };
 
-  const _handleAddStepSubmit = (stepData: { name: string; type: StepType }) => {
-    if (!selectedStageId || !_selectedProcessId) return;
+  // Add Process Modal handler
+  const openAddProcessModal = (stageId: number) => {
+    setSelectedStageId(stageId);
+    setIsAddProcessModalOpen(true);
+  };
+  const handleAddProcessSubmit = (data: { name: string }) => {
+    if (!selectedStageId) return;
+    // Call parent handler with stageId and process name
+    onAddProcess(selectedStageId.toString(), data.name);
+    setIsAddProcessModalOpen(false);
+    setSelectedStageId(null);
+  };
 
-    const updatedStages = stages.map((stage) => {
-      if (stage.name === selectedStageId) {
-        return {
-          ...stage,
-          processes: stage.processes.map((process) => {
-            if (process.name === _selectedProcessId) {
-              return {
-                ...process,
-                steps: [
-                  ...process.steps,
-                  {
-                    id: uuidv4(),
-                    name: stepData.name,
-                    type: stepData.type,
-                    status: "pending" as const,
-                    fields: [],
-                  },
-                ],
-              };
-            }
-            return process;
-          }),
-        };
-      }
-      return stage;
-    });
+  // Add Step Modal handler
+  const openAddStepModal = (stageId: number, processId: number) => {
+    console.log("Opening Add Step Modal:", { stageId, processId });
+    setSelectedStageId(stageId);
+    setSelectedProcessId(processId);
+    setIsAddStepModalOpen(true);
+  };
 
-    onStepsUpdate(updatedStages);
+  const handleAddStep = (
+    stageId: number,
+    processId: number,
+    stepName: string,
+    stepType: StepType,
+  ) => {
+    console.log("Adding Step:", { stageId, processId, stepName, stepType });
+    onAddStep(stageId.toString(), processId.toString(), stepName, stepType);
     setIsAddStepModalOpen(false);
     setSelectedStageId(null);
     setSelectedProcessId(null);
@@ -219,135 +242,69 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     setIsDragging(true);
   };
 
-  const _handleDragEnd = (result: DropResult) => {
+  const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
 
-    const sourceDroppableId = result.source.droppableId;
-    const destinationDroppableId = result.destination.droppableId;
+    const { source, destination, type } = result;
 
-    // Handle stage reordering
-    if (sourceDroppableId === "stages" && destinationDroppableId === "stages") {
-      const newStages = Array.from(stages);
-      const [removed] = newStages.splice(result.source.index, 1);
-      newStages.splice(result.destination.index, 0, removed);
-      onStepsUpdate(newStages);
-      return;
-    }
-
-    // Handle process reordering
-    if (
-      sourceDroppableId.startsWith("processes-") &&
-      destinationDroppableId.startsWith("processes-")
-    ) {
-      const sourceStageId = sourceDroppableId.replace("processes-", "");
-      const destStageId = destinationDroppableId.replace("processes-", "");
-
-      const newStages = Array.from(stages);
-      const sourceStage = newStages.find((s) => s.name === sourceStageId);
-      const destStage = newStages.find((s) => s.name === destStageId);
-
-      if (!sourceStage || !destStage) return;
-
-      const [removedProcess] = sourceStage.processes.splice(
-        result.source.index,
-        1,
-      );
-      destStage.processes.splice(result.destination.index, 0, removedProcess);
-
-      onStepsUpdate(newStages);
-      return;
-    }
-
-    // Handle step reordering within a process
-    const [sourceStageId, sourceProcessId] = sourceDroppableId.split(":");
-    const [destStageId, destProcessId] = destinationDroppableId.split(":");
-
-    const newStages = Array.from(stages);
-    const sourceStage = newStages.find((s) => s.name === sourceStageId);
-    const destStage = newStages.find((s) => s.name === destStageId);
-
-    if (!sourceStage || !destStage) return;
-
-    const sourceProcess = sourceStage.processes.find(
-      (p) => p.name === sourceProcessId,
-    );
-    const destProcess = destStage.processes.find(
-      (p) => p.name === destProcessId,
-    );
-
-    if (!sourceProcess || !destProcess) return;
-
-    const newSourceSteps = Array.from(sourceProcess.steps);
-    const [removed] = newSourceSteps.splice(result.source.index, 1);
-
-    if (sourceProcessId === destProcessId) {
-      // Reordering within the same process
-      newSourceSteps.splice(result.destination.index, 0, removed);
-      sourceProcess.steps = newSourceSteps;
-    } else {
-      // Moving between processes
-      const newDestSteps = Array.from(destProcess.steps);
-      newDestSteps.splice(result.destination.index, 0, removed);
-      sourceProcess.steps = newSourceSteps;
-      destProcess.steps = newDestSteps;
-    }
-
-    onStepsUpdate(newStages);
-  };
-
-  const handleAddProcess = (stageId: string) => {
-    onAddProcess(stageId);
-  };
-
-  const handleAddStep = (stageId: string, processId: string) => {
-    setSelectedStageId(stageId);
-    setSelectedProcessId(processId);
-    setIsAddStepModalOpen(true);
-  };
-
-  const handleEditClick = (
-    type: "stage" | "process" | "step",
-    id: string,
-    stageId?: string,
-    processId?: string,
-  ) => {
     if (type === "stage") {
-      const stage = stages.find((s) => s.name === id);
-      if (stage) {
-        setEditItem({
-          type: "stage",
-          id: stage.name,
-          name: stage.name,
-        });
-        setIsEditModalOpen(true);
-      }
+      onStageReorder(source.index, destination.index);
     } else if (type === "process") {
-      const stage = stages.find((s) => s.name === stageId);
-      const process = stage?.processes.find((p) => p.name === id);
-      if (process) {
-        setEditItem({
-          type: "process",
-          id: process.name,
-          stageId,
-          name: process.name,
-        });
-        setIsEditModalOpen(true);
-      }
-    } else {
-      const stage = stages.find((s) => s.name === stageId);
-      const process = stage?.processes.find((p) => p.name === processId);
-      const step = process?.steps.find((s) => s.name === id);
-      if (step) {
-        setEditItem({
-          type: "step",
-          id: step.name,
-          stageId,
-          processId,
-          name: step.name,
-          stepType: step.type,
-        });
-        setIsEditModalOpen(true);
-      }
+      const stageId = parseInt(result.source.droppableId.split("-")[1]);
+      onProcessReorder(stageId, source.index, destination.index);
+    } else if (type === "step") {
+      const [stageId, processId] = result.source.droppableId
+        .split("-")
+        .slice(1)
+        .map(Number);
+      onStepReorder(stageId, processId, source.index, destination.index);
+    }
+  };
+
+  const handleEditStage = (stageId: number) => {
+    const stage = stages.find((s) => s.id === stageId);
+    if (stage) {
+      setEditItem({
+        type: "stage",
+        id: stage.id,
+        name: stage.name,
+      });
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleEditProcess = (stageId: number, processId: number) => {
+    const stage = stages.find((s) => s.id === stageId);
+    const process = stage?.processes.find((p) => p.id === processId);
+    if (process) {
+      setEditItem({
+        type: "process",
+        id: process.id,
+        stageId,
+        name: process.name,
+      });
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleEditStep = (
+    stageId: number,
+    processId: number,
+    stepId: number,
+  ) => {
+    const stage = stages.find((s) => s.id === stageId);
+    const process = stage?.processes.find((p) => p.id === processId);
+    const step = process?.steps.find((s) => s.id === stepId);
+    if (step) {
+      setEditItem({
+        type: "step",
+        id: step.id,
+        stageId,
+        processId,
+        name: step.name,
+        stepType: step.type,
+      });
+      setIsEditModalOpen(true);
     }
   };
 
@@ -359,32 +316,30 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     if (!editItem) return;
 
     const updatedStages = stages.map((stage) => {
-      if (editItem.type === "stage" && stage.name === editItem.name) {
-        return {
-          ...stage,
-          name: data.name,
-        };
-      } else if (
-        editItem.type === "process" &&
-        stage.name === editItem.stageId
-      ) {
+      if (editItem.type === "stage" && stage.id === editItem.id) {
+        return { ...stage, name: data.name };
+      }
+
+      if (editItem.type === "process" && stage.id === editItem.stageId) {
         return {
           ...stage,
           processes: stage.processes.map((process) =>
-            process.name === editItem.name
+            process.id === editItem.id
               ? { ...process, name: data.name }
               : process,
           ),
         };
-      } else if (editItem.type === "step" && stage.name === editItem.stageId) {
+      }
+
+      if (editItem.type === "step" && stage.id === editItem.stageId) {
         return {
           ...stage,
           processes: stage.processes.map((process) =>
-            process.name === editItem.processId
+            process.id === editItem.processId
               ? {
                   ...process,
                   steps: process.steps.map((step) =>
-                    step.name === editItem.name
+                    step.id === editItem.id
                       ? {
                           ...step,
                           name: data.name,
@@ -412,13 +367,13 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   };
 
   const handleStepSelect = (
-    stageId: string,
-    processId: string,
-    stepId: string,
+    stageId: number,
+    processId: number,
+    stepId: number,
   ) => {
-    const stage = stages.find((s: Stage) => s.name === stageId);
-    const process = stage?.processes.find((p: Process) => p.name === processId);
-    const step = process?.steps.find((s: Step) => s.name === stepId);
+    const stage = stages.find((s: Stage) => s.id === stageId);
+    const process = stage?.processes.find((p: Process) => p.id === processId);
+    const step = process?.steps.find((s: Step) => s.id === stepId);
 
     if (step) {
       const stepFields = (step.fields || []).map(
@@ -439,10 +394,10 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       );
 
       setSelectedStep({
-        id: step.name,
+        id: step.id,
         stageId,
         processId,
-        stepId: step.name,
+        stepId: step.id,
         name: step.name,
         fields: stepFields,
         type: step.type,
@@ -497,15 +452,15 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     const fieldId = onAddField(field);
 
     const updatedStages = stages.map((stage: Stage) => {
-      if (stage.name === selectedStep.stageId) {
+      if (stage.id === selectedStep.stageId) {
         return {
           ...stage,
           processes: stage.processes.map((process) => {
-            if (process.name === selectedStep.processId) {
+            if (process.id === selectedStep.processId) {
               return {
                 ...process,
                 steps: process.steps.map((step) => {
-                  if (step.name === selectedStep.stepId) {
+                  if (step.id === selectedStep.stepId) {
                     const updatedFields = [
                       ...(step.fields || []),
                       { name: fieldId, required: false },
@@ -532,68 +487,39 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   };
 
   const handleAddExistingFieldToStep = (
-    stepId: string,
+    stepId: number,
     fieldIds: string[],
   ): void => {
     if (!selectedStep) return;
 
-    // Only allow adding fields to "Collect information" steps
-    if (selectedStep.type !== "Collect information") {
-      return;
-    }
-
-    const updatedStages = stages.map((stage: Stage) => {
-      if (stage.name === selectedStep.stageId) {
+    const updatedStages = stages.map((stage) => {
+      if (stage.id === selectedStep.stageId) {
         return {
           ...stage,
           processes: stage.processes.map((process) => {
-            if (process.name === selectedStep.processId) {
+            if (process.id === selectedStep.processId) {
               return {
                 ...process,
                 steps: process.steps.map((step) => {
-                  if (step.name === stepId) {
-                    const fieldsToAdd = fieldIds
+                  if (step.id === stepId) {
+                    const newFields = fieldIds
                       .map((fieldId) => {
                         const field = fields.find((f) => f.name === fieldId);
-                        if (!field) return null;
-                        return {
-                          name: field.name,
-                          required: false,
-                        } as FieldReference;
+                        if (field) {
+                          return {
+                            name: field.name,
+                            required: false,
+                          };
+                        }
+                        return null;
                       })
                       .filter(
                         (field): field is FieldReference => field !== null,
                       );
 
-                    const updatedFields = [
-                      ...(step.fields || []),
-                      ...fieldsToAdd,
-                    ];
-
-                    setSelectedStep({
-                      ...selectedStep,
-                      fields: updatedFields.map((field): Field => {
-                        const existingField = fields.find(
-                          (f) => f.name === field.name,
-                        );
-                        if (existingField) {
-                          return {
-                            ...existingField,
-                            value: isField(field) ? field.value : undefined,
-                          };
-                        }
-                        return {
-                          name: field.name,
-                          label: field.name,
-                          type: "Text",
-                          value: undefined,
-                        } as Field;
-                      }),
-                    });
-
                     return {
                       ...step,
-                      fields: updatedFields,
+                      fields: [...(step.fields || []), ...newFields],
                     };
                   }
                   return step;
@@ -620,7 +546,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       <div className="max-w-7xl mx-auto">
         <DragDropContext
           onDragStart={_handleDragStart}
-          onDragEnd={_handleDragEnd}
+          onDragEnd={handleDragEnd}
         >
           <Droppable droppableId="stages" type="stage" direction="vertical">
             {(provided) => (
@@ -629,11 +555,11 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                 ref={provided.innerRef}
                 className="space-y-6"
               >
-                {stages.map((stage, index) => (
+                {stages.map((stage, stageIndex) => (
                   <Draggable
-                    key={`stage-${stage.name}-${index}`}
-                    draggableId={`stage-${stage.name}-${index}`}
-                    index={index}
+                    key={`stage-${stage.id}`}
+                    draggableId={`stage-${stage.id}`}
+                    index={stageIndex}
                   >
                     {(provided, snapshot) => (
                       <div
@@ -647,7 +573,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                               : ""
                           }
                           ${
-                            activeStage === stage.name
+                            activeStage === stage.id
                               ? "border-blue-500/50 bg-blue-50/50 dark:bg-blue-900/10 shadow-lg"
                               : "border-gray-200/50 dark:border-gray-700/50"
                           }
@@ -667,7 +593,9 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                               <FaGripVertical className="text-gray-400" />
                             </div>
                             <div
-                              className={`w-1 h-5 rounded stage-${index + 1}`}
+                              className={`w-1 h-5 rounded stage-${
+                                stageIndex + 1
+                              }`}
                             />
                             <h3 className="font-semibold text-base text-gray-700 dark:text-gray-200">
                               {stage.name}
@@ -675,15 +603,15 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                           </div>
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleAddProcess(stage.name)}
-                              className="inline-flex items-center px-2 py-1 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                              onClick={() => openAddProcessModal(stage.id)}
+                              className="flex items-center gap-2 text-blue-500 hover:text-blue-700"
+                              data-testid={`add-process-${stage.id}`}
                             >
+                              <BsGearFill className="h-4 w-4" />
                               Add Process
                             </button>
                             <button
-                              onClick={() =>
-                                handleEditClick("stage", stage.name)
-                              }
+                              onClick={() => handleEditStage(stage.id)}
                               className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                               aria-label="Edit stage"
                             >
@@ -691,9 +619,9 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                             </button>
                             {onDeleteStage && (
                               <button
-                                onClick={() => onDeleteStage(stage.name)}
-                                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                                aria-label="Delete stage"
+                                onClick={() => onDeleteStage(stage.id)}
+                                className="p-1 text-red-500 hover:text-red-700"
+                                data-testid={`delete-stage-${stage.id}`}
                               >
                                 <FaTrash className="w-3.5 h-3.5 text-gray-500" />
                               </button>
@@ -703,7 +631,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
 
                         <div className="p-2 space-y-2">
                           <Droppable
-                            droppableId={`processes-${stage.name}`}
+                            droppableId={`process-${stage.id}`}
                             type="process"
                           >
                             {(provided, snapshot) => (
@@ -719,8 +647,8 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                 {stage.processes.map(
                                   (process, processIndex) => (
                                     <Draggable
-                                      key={`process-${stage.name}-${process.name}-${processIndex}`}
-                                      draggableId={`process-${stage.name}-${process.name}-${processIndex}`}
+                                      key={`process-${process.id}`}
+                                      draggableId={`process-${process.id}`}
                                       index={processIndex}
                                     >
                                       {(provided, snapshot) => (
@@ -748,21 +676,22 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                             <div className="flex items-center gap-2">
                                               <button
                                                 onClick={() =>
-                                                  handleAddStep(
-                                                    stage.name,
-                                                    process.name,
+                                                  openAddStepModal(
+                                                    stage.id,
+                                                    process.id,
                                                   )
                                                 }
-                                                className="inline-flex items-center px-1.5 py-0.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                                                className="flex items-center gap-2 text-blue-500 hover:text-blue-700"
+                                                data-testid={`add-step-${process.id}`}
                                               >
+                                                <BsGearFill className="h-4 w-4" />
                                                 Add Step
                                               </button>
                                               <button
                                                 onClick={() =>
-                                                  handleEditClick(
-                                                    "process",
-                                                    process.name,
-                                                    stage.name,
+                                                  handleEditProcess(
+                                                    stage.id,
+                                                    process.id,
                                                   )
                                                 }
                                                 className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
@@ -774,12 +703,12 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                 <button
                                                   onClick={() =>
                                                     onDeleteProcess(
-                                                      stage.name,
-                                                      process.name,
+                                                      stage.id,
+                                                      process.id,
                                                     )
                                                   }
-                                                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                                                  aria-label="Delete process"
+                                                  className="p-1 text-red-500 hover:text-red-700"
+                                                  data-testid={`delete-process-${process.id}`}
                                                 >
                                                   <FaTrash className="w-3.5 h-3.5 text-gray-500" />
                                                 </button>
@@ -788,7 +717,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                           </div>
 
                                           <Droppable
-                                            droppableId={`${stage.name}:${process.name}`}
+                                            droppableId={`step-${stage.id}-${process.id}`}
                                             type="step"
                                           >
                                             {(provided, snapshot) => (
@@ -804,8 +733,8 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                 {process.steps.map(
                                                   (step, stepIndex) => (
                                                     <Draggable
-                                                      key={`step-${stage.name}-${process.name}-${step.name}-${stepIndex}`}
-                                                      draggableId={`step-${stage.name}-${process.name}-${step.name}-${stepIndex}`}
+                                                      key={`step-${step.id}`}
+                                                      draggableId={`step-${step.id}`}
                                                       index={stepIndex}
                                                     >
                                                       {(provided, snapshot) => (
@@ -827,20 +756,20 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                         }
                                                         ${
                                                           activeStep ===
-                                                            step.name &&
+                                                            step.id &&
                                                           activeProcess ===
-                                                            process.name &&
+                                                            process.id &&
                                                           activeStage ===
-                                                            stage.name
+                                                            stage.id
                                                             ? "border-blue-500/50 bg-blue-50 dark:bg-blue-900/20"
                                                             : "border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30"
                                                         }
                                                       `}
                                                           onClick={() =>
                                                             handleStepSelect(
-                                                              stage.name,
-                                                              process.name,
-                                                              step.name,
+                                                              stage.id,
+                                                              process.id,
+                                                              step.id,
                                                             )
                                                           }
                                                         >
@@ -866,11 +795,10 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                                   e,
                                                                 ) => {
                                                                   e.stopPropagation();
-                                                                  handleEditClick(
-                                                                    "step",
-                                                                    step.name,
-                                                                    stage.name,
-                                                                    process.name,
+                                                                  handleEditStep(
+                                                                    stage.id,
+                                                                    process.id,
+                                                                    step.id,
                                                                   );
                                                                 }}
                                                                 className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
@@ -885,12 +813,13 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                                   ) => {
                                                                     e.stopPropagation();
                                                                     onDeleteStep(
-                                                                      stage.name,
-                                                                      process.name,
-                                                                      step.name,
+                                                                      stage.id,
+                                                                      process.id,
+                                                                      step.id,
                                                                     );
                                                                   }}
-                                                                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                                                                  className="p-1 text-red-500 hover:text-red-700"
+                                                                  data-testid={`delete-step-${step.id}`}
                                                                   aria-label="Delete step"
                                                                 >
                                                                   <FaTrash className="w-3.5 h-3.5 text-gray-500" />
@@ -926,15 +855,28 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
           </Droppable>
         </DragDropContext>
 
-        <AddStepModal
-          isOpen={isAddStepModalOpen}
+        <AddProcessModal
+          isOpen={_isAddProcessModalOpen}
           onClose={() => {
-            setIsAddStepModalOpen(false);
+            setIsAddProcessModalOpen(false);
             setSelectedStageId(null);
-            setSelectedProcessId(null);
           }}
-          onAddStep={_handleAddStepSubmit}
+          onAddProcess={handleAddProcessSubmit}
         />
+
+        {isAddStepModalOpen && selectedStageId && selectedProcessId && (
+          <AddStepModal
+            isOpen={isAddStepModalOpen}
+            onClose={() => {
+              setIsAddStepModalOpen(false);
+              setSelectedStageId(null);
+              setSelectedProcessId(null);
+            }}
+            onAddStep={handleAddStep}
+            stageId={selectedStageId}
+            processId={selectedProcessId}
+          />
+        )}
 
         {editItem && (
           <EditModal

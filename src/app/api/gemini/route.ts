@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  createStreamResponse,
+  createStreamProcessor,
+  getToolsContext,
+} from "@/app/lib/llmUtils";
+import { SharedLLMStreamProcessor } from "../../lib/llmStreamProcessor";
+import { databaseSystemPrompt } from "../../lib/databasePrompt";
 
+// Initialize the Google Generative AI client
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const generativeModel = genAI.getGenerativeModel({
   model: "gemini-2.0-flash-001",
@@ -10,160 +18,109 @@ const generativeModel = genAI.getGenerativeModel({
 });
 
 export async function POST(request: Request) {
+  console.log("=== Gemini API Route Started ===");
   try {
     const { prompt, systemContext } = await request.json();
-    console.error("Received request with prompt length:", prompt.length);
-
-    // Create a new TransformStream for streaming
-    const encoder = new TextEncoder();
-    const stream = new TransformStream();
-    const writer = stream.writable.getWriter();
-
-    // Start the response stream
-    const streamResponse = new Response(stream.readable, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
+    const enhancedSystemPrompt = `${databaseSystemPrompt}\n\n${getToolsContext()}\n\n`;
+    const context = systemContext || enhancedSystemPrompt;
+    console.log("Request details:", {
+      promptLength: prompt.length,
+      systemContextLength: context.length,
+      promptPreview: prompt.substring(0, 100) + "...",
+      systemContextPreview: context.substring(0, 100) + "...",
     });
+
+    const { writer, encoder, response } = createStreamResponse();
+    const processor = createStreamProcessor(writer, encoder);
+    const streamProcessor = new SharedLLMStreamProcessor();
+    console.log("Stream response initialized");
 
     // Process the stream in the background
     (async () => {
       try {
         // Send initial message to keep connection alive
-        await writer.write(encoder.encode('data: {"init":true}\n\n'));
-        console.error("Sent initial message");
+        await processor.sendText('{"init":true}');
+        console.log("=== Initial Message Sent ===");
 
-        // Make the API call
         const requestPayload = {
           contents: [
             {
               role: "user",
               parts: [
                 {
-                  text: `${systemContext}\n\nUser request: ${prompt}\n\nIMPORTANT: Respond ONLY with a JSON object. Do not include any markdown formatting, code blocks, or explanatory text. The JSON response must exactly match the format specified above.`,
+                  text: `${context}\n\nUser request: ${prompt}`,
                 },
               ],
             },
           ],
         };
-        console.error("Sending request to Gemini");
+        console.log("=== Request Payload Prepared ===", {
+          contentLength: requestPayload.contents[0].parts[0].text.length,
+          preview:
+            requestPayload.contents[0].parts[0].text.substring(0, 100) + "...",
+          hasToolsContext:
+            requestPayload.contents[0].parts[0].text.includes(
+              "Available tools:",
+            ),
+        });
+        console.log(
+          "Request payload:",
+          JSON.stringify(requestPayload, null, 2),
+        );
 
+        console.log("=== Sending Request to Gemini API ===");
         const streamingResp = await generativeModel.generateContentStream(
           requestPayload,
         );
-        let accumulatedText = "";
+        console.log("=== Received Streaming Response from Gemini ===");
 
-        for await (const chunk of streamingResp.stream) {
-          const chunkText = chunk.text();
-          if (chunkText) {
-            accumulatedText += chunkText;
-            await writer.write(
-              encoder.encode(
-                `data: ${JSON.stringify({ text: chunkText })}\n\n`,
-              ),
-            );
-          }
-        }
-
-        console.error("Final accumulated text:", accumulatedText);
-
-        try {
-          // Clean the text by removing markdown code block formatting
-          accumulatedText = accumulatedText
-            .replace(/^```json\n/, "")
-            .replace(/\n```$/, "")
-            .trim();
-
-          // Add debug logging
-          console.error(
-            "Attempting to parse JSON:",
-            accumulatedText.substring(0, 100) + "...",
-          );
-
-          // Parse and validate the complete JSON
-          let modelData;
-          try {
-            modelData = JSON.parse(accumulatedText);
-          } catch (parseError: unknown) {
-            if (parseError instanceof Error) {
-              console.error("JSON Parse Error:", parseError);
-              console.error("Problematic JSON text:", accumulatedText);
-              throw new Error(
-                `Failed to parse JSON response: ${parseError.message}`,
-              );
-            }
-            throw new Error("Failed to parse JSON response: Unknown error");
-          }
-
-          if (
-            !modelData.model ||
-            (!modelData.model.stages && !modelData.model.fields)
-          ) {
-            throw new Error("Response missing required model data");
-          }
-
-          const validatedResponse = {
-            message: modelData.message || "",
-            model: {
-              name: modelData.model.name || "",
-              stages: Array.isArray(modelData.model.stages)
-                ? modelData.model.stages
-                : [],
-              fields: Array.isArray(modelData.model.fields)
-                ? modelData.model.fields
-                : [],
-            },
-            action: modelData.action || { changes: [] },
-            visualization: modelData.visualization || {
-              totalStages: modelData.model.stages?.length || 0,
-              stageBreakdown: [],
-            },
-          };
-
-          // Send the final validated response
-          await writer.write(
-            encoder.encode(
-              `data: ${JSON.stringify({ final: validatedResponse })}\n\n`,
-            ),
-          );
-        } catch (error) {
-          console.error("Error parsing model data:", error);
-          throw new Error("Invalid JSON structure in response text");
-        }
+        await streamProcessor.processStream(streamingResp.stream, processor, {
+          extractText: async (chunk) =>
+            typeof chunk.text === "function" ? await chunk.text() : chunk.text,
+          onError: (error) => {
+            console.error("Gemini stream processing error:", error);
+          },
+        });
 
         await writer.close();
+        console.log("=== Stream Closed Successfully ===");
       } catch (error) {
-        console.error("Stream processing error:", error);
+        console.error("=== Stream Processing Error ===", {
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         try {
-          await writer.write(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Stream processing error",
-              })}\n\n`,
-            ),
+          await processor.sendError(
+            error instanceof Error ? error.message : "Stream processing error",
           );
           await writer.close();
+          console.log("=== Error Response Sent and Stream Closed ===");
         } catch (e) {
-          console.error("Error while handling stream error:", e);
+          console.error("=== Error While Handling Stream Error ===", {
+            error: e instanceof Error ? e.message : "Unknown error",
+            stack: e instanceof Error ? e.stack : undefined,
+          });
         }
       }
     })();
 
     // Return the stream response immediately
-    console.error("Returning stream response");
-    return streamResponse;
+    console.log("Returning stream response to client");
+    return response;
   } catch (error) {
+    console.log("Gemini route error catch block hit");
     console.error("API route error:", error);
+    if (error instanceof Error) {
+      console.error("Gemini Route Error Stack:", error.stack);
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Internal server error",
+        stack: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 },
     );
+  } finally {
+    console.log("=== Gemini API Route Completed ===");
   }
 }

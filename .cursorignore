@@ -1,0 +1,8 @@
+# Files to always include in context
+!.cursorrules
+!CONTRIBUTING.md
+
+# Ignore common patterns
+node_modules/
+.git/
+*.log

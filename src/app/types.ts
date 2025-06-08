@@ -28,6 +28,8 @@ export type fieldType =
   | "UserReference";
 
 export interface Field {
+  /** Unique identifier for the field */
+  id?: number;
   /** Unique name of the field for the case type - used as key */
   name: string;
   /** Field label */
@@ -44,9 +46,19 @@ export interface Field {
   value?: string | number | boolean | Array<string>;
   /** if type is RadioButtons, Dropdown or AutoComplete - list of valid options */
   options?: string[];
+  /** set to true if the field is required */
+  required?: boolean;
+  /** display order of the field */
+  order?: number;
+  /** field description */
+  description?: string;
+  /** Default value for the field */
+  defaultValue?: any;
 }
 
 export interface FieldReference {
+  /** Unique identifier for the field */
+  id?: number;
   /** Unique name of the field for the case type - used as key - should match the name of a field in the fields object */
   name: string;
   /** set to true if the field is required */
@@ -54,22 +66,23 @@ export interface FieldReference {
 }
 
 export interface Step {
-  /** Unique name of the step */
+  id: number; // Database ID
   name: string;
   type: StepType;
   fields?: FieldReference[];
+  viewId?: string;
+  order?: number;
 }
 
 export interface Process {
-  /** Unique name of the process */
+  id: number; // Database ID
   name: string;
   steps: Step[];
 }
 
 export interface Stage {
-  /** Unique name of the stage */
+  id: number; // Database ID
   name: string;
-  /** List of processes in this stage */
   processes: Process[];
   isNew?: boolean;
   isDeleting?: boolean;
@@ -89,7 +102,7 @@ export type StepType =
   | "Send Notification";
 
 export interface Message {
-  id: string;
+  id: number;
   type: "text" | "json";
   content:
     | string
@@ -133,10 +146,10 @@ export interface WorkflowDelta {
   type: "add" | "delete" | "move" | "update";
   target: {
     type: "stage" | "step";
-    id?: string;
+    id?: number;
     name?: string;
-    sourceStageId?: string;
-    targetStageId?: string;
+    sourceStageId?: number;
+    targetStageId?: number;
     sourceIndex?: number;
     targetIndex?: number;
   };
@@ -151,10 +164,10 @@ export interface Delta {
   path: string;
   target?: {
     type: "stage" | "step";
-    id?: string;
+    id?: number;
     name?: string;
-    sourceStageId?: string;
-    targetStageId?: string;
+    sourceStageId?: number;
+    targetStageId?: number;
     sourceIndex?: number;
     targetIndex?: number;
   };
@@ -169,10 +182,10 @@ export interface MessageDelta {
   path: string;
   target: {
     type: "stage" | "step";
-    id?: string;
+    id?: number;
     name?: string;
-    sourceStageId?: string;
-    targetStageId?: string;
+    sourceStageId?: number;
+    targetStageId?: number;
     sourceIndex?: number;
     targetIndex?: number;
   };
@@ -181,6 +194,8 @@ export interface MessageDelta {
 }
 
 export interface Case {
+  /** Unique identifier for the case */
+  id: number;
   /** Unique name of the case type */
   name: string;
   /** Case description - not used */
@@ -193,6 +208,8 @@ export interface Case {
    * List of stages and steps
    */
   stages?: Stage[];
+  /** Unique name of the case type */
+  model: string;
 }
 
 export interface Application {
@@ -203,7 +220,7 @@ export interface Application {
   /**
    * ID of the case type to open in the main content
    */
-  caseID?: string;
+  caseID?: number;
   /**
    * Name of the case type to open in the main content
    */
@@ -213,4 +230,11 @@ export interface Application {
    * If not set, the current active step will be the first step in the case type
    */
   stepName?: string;
+}
+
+export interface Checkpoint {
+  id: number;
+  timestamp: string;
+  description: string;
+  model: WorkflowModel;
 }

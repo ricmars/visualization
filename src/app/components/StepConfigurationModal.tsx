@@ -8,10 +8,10 @@ interface StepConfigurationModalProps {
   isOpen: boolean;
   onClose: () => void;
   step: {
-    id: string;
-    stageId: string;
-    processId: string;
-    stepId: string;
+    id: number;
+    stageId: number;
+    processId: number;
+    stepId: number;
     name: string;
     fields: Field[];
     type: string;
@@ -25,9 +25,9 @@ interface StepConfigurationModalProps {
     required?: boolean;
     primary?: boolean;
   }) => string;
-  onAddExistingField: (stepId: string, fieldIds: string[]) => void;
+  onAddExistingField: (stepId: number, fieldIds: string[]) => void;
   onUpdateField: (updates: Partial<Field>) => void;
-  onDeleteField: (fieldId: string) => void;
+  onDeleteField: (field: Field) => void;
 }
 
 const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
@@ -39,7 +39,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   onAddField,
   onAddExistingField,
   onUpdateField,
-  onDeleteField: _onDeleteField,
+  onDeleteField,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
@@ -99,13 +99,8 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     );
   };
 
-  const handleRemoveField = (fieldId: string) => {
-    // Only remove the field from this step by updating the step's field references
-    const updatedFields = stepFields.filter((field) => field.name !== fieldId);
-    onAddExistingField(
-      step.id,
-      updatedFields.map((field) => field.name),
-    );
+  const handleRemoveField = (field: Field) => {
+    onDeleteField(field);
   };
 
   if (!isOpen) return null;
