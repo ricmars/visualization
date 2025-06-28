@@ -15,6 +15,7 @@ interface StepFormProps {
   onDeleteField: (field: Field) => void;
   onReorderFields: (startIndex: number, endIndex: number) => void;
   onEditField: (field: Field) => void;
+  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
 }
 
 const StepForm: React.FC<StepFormProps> = ({
@@ -22,6 +23,7 @@ const StepForm: React.FC<StepFormProps> = ({
   onDeleteField,
   onReorderFields,
   onEditField,
+  onFieldChange: _onFieldChange,
 }) => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;

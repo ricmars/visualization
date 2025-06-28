@@ -18,7 +18,6 @@ type WorkflowState = Pick<
   WorkflowStore,
   "cases" | "loading" | "isCreateModalOpen" | "isCreatingWorkflow"
 >;
-type WorkflowActions = Omit<WorkflowStore, keyof WorkflowState>;
 
 export const useWorkflowStore = create<WorkflowStore>(
   (set: (fn: (state: WorkflowState) => Partial<WorkflowState>) => void) => ({

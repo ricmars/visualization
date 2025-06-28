@@ -1,14 +1,12 @@
-import { databaseTools } from "./llmTools";
-
 export interface Tool {
   name: string;
   description: string;
-  execute: (params: any) => Promise<any>;
+  execute: (params: unknown) => Promise<unknown>;
 }
 
 export interface StreamProcessor {
   processChunk: (chunk: string) => Promise<void>;
-  processToolCall: (toolName: string, params: any) => Promise<void>;
+  processToolCall: (toolName: string, params: unknown) => Promise<void>;
   sendText: (text: string) => Promise<void>;
   sendError: (error: string) => Promise<void>;
   sendDone: () => Promise<void>;
@@ -17,6 +15,7 @@ export interface StreamProcessor {
 export function createStreamProcessor(
   writer: WritableStreamDefaultWriter<Uint8Array>,
   encoder: TextEncoder,
+  databaseTools: Tool[],
 ): StreamProcessor {
   return {
     async processChunk(chunk: string) {
@@ -25,7 +24,7 @@ export function createStreamProcessor(
       );
     },
 
-    async processToolCall(toolName: string, params: any) {
+    async processToolCall(toolName: string, params: unknown) {
       try {
         const tool = databaseTools.find((t) => t.name === toolName);
         if (!tool) {
@@ -52,13 +51,15 @@ export function createStreamProcessor(
             })}\n\n`,
           ),
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Error executing tool:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
-              text: `\nError executing ${toolName}: ${error.message}\n`,
-              error: error.message,
+              text: `\nError executing ${toolName}: ${errorMessage}\n`,
+              error: errorMessage,
             })}\n\n`,
           ),
         );
@@ -89,7 +90,7 @@ export function createStreamProcessor(
   };
 }
 
-export function getToolsContext(): string {
+export function getToolsContext(databaseTools: Tool[]): string {
   return `Available tools:
 ${databaseTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
 
@@ -130,33 +131,104 @@ export function createStreamResponse(): {
 
 export function extractToolCall(
   text: string,
-): { toolName: string; params: any } | null {
-  // Use a regex to find the tool call pattern
+): { toolName: string; params: unknown } | null {
+  // First, try to extract tool calls from markdown code blocks
+  const codeBlockMatch = text.match(
+    /```(?:tool_code)?\s*\n(TOOL:\s*\w+\s+PARAMS:\s*{[\s\S]*?})\s*\n```/,
+  );
+  if (codeBlockMatch) {
+    const toolCallText = codeBlockMatch[1];
+    const match = toolCallText.match(
+      /TOOL:\s*(\w+)\s+PARAMS:\s*({[\s\S]*?})\s*(?:\n|$)/,
+    );
+    if (match) {
+      const toolName = match[1];
+      const paramsStr = match[2];
+
+      try {
+        const params = JSON.parse(paramsStr);
+        return { toolName, params };
+      } catch (e) {
+        console.error("Failed to parse tool call params from code block:", e);
+        console.error("Params string:", paramsStr);
+      }
+    }
+  }
+
+  // Use a regex to find the tool call pattern (original logic)
   const match = text.match(/TOOL:\s*(\w+)\s+PARAMS:\s*({[\s\S]*?})\s*(?:\n|$)/);
   if (!match) return null;
 
   const toolName = match[1];
   const paramsStr = match[2];
 
-  // Count braces to ensure we have a complete JSON object
-  let braceCount = 0;
-  let completeParamsStr = "";
-  for (let i = 0; i < paramsStr.length; i++) {
-    const char = paramsStr[i];
-    if (char === "{") braceCount++;
-    if (char === "}") braceCount--;
-    completeParamsStr += char;
-    if (braceCount === 0) break;
-  }
-
-  // If braces are not balanced, the tool call is incomplete
-  if (braceCount !== 0) return null;
-
+  // Try to parse the JSON directly first
   try {
-    const params = JSON.parse(completeParamsStr);
+    const params = JSON.parse(paramsStr);
     return { toolName, params };
   } catch (e) {
+    // If direct parsing fails, try to clean up and complete the JSON
+    console.log(
+      "Direct JSON parsing failed, attempting to clean up:",
+      paramsStr,
+    );
+
+    // Try to complete incomplete JSON by adding missing closing braces
+    let completedJson = paramsStr;
+    let braceCount = 0;
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = 0; i < paramsStr.length; i++) {
+      const char = paramsStr[i];
+
+      // Handle string escaping
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escapeNext = true;
+        continue;
+      }
+
+      // Handle string boundaries
+      if (char === '"' && !escapeNext) {
+        inString = !inString;
+        continue;
+      }
+
+      // Only count braces when not inside a string
+      if (!inString) {
+        if (char === "{") {
+          braceCount++;
+        }
+        if (char === "}") {
+          braceCount--;
+        }
+      }
+    }
+
+    // Add missing closing braces
+    while (braceCount > 0) {
+      completedJson += "}";
+      braceCount--;
+    }
+
+    // Try to parse the completed JSON
+    try {
+      const params = JSON.parse(completedJson);
+      console.log("Successfully parsed completed JSON:", completedJson);
+      return { toolName, params };
+    } catch (parseError) {
+      console.error("Failed to parse completed JSON:", parseError);
+      console.error("Completed JSON string:", completedJson);
+    }
+
+    // If all else fails, log the issue and return null
     console.error("Failed to parse tool call params:", e);
+    console.error("Original params string:", paramsStr);
     return null;
   }
 }

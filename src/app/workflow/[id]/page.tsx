@@ -3,17 +3,17 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import WorkflowDiagram from "../../components/WorkflowDiagram";
-import ChatInterface from "../../components/ChatInterface";
+import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
 import { Service } from "../../services/service";
 import {
   Stage,
   Field,
-  Message,
   Process,
   Step,
   FieldReference,
   Checkpoint,
   WorkflowModel,
+  StepType,
 } from "../../types";
 import type { View } from "../../types/rules";
 import { motion } from "framer-motion";
@@ -34,11 +34,6 @@ const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
 const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
 const MAX_CHECKPOINTS = 10;
-
-// Add type guard for ID validation
-function isValidId(id: unknown): id is string {
-  return typeof id === "string" && id.length > 0 && !isNaN(Number(id));
-}
 
 interface DatabaseCase {
   id: number;
@@ -161,7 +156,7 @@ export default function WorkflowPage() {
   const [activeStage, setActiveStage] = useState<string>();
   const [activeProcess, setActiveProcess] = useState<string>();
   const [activeStep, setActiveStep] = useState<string>();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [chatPanelWidth] = useState(500);
   const [isChatPanelExpanded] = useState(true);
@@ -187,10 +182,6 @@ export default function WorkflowPage() {
   const [selectedView, setSelectedView] = useState<string | null>(null);
   const [newStageName, setNewStageName] = useState("");
   const [newProcessName, setNewProcessName] = useState("");
-  const [newStepName, setNewStepName] = useState("");
-  const [newStepType, setNewStepType] = useState<StepType>(
-    "Collect information",
-  );
 
   // 3. All useRef hooks
   const addFieldButtonRef = useRef<HTMLButtonElement>(null);
@@ -277,35 +268,25 @@ export default function WorkflowPage() {
     }
   }, [id]);
 
-  // Load workflow data
-  useEffect(() => {
-    async function loadWorkflow() {
-      try {
-        setLoading(true);
-        const composedModel = await fetchCaseData(id);
-        setModel(composedModel);
-        setError(null);
-      } catch (err) {
-        console.error("Error loading workflow:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to load workflow",
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadWorkflow();
-  }, [id, fetchCase]);
-
-  // Fetch case data
-  useEffect(() => {
-    if (isValidId(id)) {
-      fetchCase();
-    } else {
+  // Load workflow data function
+  const loadWorkflow = async () => {
+    try {
+      setLoading(true);
+      const composedModel = await fetchCaseData(id);
+      setModel(composedModel);
+      setError(null);
+    } catch (err) {
+      console.error("Error loading workflow:", err);
+      setError(err instanceof Error ? err.message : "Failed to load workflow");
+    } finally {
       setLoading(false);
     }
-  }, [fetchCase, id]);
+  };
+
+  // Load workflow data
+  useEffect(() => {
+    loadWorkflow();
+  }, [id, fetchCase]);
 
   // Handle iframe creation
   useEffect(() => {
@@ -486,22 +467,50 @@ export default function WorkflowPage() {
           name: field.label.toLowerCase().replace(/\s+/g, "_"),
           type: field.type,
           label: field.label,
-          required: field.required,
-          primary: field.primary,
+          required: field.required ?? false,
+          primary: field.primary ?? false,
+          caseID: selectedCase.id,
+          description: field.label,
+          order: 0,
+          options: [],
         };
 
-        const response = await fetch("/api/database", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+        console.log("Creating field with data:", fieldData);
+
+        const response = await fetch(
+          `/api/database?table=${DB_TABLES.FIELDS}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              table: DB_TABLES.FIELDS,
+              data: {
+                name: fieldData.name,
+                type: fieldData.type,
+                primary: fieldData.primary,
+                caseID: fieldData.caseID,
+                label: fieldData.label,
+                description: fieldData.description,
+                order: fieldData.order,
+                options: fieldData.options,
+                required: fieldData.required,
+              },
+            }),
           },
-          body: JSON.stringify({
-            table: "fields",
-            data: fieldData,
-          }),
-        });
+        );
 
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error("=== Field Creation Failed ===");
+          console.error("Status:", response.status);
+          console.error("Status Text:", response.statusText);
+          console.error("Error Response:", errorText);
+          console.error("Request Data:", {
+            table: DB_TABLES.FIELDS,
+            data: fieldData,
+          });
           throw new Error("Failed to add field");
         }
 
@@ -519,7 +528,7 @@ export default function WorkflowPage() {
         };
 
         // Update the case with the modified model
-        await fetch(
+        const updateResponse = await fetch(
           `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
           {
             method: "PUT",
@@ -527,12 +536,36 @@ export default function WorkflowPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              name: selectedCase.name,
-              description: selectedCase.description,
-              model: JSON.stringify(updatedModel),
+              table: DB_TABLES.CASES,
+              data: {
+                id: selectedCase.id,
+                name: selectedCase.name,
+                description: selectedCase.description,
+                model: JSON.stringify(updatedModel),
+              },
             }),
           },
         );
+
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          console.error("=== Case Update Failed ===");
+          console.error("Status:", updateResponse.status);
+          console.error("Status Text:", updateResponse.statusText);
+          console.error("Error Response:", errorText);
+          console.error("Request Data:", {
+            table: DB_TABLES.CASES,
+            data: {
+              id: selectedCase.id,
+              name: selectedCase.name,
+              description: selectedCase.description,
+              model: JSON.stringify(updatedModel),
+            },
+          });
+          throw new Error(
+            `Failed to update case: ${updateResponse.status} ${errorText}`,
+          );
+        }
 
         // Refresh the model
         const composedModel = await fetchCaseData(id);
@@ -630,12 +663,11 @@ export default function WorkflowPage() {
       }
 
       // Update the case model to remove the field from all steps and views
+      const currentModel = JSON.parse(selectedCase.model);
       const updatedModel = {
-        ...JSON.parse(selectedCase.model),
-        fields: JSON.parse(selectedCase.model).fields.filter(
-          (f: Field) => f.id !== field.id,
-        ),
-        stages: JSON.parse(selectedCase.model).stages.map((stage: Stage) => ({
+        ...currentModel,
+        fields: currentModel.fields.filter((f: Field) => f.id !== field.id),
+        stages: currentModel.stages.map((stage: Stage) => ({
           ...stage,
           processes: stage.processes.map((process: Process) => ({
             ...process,
@@ -675,12 +707,21 @@ export default function WorkflowPage() {
         console.error("Status:", updateResponse.status);
         console.error("Status Text:", updateResponse.statusText);
         console.error("Error Response:", errorText);
+        console.error("Request Data:", {
+          table: DB_TABLES.CASES,
+          data: {
+            id: selectedCase.id,
+            name: selectedCase.name,
+            description: selectedCase.description,
+            model: JSON.stringify(updatedModel),
+          },
+        });
         throw new Error(
           `Failed to update case: ${updateResponse.status} ${errorText}`,
         );
       }
 
-      // Refresh the model to get updated data
+      // Refresh the model
       const composedModel = await fetchCaseData(id);
       setModel(composedModel);
     } catch (error) {
@@ -828,6 +869,70 @@ export default function WorkflowPage() {
     } catch (error) {
       console.error("Error adding process:", error);
       throw new Error("Failed to add process");
+    }
+  };
+
+  const handleAddStep = async (
+    stageId: number,
+    processId: number,
+    stepName: string,
+    stepType: StepType,
+  ) => {
+    if (!selectedCase) return;
+
+    const newStep: Step = {
+      id: Date.now(),
+      name: stepName,
+      type: stepType,
+      fields: [],
+    };
+
+    const updatedStages = workflowModel.stages.map((stage) =>
+      stage.id === stageId
+        ? {
+            ...stage,
+            processes: stage.processes.map((process) =>
+              process.id === processId
+                ? {
+                    ...process,
+                    steps: [...process.steps, newStep],
+                  }
+                : process,
+            ),
+          }
+        : stage,
+    );
+
+    const updatedModel = {
+      ...workflowModel,
+      stages: updatedStages,
+    };
+
+    addCheckpoint(`Added step: ${stepName}`, updatedModel);
+
+    try {
+      const response = await fetch(
+        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: selectedCase.name,
+            description: selectedCase.description,
+            model: JSON.stringify(updatedModel),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to add step: ${response.status}`);
+      }
+
+      const { data: updatedCase } = await response.json();
+      setSelectedCase(updatedCase);
+    } catch (error) {
+      console.error("Error adding step:", error);
+      throw error;
     }
   };
 
@@ -982,45 +1087,24 @@ export default function WorkflowPage() {
       setMessages((prev) => [
         ...prev,
         {
-          id: parseInt(uuidv4().replace(/-/g, ""), 16),
-          type: "text",
+          id: uuidv4(),
           content: message,
           sender: "user",
+          timestamp: new Date(),
         },
       ]);
 
-      // Add a placeholder AI message that will be updated with streaming content
-      const aiMessageId = parseInt(uuidv4().replace(/-/g, ""), 16);
+      // Add a placeholder AI message that will be updated with the response
+      const aiMessageId = uuidv4();
       setMessages((prev) => [
         ...prev,
         {
           id: aiMessageId,
-          type: "text",
           content: "",
-          sender: "ai",
+          sender: "assistant",
+          timestamp: new Date(),
         },
       ]);
-
-      // Accumulate the complete response during streaming
-      let completeResponse = "";
-
-      // Handle streaming updates
-      const updateAiMessage = (chunk: string) => {
-        completeResponse += chunk;
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const aiMessageIndex = newMessages.findIndex(
-            (msg) => msg.id === aiMessageId,
-          );
-          if (aiMessageIndex !== -1) {
-            newMessages[aiMessageIndex] = {
-              ...newMessages[aiMessageIndex],
-              content: completeResponse,
-            };
-          }
-          return newMessages;
-        });
-      };
 
       const response = await Service.generateResponse(
         message,
@@ -1037,46 +1121,84 @@ export default function WorkflowPage() {
         throw new Error(`Failed to generate response: ${response.statusText}`);
       }
 
+      // Handle streaming response
       const reader = response.body?.getReader();
       if (!reader) {
-        throw new Error("No response body");
+        throw new Error("No response body available");
       }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const decoder = new TextDecoder();
+      let accumulatedContent = "";
 
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split("\n");
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            if (data === "[DONE]") continue;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
 
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.text) {
-                updateAiMessage(parsed.text);
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.text) {
+                  accumulatedContent += data.text;
+                  // Update the AI message with accumulated content
+                  setMessages((prev) => {
+                    const newMessages = [...prev];
+                    const aiMessageIndex = newMessages.findIndex(
+                      (msg) => msg.id === aiMessageId,
+                    );
+                    if (aiMessageIndex !== -1) {
+                      newMessages[aiMessageIndex] = {
+                        ...newMessages[aiMessageIndex],
+                        content: accumulatedContent,
+                      };
+                    }
+                    return newMessages;
+                  });
+                }
+
+                if (data.error) {
+                  console.error("Streaming error:", data.error);
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      id: uuidv4(),
+                      content: `Error: ${data.error}`,
+                      sender: "assistant",
+                      timestamp: new Date(),
+                    },
+                  ]);
+                }
+
+                if (data.done) {
+                  // Reload the workflow data if tools were executed
+                  if (accumulatedContent.includes("Successfully executed")) {
+                    await loadWorkflow();
+                  }
+                  break;
+                }
+              } catch (_parseError) {
+                console.warn("Failed to parse SSE data:", line);
               }
-              if (parsed.error) {
-                throw new Error(parsed.error);
-              }
-            } catch (error) {
-              console.error("Error parsing chunk:", error);
             }
           }
         }
+      } finally {
+        reader.releaseLock();
       }
     } catch (error) {
       console.error("Error sending message:", error);
       setMessages((prev) => [
         ...prev,
         {
-          id: parseInt(uuidv4().replace(/-/g, ""), 16),
-          type: "text",
+          id: uuidv4(),
           content: "Sorry, there was an error processing your request.",
-          sender: "ai",
+          sender: "assistant",
+          timestamp: new Date(),
         },
       ]);
     } finally {
@@ -1544,7 +1666,12 @@ export default function WorkflowPage() {
                         handleAddProcess(Number(stageId), processName)
                       }
                       onAddStep={(stageId, processId, stepName, stepType) =>
-                        handleAddStep(stageId, processId, stepName, stepType)
+                        handleAddStep(
+                          Number(stageId),
+                          Number(processId),
+                          stepName,
+                          stepType,
+                        )
                       }
                       onStageReorder={handleStageReorder}
                       onProcessReorder={handleProcessReorder}

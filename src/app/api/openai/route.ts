@@ -4,12 +4,15 @@ import {
   databaseSystemPrompt,
   exampleDatabaseResponse,
 } from "../../lib/databasePrompt";
+import { pool } from "../../lib/db";
+import { getDatabaseTools } from "../../lib/llmTools";
 import {
-  createStreamResponse,
   createStreamProcessor,
+  createStreamResponse,
   getToolsContext,
+  Tool,
 } from "../../lib/llmUtils";
-import { SharedLLMStreamProcessor } from "../../lib/llmStreamProcessor";
+import { openaiToolSchemas } from "../../lib/openaiToolSchemas";
 
 // Add debug logging
 console.log("OpenAI Route Environment Variables:", {
@@ -59,26 +62,24 @@ export async function POST(request: Request) {
     const { prompt, systemContext } = await request.json();
     console.log("Received request with prompt length:", prompt.length);
 
-    // Create stream response using shared utility
-    const { writer, encoder, response } = createStreamResponse();
-    const processor = createStreamProcessor(writer, encoder);
-    const streamProcessor = new SharedLLMStreamProcessor();
+    // Get database tools
+    const databaseTools = getDatabaseTools(pool) as Tool[];
 
-    // Process the stream in the background
+    // Create OpenAI client with fresh token
+    const openai = await createOpenAIClient();
+
+    // Enhanced system prompt with tools context
+    const toolsContext = getToolsContext(databaseTools);
+    const enhancedSystemPrompt = `${databaseSystemPrompt}\n\n${toolsContext}\n\n${exampleDatabaseResponse}`;
+
+    // Create streaming response
+    const { writer, encoder, response } = createStreamResponse();
+    const processor = createStreamProcessor(writer, encoder, databaseTools);
+
     (async () => {
       try {
-        // Send initial message to keep connection alive
-        await processor.sendText('{"init":true}');
-        console.log("Sent initial message");
-
-        // Create OpenAI client with fresh token
-        const openai = await createOpenAIClient();
-
-        // Enhanced system prompt to ensure proper tool usage
-        const enhancedSystemPrompt = `${databaseSystemPrompt}\n\n${getToolsContext()}\n\n${exampleDatabaseResponse}`;
-
         const completion = await openai.chat.completions.create({
-          model: "gpt-4",
+          model: "gpt-4o",
           messages: [
             {
               role: "system",
@@ -92,21 +93,68 @@ export async function POST(request: Request) {
           temperature: 0.7,
           max_tokens: 4000,
           stream: true,
+          tools: openaiToolSchemas,
         });
 
-        await streamProcessor.processStream(completion, processor, {
-          extractText: (chunk) => chunk.choices[0]?.delta?.content,
-          onError: (error) => {
-            console.error("OpenAI stream processing error:", error);
-          },
-        });
+        // Map to accumulate arguments for each tool_call.id
+        const toolCallBuffers: Record<
+          string,
+          { name: string; arguments: string }
+        > = {};
 
-        await writer.close();
+        for await (const chunk of completion) {
+          // Handle tool calls (function calls)
+          const toolCalls = chunk.choices[0]?.delta?.tool_calls;
+          if (toolCalls && toolCalls.length > 0) {
+            for (const toolCall of toolCalls) {
+              if (
+                toolCall.id &&
+                toolCall.function &&
+                typeof toolCall.function.name === "string" &&
+                typeof toolCall.function.arguments === "string"
+              ) {
+                // Accumulate arguments for this tool_call.id
+                if (!toolCallBuffers[toolCall.id]) {
+                  toolCallBuffers[toolCall.id] = {
+                    name: toolCall.function.name,
+                    arguments: "",
+                  };
+                }
+                toolCallBuffers[toolCall.id].arguments +=
+                  toolCall.function.arguments;
+                // Try to parse the arguments (if complete)
+                try {
+                  const args = JSON.parse(
+                    toolCallBuffers[toolCall.id].arguments,
+                  );
+                  await processor.processToolCall(
+                    toolCallBuffers[toolCall.id].name,
+                    args,
+                  );
+                  // Remove from buffer after successful execution
+                  delete toolCallBuffers[toolCall.id];
+                } catch (_err) {
+                  // Not valid JSON yet, keep accumulating
+                }
+              }
+            }
+            continue;
+          }
+
+          // Handle normal text streaming
+          const content = chunk.choices[0]?.delta?.content || "";
+          if (content) {
+            await processor.processChunk(content);
+          }
+        }
+        await processor.sendDone();
       } catch (error) {
-        console.error("Stream processing error:", error);
+        console.error("Error in streaming response:", error);
         await processor.sendError(
-          error instanceof Error ? error.message : "Stream processing error",
+          error instanceof Error ? error.message : "Unknown error occurred",
         );
+        await processor.sendDone();
+      } finally {
         await writer.close();
       }
     })();

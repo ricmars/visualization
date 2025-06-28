@@ -8,26 +8,32 @@ jest.mock("openai", () => {
           chat: {
             completions: {
               create: jest.fn().mockResolvedValue({
-                stream: require("./llm-mocks").mockOpenAIStream(),
+                [Symbol.asyncIterator]: async function* () {
+                  yield {
+                    choices: [
+                      {
+                        delta: {
+                          content: "Test response",
+                        },
+                      },
+                    ],
+                  };
+                  yield {
+                    choices: [
+                      {
+                        delta: {
+                          content: " completed",
+                        },
+                      },
+                    ],
+                  };
+                },
               }),
             },
           },
         };
       }
     },
-  };
-});
-
-// Mock Gemini client
-jest.mock("@google/generative-ai", () => {
-  return {
-    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-      getGenerativeModel: jest.fn().mockReturnValue({
-        generateContentStream: jest.fn().mockResolvedValue({
-          stream: require("./llm-mocks").mockGeminiStream(),
-        }),
-      }),
-    })),
   };
 });
 
@@ -40,7 +46,6 @@ process.env.AZURE_OPENAI_DEPLOYMENT = "test-deployment";
 process.env.AZURE_TENANT_ID = "test-tenant";
 process.env.AZURE_CLIENT_ID = "test-client";
 process.env.AZURE_CLIENT_SECRET = "test-secret";
-process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || "test-gemini-key";
 
 // Mock fetch for Azure token
 global.fetch = jest.fn().mockImplementation((url) => {
@@ -56,142 +61,82 @@ global.fetch = jest.fn().mockImplementation((url) => {
   });
 });
 
-describe("LLM Routes Integration Tests", () => {
-  const mockRequest = (prompt: string, systemContext?: string) => {
-    return new NextRequest("http://localhost:3000/api/test", {
-      method: "POST",
-      body: JSON.stringify({ prompt, systemContext }),
-    });
-  };
+function mockRequest(prompt: string): NextRequest {
+  return new NextRequest("http://localhost:3000/api/openai", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      prompt,
+      systemContext: "Test system context",
+    }),
+  });
+}
 
-  const readStream = async (response: Response) => {
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error("No reader available");
+// Helper function to parse SSE response
+async function parseSSEResponse(
+  response: Response,
+): Promise<{ text: string[]; errors: string[] }> {
+  const text = await response.text();
+  const lines = text.split("\n");
+  const messages: string[] = [];
+  const errors: string[] = [];
 
-    const chunks: string[] = [];
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(new TextDecoder().decode(value));
+  for (const line of lines) {
+    if (line.startsWith("data: ")) {
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.text) {
+          messages.push(data.text);
+        }
+        if (data.error) {
+          errors.push(data.error);
+        }
+      } catch (_e) {
+        // Ignore parsing errors for non-JSON lines
+      }
     }
-    return chunks.join("");
-  };
+  }
 
+  return { text: messages, errors };
+}
+
+describe("LLM Routes Integration Tests", () => {
   describe("OpenAI Route", () => {
-    it("should process a simple prompt and return a stream", async () => {
+    it("should process a simple prompt and return a streaming response", async () => {
       const request = mockRequest("Create a simple case");
       const response = await openaiPost(request);
-
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain(
-        "text/event-stream",
-      );
+      expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
-      const streamContent = await readStream(response);
-      // Only check for the init message, since the stream processor fails after the first chunk
-      expect(streamContent).toContain('data: {"text":"{\\"init\\":true}"}');
+      const { text } = await parseSSEResponse(response);
+      expect(text.length).toBeGreaterThan(0);
+      expect(text.join("")).toContain("Test response");
     });
 
     it("should handle errors gracefully", async () => {
-      // Mock OpenAI client to throw an error by replacing the class
-      const openaiModule = require("openai");
-      openaiModule.default = class OpenAI {
-        constructor() {
-          return {
-            chat: {
-              completions: {
-                create: jest.fn().mockRejectedValue(new Error("API Error")),
-              },
-            },
-          };
-        }
+      // Mock the OpenAI client to throw an error
+      const mockCreate = jest.fn().mockRejectedValue(new Error("API Error"));
+      const mockOpenAI = {
+        chat: {
+          completions: {
+            create: mockCreate,
+          },
+        },
       };
 
+      // Replace the mock implementation
+      const openaiModule = require("openai");
+      openaiModule.default = jest.fn().mockReturnValue(mockOpenAI);
+
       const request = mockRequest("Create a case");
       const response = await openaiPost(request);
+      expect(response.status).toBe(200); // Streaming responses return 200 even with errors
+      expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
-      expect(response.status).toBe(200); // Stream is still created
-      const streamContent = await readStream(response);
-      expect(streamContent).toContain('"error"');
-    });
-  });
-
-  describe("Gemini Route", () => {
-    it("should process a simple prompt and return a stream", async () => {
-      const { POST: geminiPost } = require("../gemini/route");
-      const request = mockRequest("Create a simple case");
-      const response = await geminiPost(request);
-      if (response.status !== 200) {
-        const errorBody = await response.text();
-        let errorMsg = `Gemini route error response (raw): ${errorBody}`;
-        try {
-          const errorJson = JSON.parse(errorBody);
-          errorMsg += `\nGemini route error response (JSON): ${JSON.stringify(
-            errorJson,
-            null,
-            2,
-          )}`;
-        } catch (_e) {}
-        throw new Error(errorMsg);
-      }
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain(
-        "text/event-stream",
-      );
-      const streamContent = await readStream(response);
-      expect(streamContent).toContain('data: {"text":"{\\"init\\":true}"}');
-    });
-
-    it("should handle errors gracefully", async () => {
-      jest.resetModules();
-      const { GoogleGenerativeAI } = require("@google/generative-ai");
-      GoogleGenerativeAI.mockImplementationOnce(() => ({
-        getGenerativeModel: jest.fn().mockReturnValue({
-          generateContentStream: jest.fn().mockResolvedValue({
-            stream: require("./llm-mocks").mockGeminiErrorStream(),
-          }),
-        }),
-      }));
-      const { POST: geminiPost } = require("../gemini/route");
-      const request = mockRequest("Create a case");
-      const response = await geminiPost(request);
-      if (response.status !== 200) {
-        const errorBody = await response.text();
-        let errorMsg = `Gemini route error response (raw): ${errorBody}`;
-        try {
-          const errorJson = JSON.parse(errorBody);
-          errorMsg += `\nGemini route error response (JSON): ${JSON.stringify(
-            errorJson,
-            null,
-            2,
-          )}`;
-        } catch (_e) {}
-        throw new Error(errorMsg);
-      }
-      expect(response.status).toBe(200); // Stream is still created
-      const streamContent = await readStream(response);
-      console.log("Gemini error streamContent:", streamContent);
-      // Split by SSE data lines and parse each JSON payload
-      const foundError = streamContent
-        .split("data: ")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .some((line) => {
-          try {
-            const outer = JSON.parse(line);
-            if (outer.text) {
-              const inner =
-                typeof outer.text === "string"
-                  ? JSON.parse(outer.text)
-                  : outer.text;
-              return inner.error === "API Error" || inner.error === "APIError";
-            }
-            return false;
-          } catch (_e) {
-            return false;
-          }
-        });
-      expect(foundError).toBe(true);
+      const { errors } = await parseSSEResponse(response);
+      expect(errors.join("")).toContain("API Error");
     });
   });
 });

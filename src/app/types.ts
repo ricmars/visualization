@@ -53,7 +53,7 @@ export interface Field {
   /** field description */
   description?: string;
   /** Default value for the field */
-  defaultValue?: any;
+  defaultValue?: unknown;
 }
 
 export interface FieldReference {
@@ -62,7 +62,7 @@ export interface FieldReference {
   /** Unique name of the field for the case type - used as key - should match the name of a field in the fields object */
   name: string;
   /** set to true if the field is required */
-  required?: boolean;
+  required: boolean;
 }
 
 export interface Step {

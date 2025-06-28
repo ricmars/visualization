@@ -101,11 +101,15 @@ export function parseModel<T>(modelString: string): T {
 
 // Validation functions
 export function validateStepType(type: string): boolean {
-  return Object.values(STEP_TYPES).includes(type as any);
+  return Object.values(STEP_TYPES).includes(
+    type as (typeof STEP_TYPES)[keyof typeof STEP_TYPES],
+  );
 }
 
 export function validateFieldType(type: string): boolean {
-  return Object.values(FIELD_TYPES).includes(type as any);
+  return Object.values(FIELD_TYPES).includes(
+    type as (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES],
+  );
 }
 
 export function validateCaseId(caseID: string | number): number {

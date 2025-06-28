@@ -56,7 +56,7 @@ interface FieldInput {
   label: string;
   description: string;
   order: number;
-  options: any[];
+  options: string[];
   required: boolean;
 }
 
@@ -64,7 +64,11 @@ interface ViewInput {
   name: string;
   caseID: number;
   model: {
-    fields: any[];
+    fields: {
+      fieldId: number;
+      required?: boolean;
+      order?: number;
+    }[];
     layout: {
       type: string;
       columns: number;
@@ -125,9 +129,18 @@ function validateField(data: FieldInput) {
   if (typeof data.order !== "number") {
     throw new Error("Missing required field: order");
   }
-  if (!Array.isArray(data.options)) {
+
+  // Handle options that might be a string (from database) or array (from frontend)
+  if (typeof data.options === "string") {
+    try {
+      JSON.parse(data.options);
+    } catch {
+      throw new Error("Invalid options format");
+    }
+  } else if (!Array.isArray(data.options)) {
     throw new Error("Missing required field: options");
   }
+
   if (typeof data.required !== "boolean") {
     throw new Error("Missing required field: required");
   }
@@ -159,7 +172,12 @@ export async function GET(request: Request) {
     const id = searchParams.get("id");
     const caseID = searchParams.get(DB_COLUMNS.CASE_ID);
 
-    if (!table || !Object.values(DB_TABLES).includes(table as any)) {
+    if (
+      !table ||
+      !Object.values(DB_TABLES).includes(
+        table as (typeof DB_TABLES)[keyof typeof DB_TABLES],
+      )
+    ) {
       return NextResponse.json(
         { error: "Invalid table parameter" },
         { status: 400 },
@@ -271,6 +289,10 @@ export async function POST(request: Request) {
       }
 
       case DB_TABLES.FIELDS: {
+        console.log("=== Processing Field Creation ===");
+        console.log("Raw data received:", data);
+
+        const fieldData = data.data || data;
         const {
           type,
           name,
@@ -281,8 +303,27 @@ export async function POST(request: Request) {
           order,
           options,
           required,
-        } = data;
+        } = fieldData;
+
+        console.log("Destructured values:", {
+          type,
+          name,
+          inputCaseId,
+          label,
+          description,
+          order,
+          options,
+          required,
+          primary,
+        });
+
         if (!type || !name || !inputCaseId || !label) {
+          console.log("Validation failed - missing fields:", {
+            hasType: !!type,
+            hasName: !!name,
+            hasCaseId: !!inputCaseId,
+            hasLabel: !!label,
+          });
           return NextResponse.json(
             { error: "Type, name, caseID, and label are required" },
             { status: 400 },
@@ -356,7 +397,12 @@ export async function PUT(request: Request) {
       url: request.url,
     });
 
-    if (!table || !Object.values(DB_TABLES).includes(table as any)) {
+    if (
+      !table ||
+      !Object.values(DB_TABLES).includes(
+        table as (typeof DB_TABLES)[keyof typeof DB_TABLES],
+      )
+    ) {
       console.error("Invalid table parameter:", table);
       return NextResponse.json(
         { error: "Invalid table parameter" },
@@ -381,7 +427,8 @@ export async function PUT(request: Request) {
 
     switch (table) {
       case DB_TABLES.CASES: {
-        const { name, description, model } = data;
+        const caseData = data.data || data;
+        const { name, description, model } = caseData;
         console.log("Processing case update:", {
           name,
           description,
@@ -446,34 +493,47 @@ export async function PUT(request: Request) {
       }
 
       case DB_TABLES.FIELDS: {
-        validateField(data as FieldInput);
+        const fieldData = data.data || data;
+        validateField(fieldData as FieldInput);
         const validatedId = ensureIntegerId(id);
         const result = await pool.query(
           `UPDATE "${DB_TABLES.FIELDS}" SET
             name = $1,
             type = $2,
-            primary = $3,
+            "primary" = $3,
             caseid = $4,
             label = $5,
             description = $6,
-            order = $7,
+            "order" = $7,
             options = $8,
             required = $9
           WHERE id = $10 RETURNING *`,
           [
-            data.name,
-            data.type,
-            data.primary,
-            validateCaseId(data.caseID),
-            data.label,
-            data.description,
-            data.order,
-            data.options,
-            data.required,
+            fieldData.name,
+            fieldData.type,
+            fieldData.primary || false,
+            fieldData.caseID,
+            fieldData.label,
+            fieldData.description || "",
+            fieldData.order || 0,
+            fieldData.options
+              ? typeof fieldData.options === "string"
+                ? fieldData.options
+                : stringifyModel(fieldData.options)
+              : "[]",
+            fieldData.required || false,
             validatedId,
           ],
         );
-        return NextResponse.json(result.rows[0]);
+
+        if (result.rowCount === 0) {
+          return NextResponse.json(
+            { error: "Field not found" },
+            { status: 404 },
+          );
+        }
+
+        return NextResponse.json({ data: result.rows[0] });
       }
 
       case DB_TABLES.VIEWS: {
@@ -510,7 +570,12 @@ export async function DELETE(request: Request) {
     const table = searchParams.get("table");
     const id = searchParams.get("id");
 
-    if (!table || !Object.values(DB_TABLES).includes(table as any)) {
+    if (
+      !table ||
+      !Object.values(DB_TABLES).includes(
+        table as (typeof DB_TABLES)[keyof typeof DB_TABLES],
+      )
+    ) {
       return NextResponse.json(
         { error: "Invalid table parameter" },
         { status: 400 },

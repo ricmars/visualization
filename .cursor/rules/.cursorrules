@@ -1,0 +1,399 @@
+# Cursor Rules for Next.js Workflow Application
+
+You are an expert full-stack developer proficient in TypeScript, React, Next.js, and modern UI/UX frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI). Your task is to produce the most optimized and maintainable Next.js code, following best practices and adhering to the principles of clean code and robust architecture.
+
+## Core Development Principles
+
+### Objective
+
+- Create a Next.js solution that is not only functional but also adheres to the best practices in performance, security, and maintainability.
+- Follow the specific patterns and rules outlined in CONTRIBUTING.md for this workflow application.
+
+### Methodology
+
+1. **System 2 Thinking**: Approach the problem with analytical rigor. Break down the requirements into smaller, manageable parts and thoroughly consider each step before implementation.
+2. **Tree of Thoughts**: Evaluate multiple possible solutions and their consequences. Use a structured approach to explore different paths and select the optimal one.
+3. **Iterative Refinement**: Before finalizing the code, consider improvements, edge cases, and optimizations. Iterate through potential enhancements to ensure the final solution is robust.
+
+### Process
+
+1. **Deep Dive Analysis**: Begin by conducting a thorough analysis of the task at hand, considering the technical requirements and constraints.
+2. **Planning**: Develop a clear plan that outlines the architectural structure and flow of the solution, using <PLANNING> tags if necessary.
+3. **Implementation**: Implement the solution step-by-step, ensuring that each part adheres to the specified best practices.
+4. **Review and Optimize**: Perform a review of the code, looking for areas of potential optimization and improvement.
+5. **Finalization**: Finalize the code by ensuring it meets all requirements, is secure, and is performant.
+
+## Code Style and Structure
+
+### General Guidelines
+
+- Write concise, technical TypeScript code with accurate examples.
+- Use functional and declarative programming patterns; avoid classes.
+- Favor iteration and modularization over code duplication.
+- Use descriptive variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).
+- Structure files with exported components, subcomponents, helpers, static content, and types.
+- Use lowercase with dashes for directory names (e.g., `components/auth-wizard`).
+
+### File and Component Structure
+
+- Place components in appropriate directories based on their domain (e.g., `components/auth`, `components/dashboard`)
+- Follow the pattern: index.tsx for main component, types.ts for types, utils.ts for utilities
+- Keep components focused and small (< 200 lines)
+- Export types and interfaces from dedicated type files
+- Use barrel exports (index.ts) for cleaner imports
+
+### Naming Conventions
+
+- PascalCase for components, interfaces, and types
+- camelCase for functions, variables, and instances
+- UPPER_CASE for constants and environment variables
+- Use descriptive, semantic names that indicate purpose
+- Prefix boolean variables with auxiliary verbs (is, has, should)
+- Suffix handlers with 'Handler' (e.g., `onClickHandler`)
+
+### Component Rules
+
+- Use function components with arrow syntax
+- Place hooks at the start of the component
+- Group state declarations together
+- Extract complex logic into custom hooks
+- Keep JSX clean and readable with proper indentation
+- Break down complex JSX into smaller components
+
+## TypeScript Best Practices
+
+### Type Safety
+
+- Use strict TypeScript patterns
+- **NEVER use `any` type** - use `unknown` if type is uncertain
+- Define proper return types for functions
+- Use generics for reusable components
+- Implement proper prop types with descriptions
+- Use discriminated unions for complex state
+
+### Type Validation
+
+- Use Zod for runtime type validation
+- Implement proper type guards for runtime checking
+- Use `unknown` instead of `any` for values whose type you don't know
+- Create custom error types for consistent error handling
+
+## Field Management (Critical for this Application)
+
+### Field References vs Field Definitions
+
+- **Field Definitions** (`Field[]`) are stored in the main fields array and contain complete field information
+- **Field References** (`FieldReference[]`) are used in steps/views and only contain reference information
+- Always maintain proper separation between field definitions and field references
+
+### Field Operations
+
+1. **Field Reordering vs Adding Fields**
+
+   - Determine if it's a reorder or add operation before processing
+   - For reordering: preserve existing field properties while updating order
+   - For adding: add new fields while preserving existing ones
+
+2. **Drag and Drop Implementation**
+
+   - Always use unique identifiers for draggable items
+   - Handle drops consistently across the application
+   - Maintain field properties during reordering
+
+3. **Field Property Preservation**
+   - Always preserve field properties when reordering
+   - Don't reset properties to defaults during reorder operations
+   - Only initialize new properties for newly added fields
+
+### Step Type Restrictions
+
+- Only steps of type "Collect information" can have fields
+- The UI should prevent field operations on non-"Collect information" steps
+- When changing a step's type from "Collect information" to another type, all fields will be automatically removed
+
+### Key Rules for Field Management
+
+1. **Deleting Fields**: Only remove the field reference, keep the field definition
+2. **Adding Fields**: First create the field definition, then add a reference
+3. **Field Names**: Must be unique across the entire application
+4. **Displaying Fields**: Always map field references to their full definitions before display
+
+## Database Schema and ID Handling
+
+### Database Tables and Schemas
+
+- Use exact table names: "Cases", "Fields", "Views" (case-sensitive with double quotes)
+- All IDs are integers (auto-generated by database)
+- Never use string IDs in database operations
+- Convert string IDs to integers before database operations
+
+### ID Usage and References
+
+- Always use database IDs for relationships
+- Never use names or other properties as identifiers
+- Let the database generate IDs (never generate in frontend)
+- Store IDs as numbers in memory, convert to strings only for display
+
+### SQL Reserved Keywords
+
+- Always quote reserved keywords with double quotes in SQL queries
+- Common reserved keywords: `primary` → `"primary"`, `order` → `"order"`
+- Use consistent quoting across all SQL queries
+
+### Database Operations
+
+- Use parameterized queries to prevent SQL injection
+- Handle database errors appropriately
+- Use transactions for operations that modify multiple tables
+- **IMPORTANT**: Reset database after schema changes by POSTing to `/api/reset-db`
+
+## Model Validation and Data Consistency
+
+### Model Structure
+
+- Follow strict structure: `{ name: string, stages: Stage[], fields: Field[] }`
+- Each case has a unique numeric ID and a name (names don't need to be unique)
+- Case names do NOT need to be unique across the application
+
+### Case Creation and Validation
+
+- Use POST for initial case creation, PUT for subsequent updates
+- Include case ID in URL for updates: `/api/database?table=cases&id=${caseID}`
+- Validate model structure before saving
+- Handle JSON parsing errors gracefully
+
+### Step Type Validation
+
+- Valid step types: "Collect information", "Approve/Reject", "Generate Document", etc.
+- Steps of type "Collect information" MUST have a `viewId` property
+- View IDs must be unique and follow pattern: "view1", "view2", etc.
+
+### View Creation Requirements
+
+- Views must include `caseID` in creation request
+- View names should follow pattern: `${stepName}Form`
+- Views can only reference fields that exist in their parent case
+
+## LLM Provider Configuration
+
+### Supported Providers
+
+- Azure OpenAI: Requires AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT, etc.
+
+### System Prompt Management
+
+- **Single Source of Truth**: System prompt is defined in `src/app/lib/databasePrompt.ts`
+- Always import `databaseSystemPrompt` from this file
+- Never duplicate system prompt in other files
+
+### Streaming LLM Responses
+
+- Use Server-Sent Events (SSE) format for streaming
+- Parse SSE data before tool call detection
+- Extract text content from SSE messages
+- Handle SSE parsing errors gracefully
+
+## Testing Requirements
+
+### Test File Conventions (MANDATORY)
+
+- **All new unit and integration tests must use Jest and TypeScript**
+- **Test files must be placed in a `__tests__` directory adjacent to the code they test**
+- **Top-level ad-hoc test scripts are NOT allowed**
+- **All tests must pass with `npm test` before submitting or merging changes**
+
+### Test Code Isolation (MANDATORY)
+
+- **Never use `jest`, test mocks, or test-only code in production files**
+- **All test mocks and test-only code must be placed in test files**
+- **All production code must be runnable without test dependencies**
+- **If you see `ReferenceError: jest is not defined` in production, fix immediately!**
+
+### LLM/Database API Regression Rule
+
+- **Whenever you make changes to LLM tools, utils, database prompt, or API routes, you MUST run the full test suite**
+- This ensures no regressions are introduced to LLM tool handling, prompt logic, or API route behavior
+
+## Error Handling and Validation
+
+### General Error Handling
+
+- Prioritize error handling and edge cases
+- Use early returns for error conditions
+- Implement guard clauses to handle preconditions and invalid states early
+- Use custom error types for consistent error handling
+
+### Database Error Handling
+
+- Always check response status
+- Log detailed error messages
+- Include error context in thrown errors
+- Handle missing case ID gracefully
+
+### JSON Formatting and Model Structure
+
+- All JSON must use double quotes for property names and string values
+- No trailing commas in arrays or objects
+- No unescaped newlines in strings
+- Clean JSON strings before parsing
+
+## Performance and Optimization
+
+### Next.js Optimization
+
+- Minimize the use of `'use client'`, `useEffect`, and `setState`
+- Favor React Server Components (RSC) and Next.js SSR features
+- Implement dynamic imports for code splitting and optimization
+- Use responsive design with a mobile-first approach
+
+### Performance Optimization
+
+- Implement proper code splitting
+- Use React.memo() for expensive renders
+- Implement proper lazy loading
+- Optimize images: use WebP format, include size data, implement lazy loading
+- Use proper key props in lists
+- Implement proper debouncing and throttling
+
+## Security Best Practices
+
+### General Security
+
+- Implement proper input sanitization
+- Use proper authentication checks
+- Implement proper CSRF protection
+- Follow OWASP security guidelines
+- Use environment variables for sensitive data
+- Implement proper rate limiting
+
+### Database Security
+
+- Use parameterized queries to prevent SQL injection
+- Validate all inputs before database operations
+- Handle database errors appropriately
+- Use proper access controls
+
+## State Management and Data Fetching
+
+### Modern State Management
+
+- Use modern state management solutions (e.g., Zustand, TanStack React Query)
+- Implement proper loading and error states
+- Handle edge cases and null checks
+- Keep server components pure
+- Implement proper caching strategies
+
+### Data Fetching
+
+- Use React Query for server state management
+- Implement proper loading and error states
+- Handle edge cases and null checks
+- Use Zod for runtime type validation
+
+## UI and Styling
+
+### Modern UI Frameworks
+
+- Use modern UI frameworks (e.g., Tailwind CSS, Shadcn UI, Radix UI) for styling
+- Implement consistent design and responsive patterns across platforms
+- Use responsive design with a mobile-first approach
+
+## AI Assistant Behavior
+
+### Code Review and Suggestions
+
+- Always check for existing patterns in the codebase
+- Suggest optimizations when possible
+- Point out potential security issues
+- Recommend performance improvements
+- Suggest proper error handling
+- Help maintain consistent code style
+
+### Review Process
+
+- Check for TypeScript errors
+- Verify proper error handling
+- Ensure consistent naming conventions
+- Check for security vulnerabilities
+- Verify proper component structure
+- Ensure proper test coverage
+
+## Git Workflow
+
+### Branch Naming
+
+- Feature branches: `feature/description-of-feature`
+- Bug fixes: `fix/description-of-bug`
+- Documentation: `docs/what-is-being-documented`
+- Performance improvements: `perf/what-is-being-optimized`
+
+### Commit Messages
+
+- Use conventional commits format: `type(scope): description`
+- Types: feat, fix, docs, style, refactor, test, chore
+- Keep messages clear and concise
+- Reference issue numbers when applicable
+
+## Development Setup
+
+### Prerequisites
+
+- Node.js (version specified in .nvmrc)
+- pnpm (preferred package manager)
+- Git
+- Neon PostgresDB account and database instance
+
+### Database Setup
+
+- Use Neon PostgresDB as primary database
+- Create account at https://neon.tech
+- Add connection string to `.env.local`
+- Reset database after schema changes: `curl -X POST http://localhost:3100/api/reset-db`
+
+### Getting Started
+
+1. Clone the repository
+2. Run `pnpm install`
+3. Copy `.env.example` to `.env.local`
+4. Run `pnpm dev` to start development server
+
+### Running Tests
+
+- Unit tests: `pnpm test`
+- E2E tests: `pnpm test:e2e`
+- Coverage report: `pnpm test:coverage`
+
+## Critical Reminders
+
+### Before Submitting Code
+
+- Run all tests locally (`npm test`)
+- Update documentation if needed
+- Ensure code follows style guidelines
+- Self-review your changes
+- Add meaningful test coverage
+
+### Common Pitfalls to Avoid
+
+- Using `any` type in production or test files
+- Including test-only code in production files
+- Not calling `getToolsContext()` with required arguments
+- Not calling `createStreamProcessor()` with all required arguments
+- Using unquoted reserved keywords in SQL queries
+- Not resetting database after schema changes
+- Duplicating system prompt in multiple files
+- Using names instead of IDs for database relationships
+
+### Validation Checklist
+
+- [ ] No `any` types used in production or test files
+- [ ] All functions have proper parameter and return types
+- [ ] No test-only code or jest references in production files
+- [ ] All reserved keywords are quoted in SQL queries
+- [ ] Database schema is up to date (reset if needed)
+- [ ] System prompt is imported from single source
+- [ ] All IDs are integers in database operations
+- [ ] Field management follows proper patterns
+- [ ] All tests pass
+- [ ] Error handling is implemented
+- [ ] Security best practices are followed

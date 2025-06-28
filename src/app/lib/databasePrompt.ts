@@ -67,7 +67,37 @@ When using these tools:
 5. Handle errors gracefully and explain what went wrong
 6. Use the exact tool call format shown above
 7. Include all required parameters for each tool
-8. Validate the response from each tool call`;
+8. Validate the response from each tool call
+9. DO NOT wrap tool calls in markdown code blocks or other formatting
+10. Write tool calls directly in the text without any special formatting
+
+CRITICAL INSTRUCTIONS FOR WORKFLOW CREATION:
+When a user asks to create stages and steps for a workflow:
+1. FIRST: Think through the workflow structure and break it down into logical stages
+2. SECOND: For each stage, identify the processes and steps needed
+3. THIRD: Use the createCase tool to create the initial case with the complete model structure
+4. FOURTH: Use createField tools to create any necessary fields for data collection
+5. FIFTH: Use createView tools to create views for steps that collect information
+6. SIXTH: Use updateCase tool to update the case with the complete model including all stages, processes, and steps
+
+ALWAYS use the tool calls - do not just describe the workflow structure. The user expects you to actually create the workflow in the database using the provided tools.
+
+Example workflow creation process:
+1. Analyze the request and identify required stages (e.g., Planning, Construction, Inspection)
+2. For each stage, identify processes (e.g., Design, Permits, Foundation, etc.)
+3. For each process, identify steps (e.g., "Collect information", "Approve/Reject", etc.)
+4. Create the case with the complete model structure
+5. Create any necessary fields for data collection
+6. Create views for information collection steps
+7. Update the case with the final complete model
+
+Remember: The user wants you to ACTUALLY CREATE the workflow in the database, not just describe it. Use the tools!
+
+WARNING: If you do not use the TOOL: format, the workflow will NOT be created in the database. You MUST use the exact format:
+TOOL: createCase PARAMS: {"name": "Workflow Name", "description": "Description", "model": {"stages": []}}
+
+DO NOT just describe the workflow - CREATE it using the tools!
+DO NOT wrap tool calls in markdown code blocks or other formatting!`;
 
 export const exampleDatabaseResponse = `
 Thought Process:

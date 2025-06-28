@@ -31,7 +31,6 @@ import { MdNotifications } from "react-icons/md";
 import { BsGearFill } from "react-icons/bs";
 import StepConfigurationModal from "./StepConfigurationModal";
 import AddProcessModal from "./AddProcessModal";
-import StepForm from "./StepForm";
 
 interface WorkflowDiagramProps {
   stages: Stage[];
@@ -72,32 +71,6 @@ interface WorkflowDiagramProps {
     startIndex: number,
     endIndex: number,
   ) => void;
-}
-
-interface _StepConfigurationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  step: {
-    id: number;
-    stageId: number;
-    processId: number;
-    stepId: number;
-    name: string;
-    fields: Field[];
-    type: string;
-  };
-  fields: Field[];
-  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
-  onAddField: (field: {
-    label: string;
-    type: Field["type"];
-    options?: string[];
-    required?: boolean;
-    primary?: boolean;
-  }) => string;
-  onAddExistingField: (stepId: number, fieldIds: string[]) => void;
-  onUpdateField: (updates: Partial<Field>) => void;
-  onDeleteField: (fieldId: string) => void;
 }
 
 interface EditItem {
@@ -149,27 +122,6 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     type: string;
   } | null>(null);
 
-  const _getStageClass = (stage: Stage, index: number) => {
-    const baseClass =
-      "clip-path-chevron min-w-[var(--stage-min-width)] h-[var(--stage-height)] flex items-center justify-center p-4 text-white font-semibold text-shadow transition-all duration-500";
-    const positionClass = `stage-${index + 1}`;
-
-    let animationClass = "";
-    if (stage.isNew) {
-      animationClass = "animate-slide-in";
-    } else if (stage.isDeleting) {
-      animationClass = "animate-fade-out";
-    } else if (stage.isMoving) {
-      animationClass =
-        stage.moveDirection === "up" ? "animate-move-up" : "animate-move-down";
-    }
-
-    const activeClass =
-      activeStage === stage.id ? "ring-2 ring-white ring-opacity-70" : "";
-
-    return `${baseClass} ${positionClass} ${animationClass} ${activeClass}`;
-  };
-
   const getStepIcon = (stepType: string) => {
     // Map step types to appropriate icons
     switch (stepType) {
@@ -194,14 +146,6 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       default:
         return <BsGearFill className="text-gray-400" />;
     }
-  };
-
-  const _handleWorkflowUpdate = (updatedStages: Stage[]) => {
-    onStepsUpdate(updatedStages);
-  };
-
-  const _handleMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
   };
 
   // Add Process Modal handler
@@ -537,9 +481,6 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   };
 
   // Type guard to check if a field is a Field type
-  const isField = (field: Field | FieldReference): field is Field => {
-    return "value" in field && "type" in field && "label" in field;
-  };
 
   return (
     <div className={`p-6 ${_isDragging ? "cursor-grabbing" : ""}`}>

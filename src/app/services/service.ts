@@ -1,9 +1,5 @@
-import { Stage, Field } from "../types";
-import { databaseSystemPrompt } from "../lib/databasePrompt";
-import { fetchWithBaseUrl } from "../lib/fetchWithBaseUrl";
-
 export type ChatRole = "system" | "user" | "assistant";
-export type LLMProvider = "gemini" | "openai";
+export type LLMProvider = "openai";
 
 export interface ChatMessage {
   role: ChatRole;
@@ -18,6 +14,7 @@ export class Service {
   private static currentProvider: LLMProvider = "openai";
 
   static setProvider(provider: LLMProvider) {
+    console.log(`Setting provider to: ${provider}`);
     this.currentProvider = provider;
   }
 
@@ -26,39 +23,15 @@ export class Service {
   }
 
   static async generateResponse(prompt: string, systemContext: string) {
-    if (this.currentProvider === "gemini") {
-      return await this.generateGeminiResponse(prompt, systemContext);
-    } else {
-      return await this.generateOpenAIResponse(prompt, systemContext);
-    }
-  }
-
-  private static async generateGeminiResponse(
-    prompt: string,
-    systemContext: string,
-  ) {
-    const response = await fetch("/api/gemini", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt,
-        systemContext,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to generate response: ${response.statusText}`);
-    }
-
-    return response;
+    console.log(`Generating response with provider: ${this.currentProvider}`);
+    return await this.generateOpenAIResponse(prompt, systemContext);
   }
 
   private static async generateOpenAIResponse(
     prompt: string,
     systemContext: string,
   ) {
+    console.log("Calling OpenAI API...");
     const response = await fetch("/api/openai", {
       method: "POST",
       headers: {

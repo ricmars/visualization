@@ -36,7 +36,6 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   onUpdateField,
   onDeleteField,
   onAddExistingFieldToStep,
-  onFieldsReorder,
   selectedView,
   onViewSelect,
 }) => {
@@ -95,12 +94,6 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     return step.fields.map((f) => f.name);
   }, [selectedView, collectSteps]);
 
-  const handleEditField = (field: Field) => {
-    setEditingField({
-      ...field,
-    });
-  };
-
   const handleEditSubmit = (updates: {
     label: string;
     type: Field["type"];
@@ -119,30 +112,6 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     }
   };
 
-  const handleReorderFields = (startIndex: number, endIndex: number) => {
-    if (!onFieldsReorder || !selectedView) return;
-
-    // Create a new array with unique field references
-    const uniqueFieldsMap = new Map<string, Field>();
-
-    // First, add all fields to the map to ensure uniqueness
-    selectedViewFields.forEach((field) => {
-      if (!uniqueFieldsMap.has(field.name)) {
-        uniqueFieldsMap.set(field.name, field);
-      }
-    });
-
-    const uniqueFields = Array.from(uniqueFieldsMap.values());
-    const reorderedFields = Array.from(uniqueFields);
-    const [removed] = reorderedFields.splice(startIndex, 1);
-    reorderedFields.splice(endIndex, 0, removed);
-
-    onFieldsReorder(
-      selectedView,
-      reorderedFields.map((field) => field.name),
-    );
-  };
-
   // Update the click handler to use the prop
   const handleViewSelect = (viewName: string) => {
     if (onViewSelect) {
@@ -150,15 +119,15 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     }
   };
 
-  const handleFieldChange = (id: string, value: string) => {
+  const handleFieldChange = () => {
     // Implementation of onFieldChange
   };
 
-  const handleFieldsReorder = (startIndex: number, endIndex: number) => {
+  const handleFieldsReorder = () => {
     // Implementation of onFieldsReorder
   };
 
-  const onEditField = (field: Field) => {
+  const onEditField = () => {
     // Implementation of onEditField
   };
 
@@ -239,7 +208,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
                 <StepForm
                   fields={selectedViewFields}
                   onFieldChange={handleFieldChange}
-                  onDeleteField={onDeleteField}
+                  onDeleteField={onDeleteField ?? (() => {})}
                   onEditField={onEditField}
                   onReorderFields={handleFieldsReorder}
                 />

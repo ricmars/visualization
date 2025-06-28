@@ -6,7 +6,6 @@ const nextConfig = {
     AZURE_TENANT_ID: process.env.AZURE_TENANT_ID,
     AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
     AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
   },
   // Ensure environment variables are available at build time
@@ -16,7 +15,6 @@ const nextConfig = {
     AZURE_TENANT_ID: process.env.AZURE_TENANT_ID,
     AZURE_CLIENT_ID: process.env.AZURE_CLIENT_ID,
     AZURE_CLIENT_SECRET: process.env.AZURE_CLIENT_SECRET,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
   },
   // Validate required environment variables
@@ -28,7 +26,6 @@ const nextConfig = {
         "AZURE_TENANT_ID",
         "AZURE_CLIENT_ID",
         "AZURE_CLIENT_SECRET",
-        "GEMINI_API_KEY",
         "DATABASE_URL",
       ];
 

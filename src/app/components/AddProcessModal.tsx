@@ -1,16 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import React from "react";
 
 interface AddProcessModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddProcess: (processData: { name: string }) => void;
+  children?: React.ReactNode;
 }
 
 const AddProcessModal: React.FC<AddProcessModalProps> = ({
   isOpen,
   onClose,
   onAddProcess,
+  children,
 }) => {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +138,8 @@ const AddProcessModal: React.FC<AddProcessModalProps> = ({
                     placeholder="Enter process name"
                   />
                 </div>
+
+                {children}
 
                 <div className="flex justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                   <button

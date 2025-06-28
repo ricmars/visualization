@@ -139,8 +139,9 @@ describe("Workflow Operations", () => {
   describe("Process Operations", () => {
     it("should delete a process", async () => {
       // Remove all processes from the first stage
-      const updatedStages = currentModel.stages.map((stage: any, i: number) =>
-        i === 0 ? { ...stage, processes: [] } : stage,
+      const updatedStages = currentModel.stages.map(
+        (stage: { processes: unknown[]; [key: string]: unknown }, i: number) =>
+          i === 0 ? { ...stage, processes: [] } : stage,
       );
       const updatedModel = { ...currentModel, stages: updatedStages };
       const response = await fetch("/api/database?table=cases&id=1", {
@@ -168,10 +169,11 @@ describe("Workflow Operations", () => {
         order: 2,
         steps: [],
       };
-      const updatedStages = currentModel.stages.map((stage: any, i: number) =>
-        i === 0
-          ? { ...stage, processes: [...stage.processes, newProcess] }
-          : stage,
+      const updatedStages = currentModel.stages.map(
+        (stage: { processes: unknown[]; [key: string]: unknown }, i: number) =>
+          i === 0
+            ? { ...stage, processes: [...stage.processes, newProcess] }
+            : stage,
       );
       const updatedModel = { ...currentModel, stages: updatedStages };
       const response = await fetch("/api/database?table=cases&id=1", {
@@ -195,15 +197,25 @@ describe("Workflow Operations", () => {
   describe("Step Operations", () => {
     it("should delete a step", async () => {
       // Remove all steps from the first process of the first stage
-      const updatedStages = currentModel.stages.map((stage: any, i: number) =>
-        i === 0
-          ? {
-              ...stage,
-              processes: stage.processes.map((process: any, j: number) =>
-                j === 0 ? { ...process, steps: [] } : process,
-              ),
-            }
-          : stage,
+      const updatedStages = currentModel.stages.map(
+        (
+          stage: {
+            processes: { steps: unknown[]; [key: string]: unknown }[];
+            [key: string]: unknown;
+          },
+          i: number,
+        ) =>
+          i === 0
+            ? {
+                ...stage,
+                processes: stage.processes.map(
+                  (
+                    process: { steps: unknown[]; [key: string]: unknown },
+                    j: number,
+                  ) => (j === 0 ? { ...process, steps: [] } : process),
+                ),
+              }
+            : stage,
       );
       const updatedModel = { ...currentModel, stages: updatedStages };
       const response = await fetch("/api/database?table=cases&id=1", {
@@ -234,17 +246,28 @@ describe("Workflow Operations", () => {
         type: "Collect information",
         viewId: "2",
       };
-      const updatedStages = currentModel.stages.map((stage: any, i: number) =>
-        i === 0
-          ? {
-              ...stage,
-              processes: stage.processes.map((process: any, j: number) =>
-                j === 0
-                  ? { ...process, steps: [...process.steps, newStep] }
-                  : process,
-              ),
-            }
-          : stage,
+      const updatedStages = currentModel.stages.map(
+        (
+          stage: {
+            processes: { steps: unknown[]; [key: string]: unknown }[];
+            [key: string]: unknown;
+          },
+          i: number,
+        ) =>
+          i === 0
+            ? {
+                ...stage,
+                processes: stage.processes.map(
+                  (
+                    process: { steps: unknown[]; [key: string]: unknown },
+                    j: number,
+                  ) =>
+                    j === 0
+                      ? { ...process, steps: [...process.steps, newStep] }
+                      : process,
+                ),
+              }
+            : stage,
       );
       const updatedModel = { ...currentModel, stages: updatedStages };
       const response = await fetch("/api/database?table=cases&id=1", {
