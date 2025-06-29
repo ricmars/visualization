@@ -9,21 +9,20 @@ import {
 } from "@hello-pangea/dnd";
 import { FaGripVertical, FaTrash, FaPencilAlt } from "react-icons/fa";
 import { Field } from "../types";
+import { getFieldTypeDisplayName } from "../utils/fieldTypes";
 
-interface StepFormProps {
+interface FieldsListProps {
   fields: Field[];
   onDeleteField: (field: Field) => void;
   onReorderFields: (startIndex: number, endIndex: number) => void;
   onEditField: (field: Field) => void;
-  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
 }
 
-const StepForm: React.FC<StepFormProps> = ({
+const FieldsList: React.FC<FieldsListProps> = ({
   fields,
   onDeleteField,
   onReorderFields,
   onEditField,
-  onFieldChange: _onFieldChange,
 }) => {
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -39,7 +38,7 @@ const StepForm: React.FC<StepFormProps> = ({
   return (
     <div className="space-y-2">
       <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="step-fields">
+        <Droppable droppableId="fields-list">
           {(provided: DroppableProvided) => (
             <div
               {...provided.droppableProps}
@@ -65,11 +64,18 @@ const StepForm: React.FC<StepFormProps> = ({
                         <FaGripVertical className="w-4 h-4" />
                       </div>
                       <div className="flex-grow min-w-0">
-                        <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {field.label || field.name}
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                            {field.label}
+                          </div>
+                          {field.primary && (
+                            <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
+                              Primary
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          {field.type}
+                          Type: {getFieldTypeDisplayName(field.type)}
                         </div>
                       </div>
                       <div className="flex items-center space-x-1">
@@ -101,4 +107,4 @@ const StepForm: React.FC<StepFormProps> = ({
   );
 };
 
-export default StepForm;
+export default FieldsList;

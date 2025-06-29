@@ -53,34 +53,7 @@ export interface Case {
   id?: number;
   name: string;
   description: string;
-  model: {
-    stages: {
-      id: string;
-      name: string;
-      order: number;
-      processes: {
-        id: string;
-        name: string;
-        order: number;
-        steps: {
-          id: string;
-          type:
-            | "Collect information"
-            | "Approve/Reject"
-            | "Automation"
-            | "Create Case"
-            | "Decision"
-            | "Generate Document"
-            | "Generative AI"
-            | "Robotic Automation"
-            | "Send Notification";
-          viewId?: string; // Required if type is collect_information
-          name: string;
-          order: number;
-        }[];
-      }[];
-    }[];
-  };
+  model: string; // JSON string containing the workflow structure
 }
 
 export interface Condition {

@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 interface ViewsPanelProps {
   stages: Stage[];
   fields: Field[];
+  views: View[];
   onAddField?: (field: {
     label: string;
     type: Field["type"];
@@ -23,21 +24,33 @@ interface ViewsPanelProps {
   onViewSelect?: (view: string | null) => void;
 }
 
+interface View {
+  id: number;
+  name: string;
+  model: string;
+  caseID: number;
+}
+
 interface CollectStep {
+  id: string;
   name: string;
   stageName: string;
   fields: FieldReference[];
+  isDatabaseView?: boolean;
+  viewData?: View;
 }
 
 const ViewsPanel: React.FC<ViewsPanelProps> = ({
   stages,
   fields,
+  views: _views,
   onAddField,
   onUpdateField,
   onDeleteField,
   onAddExistingFieldToStep,
   selectedView,
   onViewSelect,
+  onFieldsReorder,
 }) => {
   const [isAddFieldOpen, setIsAddFieldOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
@@ -45,14 +58,15 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     null,
   ) as MutableRefObject<HTMLButtonElement>;
 
-  // Get all steps of type 'Collect information' and sort them alphabetically
+  // Get all steps of type 'Collect information' that have corresponding database views
   const collectSteps = useMemo(() => {
     const steps: CollectStep[] = [];
     stages.forEach((stage) => {
       stage.processes.forEach((process) => {
         process.steps.forEach((step) => {
-          if (step.type === "Collect information") {
+          if (step.type === "Collect information" && step.viewId) {
             steps.push({
+              id: `${stage.name}-${step.name}`, // Create unique ID for steps
               name: step.name,
               stageName: stage.name,
               fields: step.fields || [],
@@ -61,38 +75,141 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
         });
       });
     });
-    return steps.sort((a, b) => a.name.localeCompare(b.name));
+    return steps;
   }, [stages]);
+
+  // Get all views from database
+  const databaseViews = useMemo(() => {
+    if (!_views || _views.length === 0) return [];
+
+    return _views.map((view) => ({
+      id: `db-${view.id}`, // Use database ID for database views
+      name: view.name,
+      stageName: "Database View",
+      fields: [], // We'll parse these from the view model
+      isDatabaseView: true,
+      viewData: view,
+    }));
+  }, [_views]);
+
+  // Combine database views and linked steps, prioritizing database views
+  const allViews = useMemo(() => {
+    // Create a map of database view names to avoid duplicates
+    const databaseViewNames = new Set(databaseViews.map((v) => v.name));
+
+    // Add steps that don't have corresponding database views (should be rare)
+    const unlinkedSteps = collectSteps.filter(
+      (step) => !databaseViewNames.has(step.name),
+    );
+
+    // Sort database views alphabetically, but keep workflow steps in their natural order
+    const sortedDatabaseViews = databaseViews.sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+
+    // Only include database views and unlinked steps
+    const combined = [...sortedDatabaseViews, ...unlinkedSteps];
+    return combined;
+  }, [collectSteps, databaseViews]);
 
   // Get the fields for the selected view
   const selectedViewFields = useMemo(() => {
     if (!selectedView) return [];
-    const step = collectSteps.find((s) => s.name === selectedView);
-    if (!step) return [];
 
-    // Create a map to store unique fields by name
-    const uniqueFieldsMap = new Map<string, Field>();
-
-    step.fields.forEach((fieldRef) => {
-      // Only add the field if it hasn't been added yet
-      if (!uniqueFieldsMap.has(fieldRef.name)) {
-        const field = fields.find((f) => f.name === fieldRef.name);
-        if (field) {
-          uniqueFieldsMap.set(fieldRef.name, { ...field, ...fieldRef });
+    // First try to find it as a database view
+    const databaseView = allViews.find(
+      (v) => v.id === selectedView && v.isDatabaseView,
+    );
+    if (databaseView && databaseView.viewData) {
+      try {
+        const viewModel = JSON.parse(databaseView.viewData.model);
+        if (viewModel.fields && Array.isArray(viewModel.fields)) {
+          // Map field IDs to actual field objects
+          const viewFields: Field[] = [];
+          viewModel.fields.forEach(
+            (fieldRef: {
+              fieldId: number;
+              required?: boolean;
+              order?: number;
+            }) => {
+              const field = fields.find((f) => f.id === fieldRef.fieldId);
+              if (field) {
+                viewFields.push({
+                  ...field,
+                  required: fieldRef.required || false,
+                  order: fieldRef.order || 0,
+                });
+              }
+            },
+          );
+          return viewFields.sort((a, b) => (a.order || 0) - (b.order || 0));
         }
+      } catch (error) {
+        console.error("Error parsing view model:", error);
       }
-    });
+    }
 
-    return Array.from(uniqueFieldsMap.values());
-  }, [selectedView, collectSteps, fields]);
+    // If not found as a database view, try to find it as a linked step
+    const step = collectSteps.find((s) => s.id === selectedView);
+    if (step) {
+      // Create a map to store unique fields by name
+      const uniqueFieldsMap = new Map<string, Field>();
+
+      step.fields.forEach((fieldRef) => {
+        // Only add the field if it hasn't been added yet
+        if (!uniqueFieldsMap.has(fieldRef.name)) {
+          const field = fields.find((f) => f.name === fieldRef.name);
+          if (field) {
+            uniqueFieldsMap.set(fieldRef.name, { ...field, ...fieldRef });
+          }
+        }
+      });
+
+      // Sort fields by their order from the database
+      return Array.from(uniqueFieldsMap.values()).sort((a, b) => {
+        const orderA = a.order || 0;
+        const orderB = b.order || 0;
+        return orderA - orderB;
+      });
+    }
+
+    return [];
+  }, [selectedView, collectSteps, fields, allViews]);
 
   // Get the field IDs that are already in the selected view
   const selectedViewFieldIds = useMemo(() => {
     if (!selectedView) return [];
-    const step = collectSteps.find((s) => s.name === selectedView);
-    if (!step) return [];
-    return step.fields.map((f) => f.name);
-  }, [selectedView, collectSteps]);
+
+    // First try to find it as a database view
+    const databaseView = allViews.find(
+      (v) => v.id === selectedView && v.isDatabaseView,
+    );
+    if (databaseView && databaseView.viewData) {
+      try {
+        const viewModel = JSON.parse(databaseView.viewData.model);
+        if (viewModel.fields && Array.isArray(viewModel.fields)) {
+          const fieldNames: string[] = [];
+          viewModel.fields.forEach((fieldRef: { fieldId: number }) => {
+            const field = fields.find((f) => f.id === fieldRef.fieldId);
+            if (field && field.name) {
+              fieldNames.push(field.name);
+            }
+          });
+          return fieldNames;
+        }
+      } catch (error) {
+        console.error("Error parsing view model:", error);
+      }
+    }
+
+    // If not found as a database view, try to find it as a linked step
+    const step = collectSteps.find((s) => s.id === selectedView);
+    if (step) {
+      return step.fields.map((f) => f.name);
+    }
+
+    return [];
+  }, [selectedView, collectSteps, fields, allViews]);
 
   const handleEditSubmit = (updates: {
     label: string;
@@ -113,9 +230,9 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   };
 
   // Update the click handler to use the prop
-  const handleViewSelect = (viewName: string) => {
+  const handleViewSelect = (viewId: string) => {
     if (onViewSelect) {
-      onViewSelect(viewName);
+      onViewSelect(viewId);
     }
   };
 
@@ -123,12 +240,23 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     // Implementation of onFieldChange
   };
 
-  const handleFieldsReorder = () => {
-    // Implementation of onFieldsReorder
+  const handleFieldsReorder = (startIndex: number, endIndex: number) => {
+    if (!selectedView || !onFieldsReorder) return;
+
+    // Get the current field order
+    const currentFieldIds = selectedViewFields.map((field) => field.name);
+
+    // Reorder the fields
+    const reorderedFieldIds = Array.from(currentFieldIds);
+    const [removed] = reorderedFieldIds.splice(startIndex, 1);
+    reorderedFieldIds.splice(endIndex, 0, removed);
+
+    // Call the parent handler with the reordered field IDs
+    onFieldsReorder(selectedView, reorderedFieldIds);
   };
 
-  const onEditField = () => {
-    // Implementation of onEditField
+  const onEditField = (field: Field) => {
+    setEditingField(field);
   };
 
   return (
@@ -136,25 +264,27 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
       {/* Master View - List of Collect Information Steps */}
       <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
         <div className="p-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
-            Views
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              Views
+            </h3>
+          </div>
           <div className="space-y-2">
-            {collectSteps.map((step) => (
+            {allViews.map((view) => (
               <button
-                key={step.name}
-                onClick={() => handleViewSelect(step.name)}
+                key={view.id}
+                onClick={() => handleViewSelect(view.id)}
                 className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  selectedView === step.name
+                  selectedView === view.id
                     ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
                     : "hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
               >
                 <div className="font-medium text-gray-900 dark:text-gray-100">
-                  {step.name}
+                  {view.name}
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {step.stageName}
+                  {view.stageName}
                 </div>
               </button>
             ))}
@@ -168,7 +298,8 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                {selectedView}
+                {allViews.find((v) => v.id === selectedView)?.name ||
+                  selectedView}
               </h3>
               <Tooltip content="Add new field">
                 <motion.button
@@ -225,14 +356,14 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
       <AddFieldModal
         isOpen={isAddFieldOpen}
         onClose={() => setIsAddFieldOpen(false)}
-        onAddField={(field) => {
+        onAddField={async (field) => {
           if (onAddField) {
-            const newFieldName = onAddField({
+            const fieldName = onAddField({
               ...field,
               primary: field.primary ?? false,
             });
             if (selectedView && onAddExistingFieldToStep) {
-              onAddExistingFieldToStep(selectedView, [newFieldName]);
+              onAddExistingFieldToStep(selectedView, [fieldName]);
             }
           }
         }}

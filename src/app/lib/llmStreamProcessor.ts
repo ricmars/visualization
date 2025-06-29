@@ -1,4 +1,4 @@
-import { StreamProcessor, extractToolCall } from "./llmUtils";
+import { StreamProcessor } from "./llmUtils";
 
 export interface LLMStreamConfig {
   model: string;
@@ -47,111 +47,18 @@ export class SharedLLMStreamProcessor implements LLMStreamProcessor {
           accumulatedText += chunkText;
           console.log("Accumulated text:", accumulatedText);
 
-          // Process all tool calls in the accumulated text
-          let toolCallProcessed = false;
-          let remainingText = accumulatedText;
+          // DISABLED: Text-based tool call processing
+          // Since we're using OpenAI function calling, we don't need to process text-based tool calls
+          // This prevents errors from malformed text-based tool calls
 
-          while (true) {
-            const toolCall = extractToolCall(remainingText);
-            if (toolCall) {
-              console.log("Tool call detected:", toolCall);
-              try {
-                await processor.processToolCall(
-                  toolCall.toolName,
-                  toolCall.params,
-                );
-              } catch (error) {
-                console.error("Error in processToolCall:", error);
-                if (config.onError) {
-                  config.onError(
-                    error instanceof Error ? error : new Error(String(error)),
-                  );
-                }
-                await processor.sendError(
-                  error instanceof Error ? error.message : String(error),
-                );
-                // Continue processing other tool calls or text
-              }
-              toolCallProcessed = true;
-
-              // Remove the processed tool call from the remaining text
-              // Use a more flexible approach to handle different JSON formatting
-              const toolCallRegex = new RegExp(
-                `TOOL:\\s*${toolCall.toolName}\\s+PARAMS:\\s*{[\s\S]*?}\\s*(?:\\n|$)`,
-                "g",
-              );
-              remainingText = remainingText.replace(toolCallRegex, "");
-
-              // If the text didn't change, break to prevent infinite loop
-              if (remainingText === accumulatedText) {
-                console.warn(
-                  "Tool call removal failed, breaking to prevent infinite loop",
-                );
-                break;
-              }
-            } else {
-              break;
-            }
-          }
-
-          // If we processed tool calls, update accumulated text to remaining text
-          if (toolCallProcessed) {
-            accumulatedText = remainingText;
-          } else {
-            // If no tool call was found, process as regular text
-            await processor.processChunk(chunkText);
-          }
+          // Process as regular text only
+          await processor.processChunk(chunkText);
         }
       }
 
-      // Check for any remaining tool calls at the end of the stream
-      if (accumulatedText) {
-        let remainingText = accumulatedText;
-
-        while (true) {
-          const finalToolCall = extractToolCall(remainingText);
-          if (finalToolCall) {
-            console.log("Final tool call detected:", finalToolCall);
-            try {
-              await processor.processToolCall(
-                finalToolCall.toolName,
-                finalToolCall.params,
-              );
-            } catch (error) {
-              console.error("Error in processToolCall:", error);
-              if (config.onError) {
-                config.onError(
-                  error instanceof Error ? error : new Error(String(error)),
-                );
-              }
-              await processor.sendError(
-                error instanceof Error ? error.message : String(error),
-              );
-            }
-
-            // Remove the processed tool call
-            const toolCallRegex = new RegExp(
-              `TOOL:\\s*${finalToolCall.toolName}\\s+PARAMS:\\s*{[\s\S]*?}\\s*(?:\\n|$)`,
-              "g",
-            );
-            remainingText = remainingText.replace(toolCallRegex, "");
-
-            // If the text didn't change, break to prevent infinite loop
-            if (remainingText === accumulatedText) {
-              console.warn(
-                "Final tool call removal failed, breaking to prevent infinite loop",
-              );
-              break;
-            }
-          } else {
-            break;
-          }
-        }
-
-        // Process any remaining text
-        if (remainingText.trim()) {
-          await processor.processChunk(remainingText);
-        }
+      // Process any remaining text at the end of the stream
+      if (accumulatedText.trim()) {
+        await processor.processChunk(accumulatedText);
       }
 
       await processor.sendDone();

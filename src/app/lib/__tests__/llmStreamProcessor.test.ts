@@ -1,15 +1,5 @@
 import { SharedLLMStreamProcessor } from "../llmStreamProcessor";
-import { StreamProcessor, extractToolCall } from "../llmUtils";
-
-// Mock extractToolCall to control its behavior in tests
-jest.mock("../llmUtils", () => ({
-  ...jest.requireActual("../llmUtils"),
-  extractToolCall: jest.fn(),
-}));
-
-const mockExtractToolCall = extractToolCall as jest.MockedFunction<
-  typeof extractToolCall
->;
+import { StreamProcessor } from "../llmUtils";
 
 // Define proper types for test configuration
 interface MockExtractTextConfig {
@@ -50,7 +40,6 @@ describe("SharedLLMStreamProcessor", () => {
       mockConfig.extractText
         .mockResolvedValueOnce("Hello")
         .mockResolvedValueOnce(" World");
-      mockExtractToolCall.mockReturnValue(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
@@ -59,85 +48,66 @@ describe("SharedLLMStreamProcessor", () => {
       expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
     });
 
-    it("should process tool calls and remove them from accumulated text", async () => {
-      const stream = async function* () {
-        yield { text: 'TOOL: createCase PARAMS: {"name": "test"}' };
-      };
-
-      mockConfig.extractText.mockResolvedValue(
-        'TOOL: createCase PARAMS: {"name": "test"}',
-      );
-      mockExtractToolCall
-        .mockReturnValueOnce({
-          toolName: "createCase",
-          params: { name: "test" },
-        })
-        .mockReturnValueOnce(null);
-
-      await processor.processStream(stream(), mockStreamProcessor, mockConfig);
-
-      expect(mockStreamProcessor.processToolCall).toHaveBeenCalledWith(
-        "createCase",
-        { name: "test" },
-      );
-      expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
-    });
-
-    it("should process multiple tool calls in sequence", async () => {
+    it("should process text chunks containing tool call patterns as regular text", async () => {
       const stream = async function* () {
         yield {
-          text: 'TOOL: createCase PARAMS: {"name": "test1"}\nTOOL: createField PARAMS: {"name": "field1"}',
+          text: 'TOOL: saveCase PARAMS: {"name": "test"}',
         };
       };
 
       mockConfig.extractText.mockResolvedValue(
-        'TOOL: createCase PARAMS: {"name": "test1"}\nTOOL: createField PARAMS: {"name": "field1"}',
+        'TOOL: saveCase PARAMS: {"name": "test"}',
       );
-      mockExtractToolCall
-        .mockReturnValueOnce({
-          toolName: "createCase",
-          params: { name: "test1" },
-        })
-        .mockReturnValueOnce({
-          toolName: "createField",
-          params: { name: "field1" },
-        })
-        .mockReturnValueOnce(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
-      expect(mockStreamProcessor.processToolCall).toHaveBeenCalledWith(
-        "createCase",
-        { name: "test1" },
+      // Should process as regular text, not as tool calls
+      expect(mockStreamProcessor.processChunk).toHaveBeenCalledWith(
+        'TOOL: saveCase PARAMS: {"name": "test"}',
       );
-      expect(mockStreamProcessor.processToolCall).toHaveBeenCalledWith(
-        "createField",
-        { name: "field1" },
-      );
+      expect(mockStreamProcessor.processToolCall).not.toHaveBeenCalled();
       expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
     });
 
-    it("should handle mixed text and tool calls", async () => {
+    it("should process multiple text chunks with tool call patterns as regular text", async () => {
       const stream = async function* () {
-        yield { text: 'Hello TOOL: createCase PARAMS: {"name": "test"} World' };
+        yield {
+          text: 'TOOL: saveCase PARAMS: {"name": "test1"}\nTOOL: saveField PARAMS: {"name": "field1"}',
+        };
       };
 
       mockConfig.extractText.mockResolvedValue(
-        'Hello TOOL: createCase PARAMS: {"name": "test"} World',
+        'TOOL: saveCase PARAMS: {"name": "test1"}\nTOOL: saveField PARAMS: {"name": "field1"}',
       );
-      mockExtractToolCall
-        .mockReturnValueOnce({
-          toolName: "createCase",
-          params: { name: "test" },
-        })
-        .mockReturnValueOnce(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
-      expect(mockStreamProcessor.processToolCall).toHaveBeenCalledWith(
-        "createCase",
-        { name: "test" },
+      // Should process as regular text, not as tool calls
+      expect(mockStreamProcessor.processChunk).toHaveBeenCalledWith(
+        'TOOL: saveCase PARAMS: {"name": "test1"}\nTOOL: saveField PARAMS: {"name": "field1"}',
       );
+      expect(mockStreamProcessor.processToolCall).not.toHaveBeenCalled();
+      expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
+    });
+
+    it("should handle mixed text and tool call patterns as regular text", async () => {
+      const stream = async function* () {
+        yield {
+          text: 'Hello TOOL: saveCase PARAMS: {"name": "test"} World',
+        };
+      };
+
+      mockConfig.extractText.mockResolvedValue(
+        'Hello TOOL: saveCase PARAMS: {"name": "test"} World',
+      );
+
+      await processor.processStream(stream(), mockStreamProcessor, mockConfig);
+
+      // Should process as regular text, not as tool calls
+      expect(mockStreamProcessor.processChunk).toHaveBeenCalledWith(
+        'Hello TOOL: saveCase PARAMS: {"name": "test"} World',
+      );
+      expect(mockStreamProcessor.processToolCall).not.toHaveBeenCalled();
       expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
     });
 
@@ -150,7 +120,6 @@ describe("SharedLLMStreamProcessor", () => {
       mockConfig.extractText
         .mockResolvedValueOnce("")
         .mockResolvedValueOnce("Hello");
-      mockExtractToolCall.mockReturnValue(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
@@ -167,7 +136,6 @@ describe("SharedLLMStreamProcessor", () => {
       mockConfig.extractText
         .mockResolvedValueOnce(undefined)
         .mockResolvedValueOnce("Hello");
-      mockExtractToolCall.mockReturnValue(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
@@ -190,47 +158,16 @@ describe("SharedLLMStreamProcessor", () => {
       );
     });
 
-    it("should handle errors in processToolCall", async () => {
-      const stream = async function* () {
-        yield { text: 'TOOL: createCase PARAMS: {"name": "test"}' };
-      };
-
-      mockConfig.extractText.mockResolvedValue(
-        'TOOL: createCase PARAMS: {"name": "test"}',
-      );
-      mockExtractToolCall.mockReturnValue({
-        toolName: "createCase",
-        params: { name: "test" },
-      });
-      mockStreamProcessor.processToolCall.mockRejectedValue(
-        new Error("Tool execution error"),
-      );
-
-      await processor.processStream(stream(), mockStreamProcessor, mockConfig);
-
-      expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
-    });
-
-    it("should process remaining tool calls at end of stream", async () => {
+    it("should process remaining text at end of stream", async () => {
       const stream = async function* () {
         yield { text: "Hello" };
       };
 
       mockConfig.extractText.mockResolvedValue("Hello");
-      mockExtractToolCall
-        .mockReturnValueOnce(null) // First call during stream processing
-        .mockReturnValueOnce({
-          toolName: "createCase",
-          params: { name: "test" },
-        }) // Final call
-        .mockReturnValueOnce(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 
-      expect(mockStreamProcessor.processToolCall).toHaveBeenCalledWith(
-        "createCase",
-        { name: "test" },
-      );
+      expect(mockStreamProcessor.processChunk).toHaveBeenCalledWith("Hello");
       expect(mockStreamProcessor.sendDone).toHaveBeenCalled();
     });
 
@@ -245,7 +182,6 @@ describe("SharedLLMStreamProcessor", () => {
         .mockResolvedValueOnce("Hello")
         .mockResolvedValueOnce("World")
         .mockResolvedValueOnce("!");
-      mockExtractToolCall.mockReturnValue(null);
 
       await processor.processStream(stream(), mockStreamProcessor, mockConfig);
 

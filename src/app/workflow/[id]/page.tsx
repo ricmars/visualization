@@ -6,29 +6,28 @@ import WorkflowDiagram from "../../components/WorkflowDiagram";
 import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
 import { Service } from "../../services/service";
 import {
-  Stage,
   Field,
+  FieldReference,
+  Stage,
   Process,
   Step,
-  FieldReference,
-  Checkpoint,
   WorkflowModel,
   StepType,
+  Checkpoint,
 } from "../../types";
-import type { View } from "../../types/rules";
 import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import ViewsPanel from "../../components/ViewsPanel";
+import FieldsList from "../../components/FieldsList";
 import { FaPencilAlt } from "react-icons/fa";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
-import { getFieldTypeDisplayName } from "../../utils/fieldTypes";
+import { DB_TABLES, DB_COLUMNS } from "../../types/database";
+import { fetchWithBaseUrl } from "../../lib/fetchWithBaseUrl";
 import ChangesPanel from "../../components/ChangesPanel";
 import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
-import { DB_TABLES, DB_COLUMNS } from "../../types/database";
-import { fetchWithBaseUrl } from "../../lib/fetchWithBaseUrl";
 
 const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
@@ -44,20 +43,25 @@ interface DatabaseCase {
 
 interface WorkflowState {
   stages: Stage[];
-  fields: Field[];
 }
 
 interface ComposedModel {
   name: string;
   description?: string;
-  fields: Field[];
   stages: Stage[];
-  views: View[];
+}
+
+// Local View interface for this component
+interface View {
+  id: number;
+  name: string;
+  model: string;
+  caseID: number;
 }
 
 async function fetchCaseData(caseID: string): Promise<ComposedModel> {
   try {
-    // Fetch case data
+    // Fetch the case data
     const caseResponse = await fetchWithBaseUrl(
       `/api/database?table=${DB_TABLES.CASES}&id=${caseID}`,
     );
@@ -65,74 +69,20 @@ async function fetchCaseData(caseID: string): Promise<ComposedModel> {
       throw new Error(`Failed to fetch case: ${caseResponse.status}`);
     }
     const caseData = await caseResponse.json();
-    const selectedCase = caseData.data; // Get the case directly, not from an array
+    const selectedCase: DatabaseCase = caseData.data;
 
     if (!selectedCase) {
       throw new Error("Case not found");
     }
 
-    // Fetch fields for this case
-    const fieldsResponse = await fetchWithBaseUrl(
-      `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${caseID}`,
-    );
-    if (!fieldsResponse.ok) {
-      throw new Error(`Failed to fetch fields: ${fieldsResponse.status}`);
-    }
-    const fieldsData = await fieldsResponse.json();
-    const fields: Field[] = fieldsData.data;
-
-    // Fetch views for this case
-    const viewsResponse = await fetchWithBaseUrl(
-      `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${caseID}`,
-    );
-    if (!viewsResponse.ok) {
-      throw new Error(`Failed to fetch views: ${viewsResponse.status}`);
-    }
-    const viewsData = await viewsResponse.json();
-    const views: View[] = viewsData.data;
-
     // Parse the model from the case data
     const parsedModel = JSON.parse(selectedCase.model);
-
-    // Link views to steps that reference them
-    const stages =
-      parsedModel.stages?.map((stage: Stage) => ({
-        ...stage,
-        processes: stage.processes.map((process: Process) => ({
-          ...process,
-          steps: process.steps.map((step: Step) => {
-            if (step.type === "Collect information" && step.fields) {
-              const view = views.find(
-                (v: View) => v.id === step.fields?.[0]?.name,
-              );
-              if (view) {
-                return {
-                  ...step,
-                  fields: view.model.fields.map(
-                    (fieldRef: { fieldId: number; required: boolean }) => ({
-                      name: fieldRef.fieldId.toString(),
-                      required: fieldRef.required,
-                    }),
-                  ),
-                };
-              }
-            }
-            return step;
-          }),
-        })),
-      })) || [];
 
     // Compose the complete model
     const composedModel: ComposedModel = {
       name: selectedCase.name,
       description: selectedCase.description,
-      fields: fields.map((field: Field) => ({
-        ...field,
-        label: field.name, // Use name as label if not provided
-        value: field.value || undefined, // Initialize empty value
-      })),
-      stages,
-      views,
+      stages: parsedModel.stages || [],
     };
 
     return composedModel;
@@ -150,6 +100,8 @@ export default function WorkflowPage() {
 
   // 2. All useState hooks
   const [model, setModel] = useState<ComposedModel | null>(null);
+  const [fields, setFields] = useState<Field[]>([]);
+  const [views, setViews] = useState<View[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<DatabaseCase | null>(null);
@@ -180,7 +132,6 @@ export default function WorkflowPage() {
     string | null
   >(null);
   const [selectedView, setSelectedView] = useState<string | null>(null);
-  const [newStageName, setNewStageName] = useState("");
   const [newProcessName, setNewProcessName] = useState("");
 
   // 3. All useRef hooks
@@ -189,15 +140,14 @@ export default function WorkflowPage() {
 
   // 4. useMemo hook
   const workflowModel: WorkflowState = useMemo(() => {
-    if (!selectedCase || !model) {
-      return { stages: [], fields: [] };
+    if (!model) {
+      return { stages: [] };
     }
-    const parsed = JSON.parse(selectedCase.model) as Partial<WorkflowModel>;
+
     return {
-      stages: parsed.stages || [],
-      fields: model.fields || [], // Use fields from the composed model instead of parsed model
+      stages: model.stages || [],
     };
-  }, [selectedCase, model]);
+  }, [model]);
 
   // 5. All useEffect hooks
   // Load saved tab from localStorage after initial render
@@ -269,11 +219,32 @@ export default function WorkflowPage() {
   }, [id]);
 
   // Load workflow data function
-  const loadWorkflow = async () => {
+  const loadWorkflow = useCallback(async () => {
     try {
       setLoading(true);
       const composedModel = await fetchCaseData(id);
       setModel(composedModel);
+
+      // Load fields separately
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${id}`,
+      );
+      let fieldsData: Field[] = [];
+      if (fieldsResponse.ok) {
+        const fieldsResult = await fieldsResponse.json();
+        fieldsData = fieldsResult.data;
+        setFields(fieldsData);
+      }
+
+      // Load views separately
+      const viewsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
+      );
+      if (viewsResponse.ok) {
+        const viewsData = await viewsResponse.json();
+        setViews(viewsData.data);
+      }
+
       setError(null);
     } catch (err) {
       console.error("Error loading workflow:", err);
@@ -281,12 +252,13 @@ export default function WorkflowPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
 
   // Load workflow data
   useEffect(() => {
+    fetchCase();
     loadWorkflow();
-  }, [id, fetchCase]);
+  }, [id]);
 
   // Handle iframe creation
   useEffect(() => {
@@ -371,7 +343,6 @@ export default function WorkflowPage() {
         ...JSON.parse(selectedCase.model),
         stages: updatedStages,
         name: selectedCase.name,
-        views: model?.views || [],
       };
 
       const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
@@ -426,7 +397,7 @@ export default function WorkflowPage() {
         prev
           ? {
               ...prev,
-              stages: updatedStages,
+              stages: updatedModel.stages,
             }
           : null,
       );
@@ -435,7 +406,7 @@ export default function WorkflowPage() {
       console.log("New Model:", {
         name: selectedCase.name,
         description: selectedCase.description,
-        stages: updatedStages.length,
+        stages: updatedModel.stages.length,
       });
     } catch (error) {
       console.error("=== Error in Steps Update ===");
@@ -457,14 +428,14 @@ export default function WorkflowPage() {
   }): string => {
     if (!selectedCase) return "";
 
-    // Generate a temporary field ID
-    const tempFieldId = `temp-${Date.now()}`;
+    // Generate the actual field name
+    const fieldName = field.label.toLowerCase().replace(/\s+/g, "_");
 
     // Start the async operation in the background
     (async () => {
       try {
         const fieldData = {
-          name: field.label.toLowerCase().replace(/\s+/g, "_"),
+          name: fieldName,
           type: field.type,
           label: field.label,
           required: field.required ?? false,
@@ -514,57 +485,13 @@ export default function WorkflowPage() {
           throw new Error("Failed to add field");
         }
 
-        const { data } = await response.json();
-
-        // Update the model with the real field ID
-        const currentModel = JSON.parse(selectedCase.model);
-        const updatedFields = (currentModel.fields || []).map((f: Field) =>
-          f.name === tempFieldId ? { ...f, name: data.id } : f,
+        // Refresh the fields state
+        const fieldsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
         );
-
-        const updatedModel = {
-          ...currentModel,
-          fields: updatedFields,
-        };
-
-        // Update the case with the modified model
-        const updateResponse = await fetch(
-          `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              table: DB_TABLES.CASES,
-              data: {
-                id: selectedCase.id,
-                name: selectedCase.name,
-                description: selectedCase.description,
-                model: JSON.stringify(updatedModel),
-              },
-            }),
-          },
-        );
-
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error("=== Case Update Failed ===");
-          console.error("Status:", updateResponse.status);
-          console.error("Status Text:", updateResponse.statusText);
-          console.error("Error Response:", errorText);
-          console.error("Request Data:", {
-            table: DB_TABLES.CASES,
-            data: {
-              id: selectedCase.id,
-              name: selectedCase.name,
-              description: selectedCase.description,
-              model: JSON.stringify(updatedModel),
-            },
-          });
-          throw new Error(
-            `Failed to update case: ${updateResponse.status} ${errorText}`,
-          );
+        if (fieldsResponse.ok) {
+          const fieldsData = await fieldsResponse.json();
+          setFields(fieldsData.data);
         }
 
         // Refresh the model
@@ -576,14 +503,23 @@ export default function WorkflowPage() {
       }
     })();
 
-    return tempFieldId;
+    return fieldName;
   };
 
   const handleUpdateField = async (updates: Partial<Field>) => {
     if (!selectedCase || !editingField || !editingField.id) {
       console.error("Missing required data for field update:", {
-        selectedCase,
-        editingField,
+        selectedCase: selectedCase
+          ? { id: selectedCase.id, name: selectedCase.name }
+          : null,
+        editingField: editingField
+          ? {
+              id: editingField.id,
+              name: editingField.name,
+              label: editingField.label,
+              type: editingField.type,
+            }
+          : null,
       });
       return;
     }
@@ -666,7 +602,9 @@ export default function WorkflowPage() {
       const currentModel = JSON.parse(selectedCase.model);
       const updatedModel = {
         ...currentModel,
-        fields: currentModel.fields.filter((f: Field) => f.id !== field.id),
+        fields: (currentModel.fields || []).filter(
+          (f: Field) => f.id !== field.id,
+        ),
         stages: currentModel.stages.map((stage: Stage) => ({
           ...stage,
           processes: stage.processes.map((process: Process) => ({
@@ -674,8 +612,9 @@ export default function WorkflowPage() {
             steps: process.steps.map((step: Step) => ({
               ...step,
               fields:
-                step.fields?.filter((f: FieldReference) => f.id !== field.id) ||
-                [],
+                step.fields?.filter(
+                  (f: FieldReference) => f.name !== field.name,
+                ) || [],
             })),
           })),
         })),
@@ -721,9 +660,28 @@ export default function WorkflowPage() {
         );
       }
 
-      // Refresh the model
-      const composedModel = await fetchCaseData(id);
-      setModel(composedModel);
+      // Update local state immediately
+      setSelectedCase({
+        ...selectedCase,
+        model: JSON.stringify(updatedModel),
+      });
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedModel.stages,
+            }
+          : null,
+      );
+
+      // Refresh the fields state
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+      );
+      if (fieldsResponse.ok) {
+        const fieldsData = await fieldsResponse.json();
+        setFields(fieldsData.data);
+      }
     } catch (error) {
       console.error("Error deleting field:", error);
       alert("Failed to delete field. Please try again.");
@@ -740,11 +698,10 @@ export default function WorkflowPage() {
     };
 
     const updatedStages = [...workflowModel.stages, newStage];
-    const updatedModel = {
-      ...workflowModel,
-      stages: updatedStages,
+    const updatedModel: ComposedModel = {
       name: selectedCase.name,
-      views: model?.views || [],
+      description: selectedCase.description,
+      stages: updatedStages,
     };
 
     addCheckpoint(`Added stage: ${stageData.name}`, updatedModel);
@@ -817,9 +774,7 @@ export default function WorkflowPage() {
     const updatedModel: ComposedModel = {
       name: selectedCase.name,
       description: selectedCase.description,
-      fields: model.fields,
       stages: updatedStages,
-      views: model.views,
     };
     addCheckpoint(`Added process: ${processName}`, updatedModel);
 
@@ -986,6 +941,15 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+      // Update the model state to reflect the changes
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedStages,
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Error deleting step:", error);
       throw error;
@@ -1033,6 +997,15 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+      // Update the model state to reflect the changes
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedStages,
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Error deleting process:", error);
       throw error;
@@ -1073,6 +1046,15 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+      // Update the model state to reflect the changes
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedStages,
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Error deleting stage:", error);
       throw error;
@@ -1110,9 +1092,12 @@ export default function WorkflowPage() {
         message,
         selectedCase
           ? JSON.stringify({
+              currentCaseId: selectedCase.id,
               name: selectedCase.name,
               stages: workflowModel.stages,
-              fields: workflowModel.fields,
+              instructions:
+                "You are working with an EXISTING workflow. Use saveCase with isNew=false for any modifications. The current case ID is: " +
+                selectedCase.id,
             })
           : "",
       );
@@ -1129,6 +1114,7 @@ export default function WorkflowPage() {
 
       const decoder = new TextDecoder();
       let accumulatedContent = "";
+      let shouldReloadWorkflow = false;
 
       try {
         while (true) {
@@ -1144,21 +1130,93 @@ export default function WorkflowPage() {
                 const data = JSON.parse(line.slice(6));
 
                 if (data.text) {
-                  accumulatedContent += data.text;
-                  // Update the AI message with accumulated content
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    const aiMessageIndex = newMessages.findIndex(
-                      (msg) => msg.id === aiMessageId,
-                    );
-                    if (aiMessageIndex !== -1) {
-                      newMessages[aiMessageIndex] = {
-                        ...newMessages[aiMessageIndex],
-                        content: accumulatedContent,
-                      };
+                  // Check if this is a tool execution message that should be filtered
+                  const lowerText = data.text.toLowerCase();
+                  const isListTool =
+                    lowerText.includes("listviews") ||
+                    lowerText.includes("listfields");
+
+                  // Filter out verbose JSON responses from list tools, but keep readable messages
+                  // Only filter out raw JSON responses that contain specific field patterns
+                  // Allow through valuable content that contains useful information
+                  const shouldFilter =
+                    isListTool &&
+                    (lowerText.includes('"id":') ||
+                      lowerText.includes('"name":') ||
+                      lowerText.includes('"type":') ||
+                      lowerText.includes('"caseid":') ||
+                      lowerText.includes('"model":') ||
+                      lowerText.includes('"primary":') ||
+                      lowerText.includes('"required":') ||
+                      lowerText.includes('"label":') ||
+                      lowerText.includes('"description":') ||
+                      lowerText.includes('"order":') ||
+                      lowerText.includes('"options":') ||
+                      lowerText.includes('"defaultvalue":')) &&
+                    // Don't filter out content that contains valuable information
+                    !lowerText.includes("workflow") &&
+                    !lowerText.includes("fields created") &&
+                    !lowerText.includes("views created") &&
+                    !lowerText.includes("stages") &&
+                    !lowerText.includes("processes") &&
+                    !lowerText.includes("steps") &&
+                    !lowerText.includes("breakdown") &&
+                    !lowerText.includes("summary");
+
+                  if (!shouldFilter) {
+                    // Check if this is a JSON response that should be made more readable
+                    let processedText = data.text;
+
+                    // Try to parse as JSON and create a readable message
+                    processedText = processToolResponse(data.text);
+
+                    // Add debugging for saveField responses
+                    if (
+                      data.text.includes('"type"') &&
+                      data.text.includes('"name"') &&
+                      data.text.includes('"id"')
+                    ) {
+                      console.log("Processing saveField response:", data.text);
+                      console.log("Processed text:", processedText);
                     }
-                    return newMessages;
-                  });
+
+                    // If the processed text is different from the original, it means we successfully converted JSON to readable text
+                    if (processedText !== data.text) {
+                      // Add the processed text as a separate message
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          id: uuidv4(),
+                          content: processedText,
+                          sender: "assistant",
+                          timestamp: new Date(),
+                        },
+                      ]);
+                    } else {
+                      // For non-JSON messages (like execution status), accumulate them
+                      accumulatedContent += processedText;
+
+                      // Update the AI message with accumulated content
+                      setMessages((prev) => {
+                        const newMessages = [...prev];
+                        const aiMessageIndex = newMessages.findIndex(
+                          (msg) => msg.id === aiMessageId,
+                        );
+                        if (aiMessageIndex !== -1) {
+                          newMessages[aiMessageIndex] = {
+                            ...newMessages[aiMessageIndex],
+                            content: accumulatedContent,
+                          };
+                        }
+                        return newMessages;
+                      });
+                    }
+                  }
+
+                  // Track if we should reload the workflow
+                  if (lowerText.includes("successfully executed")) {
+                    shouldReloadWorkflow = true;
+                  }
                 }
 
                 if (data.error) {
@@ -1176,7 +1234,7 @@ export default function WorkflowPage() {
 
                 if (data.done) {
                   // Reload the workflow data if tools were executed
-                  if (accumulatedContent.includes("Successfully executed")) {
+                  if (shouldReloadWorkflow) {
                     await loadWorkflow();
                   }
                   break;
@@ -1233,6 +1291,58 @@ export default function WorkflowPage() {
       const updated = [newCheckpoint, ...prev].slice(0, MAX_CHECKPOINTS);
       return updated;
     });
+  };
+
+  // Helper function to process tool response messages into readable format
+  // Examples:
+  // Input: '{"id":183,"name":"KitchenSize","type":"Text","caseid":1,"primary":false,"required":false,"label":"Kitchen Size","description":"","order":1,"options":"[]","defaultValue":null}'
+  // Output: 'Updated field 'KitchenSize' of type Text'
+  //
+  // Input: '{"id":1,"name":"testView","caseid":1,"model":"{\"fields\":[],\"layout\":{\"type\":\"form\",\"columns\":1}}"}'
+  // Output: 'Updated view 'testView''
+  //
+  // Input: '[{"id":1,"name":"field1"},{"id":2,"name":"field2"}]'
+  // Output: 'Found 2 items'
+  const processToolResponse = (text: string): string => {
+    try {
+      const jsonData = JSON.parse(text);
+      if (typeof jsonData === "object" && jsonData !== null) {
+        // Create readable messages based on the tool result
+        if (jsonData.name && jsonData.type && jsonData.id) {
+          // This looks like a field result
+          // Since we can't determine create vs update from the response alone,
+          // use a generic message that works for both cases
+          return `Field '${jsonData.name}' of type ${jsonData.type} saved successfully`;
+        } else if (jsonData.name && jsonData.caseid && jsonData.model) {
+          // This looks like a view result
+          return `View '${jsonData.name}' saved successfully`;
+        } else if (jsonData.name && jsonData.description && jsonData.model) {
+          // This looks like a case result
+          return `Workflow '${jsonData.name}' saved successfully`;
+        } else if (jsonData.message) {
+          // Use the message if available
+          return jsonData.message;
+        } else if (jsonData.id && jsonData.name) {
+          // Generic object with id and name
+          return `Saved '${jsonData.name}'`;
+        } else if (Array.isArray(jsonData)) {
+          // Array response (like from listFields or listViews)
+          if (jsonData.length === 0) {
+            return "No items found";
+          } else {
+            return `Found ${jsonData.length} item${
+              jsonData.length === 1 ? "" : "s"
+            }`;
+          }
+        } else if (jsonData.error) {
+          // Error response
+          return `Error: ${jsonData.error}`;
+        }
+      }
+    } catch (_e) {
+      // Not JSON, use as is
+    }
+    return text;
   };
 
   const handleRestoreCheckpoint = (checkpoint: Checkpoint) => {
@@ -1384,7 +1494,20 @@ export default function WorkflowPage() {
         processes: stage.processes.map((process: Process) => ({
           ...process,
           steps: process.steps.map((step: Step) => {
-            if (step.name === stepId && step.type === "Collect information") {
+            // Extract step name from unique ID format: "StageName-StepName" or "db-{id}"
+            let stepName = stepId;
+            if (stepId.includes("-") && !stepId.startsWith("db-")) {
+              // For step IDs like "StageName-StepName", extract the step name
+              stepName = stepId.split("-").slice(1).join("-");
+            }
+
+            // Check if stepId matches the step ID or the step name
+            const stepMatches =
+              step.id.toString() === stepId ||
+              step.name === stepId ||
+              step.name === stepName;
+
+            if (stepMatches && step.type === "Collect information") {
               // Get existing fields
               const existingFields = step.fields || [];
 
@@ -1403,10 +1526,17 @@ export default function WorkflowPage() {
                 }
               });
 
-              // Convert map back to array, maintaining order of fieldIds
+              // Convert map back to array, preserving ALL fields (existing + new)
+              const allFieldIds = [
+                ...existingFields.map((f) => f.name),
+                ...fieldIds.filter(
+                  (id) => !existingFields.some((f) => f.name === id),
+                ),
+              ];
+
               return {
                 ...step,
-                fields: fieldIds.map(
+                fields: allFieldIds.map(
                   (fieldId) => existingFieldsMap.get(fieldId)!,
                 ),
               };
@@ -1416,11 +1546,10 @@ export default function WorkflowPage() {
         })),
       }));
 
-      const updatedModel = {
-        ...workflowModel,
-        stages: updatedStages,
+      const updatedModel: ComposedModel = {
         name: selectedCase.name,
-        views: model?.views || [],
+        description: selectedCase.description,
+        stages: updatedStages,
       };
 
       addCheckpoint(`Updated step fields: ${stepId}`, updatedModel);
@@ -1450,39 +1579,171 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+
+      // Update the local model state to refresh the UI
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedStages,
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Error updating step fields:", error);
       alert("Failed to update step fields. Please try again.");
     }
   };
 
-  const handleFieldsReorder = (stepId: string, fieldIds: string[]) => {
+  const handleFieldsReorder = async (stepId: string, fieldIds: string[]) => {
     if (!selectedCase) return;
 
-    const updatedStages = workflowModel.stages.map((stage: Stage) => ({
-      ...stage,
-      processes: stage.processes.map((process: Process) => ({
-        ...process,
-        steps: process.steps.map((step: Step) => {
-          if (step.name === stepId && step.type === "Collect information") {
-            // Ensure unique field references
-            const uniqueFieldIds = Array.from(new Set(fieldIds));
-            return {
-              ...step,
-              fields: uniqueFieldIds.map((fieldId) => ({
-                name: fieldId,
-                required:
-                  step.fields?.find((f: FieldReference) => f.name === fieldId)
-                    ?.required ?? false,
-              })),
-            };
-          }
-          return step;
-        }),
-      })),
-    }));
+    try {
+      // First, update the workflow model to reflect the new field order
+      const updatedStages = workflowModel.stages.map((stage: Stage) => ({
+        ...stage,
+        processes: stage.processes.map((process: Process) => ({
+          ...process,
+          steps: process.steps.map((step: Step) => {
+            // Extract step name from unique ID format: "StageName-StepName" or "db-{id}"
+            let stepName = stepId;
+            if (stepId.includes("-") && !stepId.startsWith("db-")) {
+              // For step IDs like "StageName-StepName", extract the step name
+              stepName = stepId.split("-").slice(1).join("-");
+            }
 
-    handleStepsUpdate(updatedStages);
+            // Check if stepId matches the step ID or the step name
+            const stepMatches =
+              step.id.toString() === stepId ||
+              step.name === stepId ||
+              step.name === stepName;
+
+            if (stepMatches && step.type === "Collect information") {
+              // Ensure unique field references and preserve existing properties
+              const uniqueFieldIds = Array.from(new Set(fieldIds));
+              return {
+                ...step,
+                fields: uniqueFieldIds.map((fieldId) => ({
+                  name: fieldId,
+                  required:
+                    step.fields?.find((f: FieldReference) => f.name === fieldId)
+                      ?.required ?? false,
+                })),
+              };
+            }
+            return step;
+          }),
+        })),
+      }));
+
+      // Update the workflow model
+      handleStepsUpdate(updatedStages);
+
+      // Now update the database field order for all fields in this case
+      const fieldUpdates = fieldIds
+        .map((fieldName, index) => {
+          const field = fields.find((f) => f.name === fieldName);
+          if (field && field.id) {
+            return fetch(
+              `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  table: DB_TABLES.FIELDS,
+                  data: {
+                    id: field.id,
+                    name: field.name,
+                    label: field.label,
+                    type: field.type,
+                    primary: field.primary || false,
+                    caseID: selectedCase.id,
+                    options: field.options || [],
+                    required: field.required || false,
+                    order: index + 1, // Update order based on new position
+                    description: field.description || field.label || field.name, // Use label or name as fallback
+                  },
+                }),
+              },
+            );
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      // Wait for all field updates to complete
+      await Promise.all(fieldUpdates);
+
+      // Refresh the fields state to get updated order
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+      );
+      if (fieldsResponse.ok) {
+        const fieldsData = await fieldsResponse.json();
+        setFields(fieldsData.data);
+      }
+    } catch (error) {
+      console.error("Error reordering fields:", error);
+      alert("Failed to reorder fields. Please try again.");
+    }
+  };
+
+  const handleFieldsListReorder = async (
+    startIndex: number,
+    endIndex: number,
+  ) => {
+    if (!selectedCase) return;
+
+    try {
+      // Create a copy of the fields array and reorder it
+      const reorderedFields = Array.from(fields);
+      const [removed] = reorderedFields.splice(startIndex, 1);
+      reorderedFields.splice(endIndex, 0, removed);
+
+      // Update the database field order for all fields
+      const fieldUpdates = reorderedFields
+        .map((field, index) => {
+          if (field.id) {
+            return fetch(
+              `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  table: DB_TABLES.FIELDS,
+                  data: {
+                    id: field.id,
+                    name: field.name,
+                    label: field.label,
+                    type: field.type,
+                    primary: field.primary || false,
+                    caseID: selectedCase.id,
+                    options: field.options || [],
+                    required: field.required || false,
+                    order: index + 1, // Update order based on new position
+                    description: field.description || field.label || field.name, // Use label or name as fallback
+                  },
+                }),
+              },
+            );
+          }
+          return null;
+        })
+        .filter(Boolean);
+
+      // Wait for all field updates to complete
+      await Promise.all(fieldUpdates);
+
+      // Update local state immediately for better UX
+      setFields(reorderedFields);
+    } catch (error) {
+      console.error("Error reordering fields:", error);
+      alert("Failed to reorder fields. Please try again.");
+    }
   };
 
   return (
@@ -1632,7 +1893,8 @@ export default function WorkflowPage() {
                   {workflowView === "flat" ? (
                     <WorkflowDiagram
                       stages={workflowModel.stages}
-                      fields={workflowModel.fields}
+                      fields={fields}
+                      views={views}
                       onStepSelect={(stageId, processId, stepId) =>
                         handleStepSelect(
                           String(stageId),
@@ -1700,64 +1962,19 @@ export default function WorkflowPage() {
                       Add Field
                     </button>
                   </div>
-                  <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-4">
-                    {workflowModel.fields
-                      .sort((a, b) => a.label.localeCompare(b.label))
-                      .map((field) => (
-                        <div
-                          key={field.name}
-                          className="p-4 rounded-lg border border-gray-200 dark:border-gray-700"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                                {field.label}
-                              </h3>
-                              {field.primary && (
-                                <span className="px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 rounded">
-                                  Primary
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleEditField(field)}
-                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                              >
-                                <FaPencilAlt className="w-4 h-4 text-gray-500" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteField(field)}
-                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                              >
-                                <svg
-                                  className="w-4 h-4 text-gray-500"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                  />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            Type: {getFieldTypeDisplayName(field.type)}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
+                  <FieldsList
+                    fields={fields}
+                    onReorderFields={handleFieldsListReorder}
+                    onDeleteField={handleDeleteField}
+                    onEditField={handleEditField}
+                  />
                 </div>
               )}
               {activeTab === "views" && (
                 <ViewsPanel
                   stages={workflowModel.stages}
-                  fields={workflowModel.fields}
+                  fields={fields}
+                  views={views}
                   onAddField={handleAddField}
                   onUpdateField={handleUpdateField}
                   onDeleteField={handleDeleteField}
@@ -1853,16 +2070,7 @@ export default function WorkflowPage() {
         isOpen={isAddStageModalOpen}
         onClose={() => setIsAddStageModalOpen(false)}
         onAddStage={handleAddStage}
-      >
-        <input
-          type="text"
-          value={newStageName}
-          onChange={(e) => setNewStageName(e.target.value)}
-          placeholder="Enter stage name"
-          className="w-full px-3 py-2 border rounded-lg"
-          data-testid="stage-name-input"
-        />
-      </AddStageModal>
+      />
       <AddProcessModal
         isOpen={isAddProcessModalOpen}
         onClose={() => {

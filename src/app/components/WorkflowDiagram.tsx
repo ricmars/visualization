@@ -35,6 +35,7 @@ import AddProcessModal from "./AddProcessModal";
 interface WorkflowDiagramProps {
   stages: Stage[];
   fields: Field[];
+  views: { id: number; name: string; model: string; caseID: number }[];
   onStepSelect: (stageId: number, processId: number, stepId: number) => void;
   activeStage?: number;
   activeProcess?: number;
@@ -85,6 +86,7 @@ interface EditItem {
 const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   stages,
   fields,
+  views,
   onStepSelect,
   activeStage,
   activeProcess,
@@ -319,36 +321,66 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     const process = stage?.processes.find((p: Process) => p.id === processId);
     const step = process?.steps.find((s: Step) => s.id === stepId);
 
-    if (step) {
-      const stepFields = (step.fields || []).map(
-        (fieldRef: FieldReference): Field => {
-          const fullField = fields.find((f) => f.name === fieldRef.name);
-          if (fullField) {
-            return {
-              ...fullField,
-            };
-          }
-          return {
-            name: fieldRef.name,
-            label: fieldRef.name,
-            type: "Text" as const,
-            value: undefined,
-          };
-        },
+    console.log("[DEBUG] Clicked step:", step);
+    let stepFields: Field[] = [];
+    if (step && step.type === "Collect information" && step.viewId) {
+      console.log("[DEBUG] Step has viewId:", step.viewId);
+      const view = views.find(
+        (v) => v.id.toString() === step.viewId?.toString(),
       );
-
-      setSelectedStep({
-        id: step.id,
-        stageId,
-        processId,
-        stepId: step.id,
-        name: step.name,
-        fields: stepFields,
-        type: step.type,
-      });
-      setIsConfigModalOpen(true);
+      console.log("[DEBUG] Found view:", view);
+      if (view) {
+        try {
+          const viewModel = JSON.parse(view.model);
+          console.log("[DEBUG] Parsed view model:", viewModel);
+          if (Array.isArray(viewModel.fields)) {
+            stepFields = viewModel.fields
+              .map(
+                (fieldRef: {
+                  fieldId: number;
+                  required?: boolean;
+                  order?: number;
+                }) => {
+                  const field = fields.find((f) => f.id === fieldRef.fieldId);
+                  console.log(
+                    "[DEBUG] Mapping fieldRef",
+                    fieldRef,
+                    "to field",
+                    field,
+                  );
+                  if (field) {
+                    return {
+                      ...field,
+                      required: fieldRef.required ?? field.required,
+                      order: fieldRef.order ?? field.order,
+                    };
+                  }
+                  return null;
+                },
+              )
+              .filter((f: Field | null): f is Field => f !== null)
+              .sort((a: Field, b: Field) => (a.order || 0) - (b.order || 0));
+            console.log("[DEBUG] Final mapped stepFields:", stepFields);
+          }
+        } catch (_e) {
+          console.log("[DEBUG] Error parsing view model for view:", view);
+        }
+      }
     }
-
+    setSelectedStep(
+      step
+        ? {
+            id: step.id,
+            stageId,
+            processId,
+            stepId: step.id,
+            name: step.name,
+            fields: stepFields,
+            type: step.type,
+          }
+        : null,
+    );
+    setIsConfigModalOpen(true);
     onStepSelect(stageId, processId, stepId);
   };
 
@@ -405,9 +437,15 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                 ...process,
                 steps: process.steps.map((step) => {
                   if (step.id === selectedStep.stepId) {
+                    // Find the field to get its ID
+                    const field = fields.find((f) => f.name === fieldId);
                     const updatedFields = [
                       ...(step.fields || []),
-                      { name: fieldId, required: false },
+                      {
+                        id: field?.id, // Include the field ID if available
+                        name: fieldId,
+                        required: false,
+                      } as FieldReference,
                     ];
 
                     return {
@@ -446,14 +484,17 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                 ...process,
                 steps: process.steps.map((step) => {
                   if (step.id === stepId) {
+                    // Create new field references from the field IDs
                     const newFields = fieldIds
                       .map((fieldId) => {
+                        // Try to find field by name (since fieldIds are field names)
                         const field = fields.find((f) => f.name === fieldId);
                         if (field) {
                           return {
+                            id: field.id, // Include the field ID (optional)
                             name: field.name,
                             required: false,
-                          };
+                          } as FieldReference;
                         }
                         return null;
                       })
@@ -461,10 +502,42 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                         (field): field is FieldReference => field !== null,
                       );
 
-                    return {
+                    const updatedStep = {
                       ...step,
-                      fields: [...(step.fields || []), ...newFields],
+                      fields: newFields,
                     };
+
+                    // Update selectedStep state if this is the current step
+                    if (selectedStep && selectedStep.stepId === step.id) {
+                      const updatedStepFields = newFields.map(
+                        (fieldRef: FieldReference): Field => {
+                          // Try to find field by ID first, then by name as fallback
+                          const fullField = fields.find(
+                            (f) =>
+                              f.id === fieldRef.id || f.name === fieldRef.name,
+                          );
+                          if (fullField) {
+                            return {
+                              ...fullField,
+                              ...fieldRef,
+                            };
+                          }
+                          return {
+                            label: fieldRef.name,
+                            type: "Text" as const,
+                            value: undefined,
+                            ...fieldRef,
+                          };
+                        },
+                      );
+
+                      setSelectedStep({
+                        ...selectedStep,
+                        fields: updatedStepFields,
+                      });
+                    }
+
+                    return updatedStep;
                   }
                   return step;
                 }),

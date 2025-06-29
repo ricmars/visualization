@@ -379,9 +379,6 @@ AZURE_OPENAI_DEPLOYMENT=your-deployment-name
 AZURE_TENANT_ID=your-tenant-id
 AZURE_CLIENT_ID=your-client-id
 AZURE_CLIENT_SECRET=your-client-secret
-
-# Google Gemini (if using)
-GEMINI_API_KEY=your-gemini-api-key
 ```
 
 ### Database Setup

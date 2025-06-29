@@ -1,3 +1,5 @@
+import { getCompleteToolsContext } from "./databasePrompt";
+
 export interface Tool {
   name: string;
   description: string;
@@ -19,19 +21,35 @@ export function createStreamProcessor(
 ): StreamProcessor {
   return {
     async processChunk(chunk: string) {
+      console.log("StreamProcessor: Processing text chunk:", chunk);
       await writer.write(
         encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`),
       );
+      console.log("StreamProcessor: Text chunk sent to client");
     },
 
     async processToolCall(toolName: string, params: unknown) {
+      console.log("StreamProcessor: Starting tool execution for:", toolName);
+      console.log(
+        "StreamProcessor: Tool parameters:",
+        JSON.stringify(params, null, 2),
+      );
+
       try {
         const tool = databaseTools.find((t) => t.name === toolName);
         if (!tool) {
+          console.error("StreamProcessor: Tool not found:", toolName);
           throw new Error(`Tool ${toolName} not found`);
         }
 
+        console.log("StreamProcessor: Found tool:", tool.name);
+        console.log(
+          "StreamProcessor: Available tools:",
+          databaseTools.map((t) => t.name),
+        );
+
         // Send execution message
+        console.log("StreamProcessor: Sending execution message to client");
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
@@ -40,21 +58,38 @@ export function createStreamProcessor(
           ),
         );
 
+        console.log(
+          "StreamProcessor: Calling tool.execute with params:",
+          params,
+        );
         const result = await tool.execute(params);
+        console.log("StreamProcessor: Tool execution completed successfully");
+        console.log(
+          "StreamProcessor: Tool result:",
+          JSON.stringify(result, null, 2),
+        );
 
         // Send success message
+        console.log("StreamProcessor: Sending success message to client");
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
-              text: `\nSuccessfully executed ${tool.name}.\n`,
+              text: `\nSuccessfully executed ${tool.name}.\n\nIMPORTANT: Continue with the next tool call. Do not stop here. The workflow is not complete until all tools are executed.\n`,
               toolResult: result,
             })}\n\n`,
           ),
         );
+        console.log("StreamProcessor: Success message sent to client");
       } catch (error: unknown) {
-        console.error("Error executing tool:", error);
+        console.error("StreamProcessor: Error executing tool:", error);
+        console.error(
+          "StreamProcessor: Error stack:",
+          error instanceof Error ? error.stack : "No stack trace",
+        );
         const errorMessage =
           error instanceof Error ? error.message : String(error);
+
+        console.log("StreamProcessor: Sending error message to client");
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
@@ -63,16 +98,19 @@ export function createStreamProcessor(
             })}\n\n`,
           ),
         );
+        console.log("StreamProcessor: Error message sent to client");
       }
     },
 
     async sendText(text: string) {
+      console.log("StreamProcessor: Sending text:", text);
       await writer.write(
         encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
       );
     },
 
     async sendError(error: string) {
+      console.log("StreamProcessor: Sending error:", error);
       await writer.write(
         encoder.encode(
           `data: ${JSON.stringify({
@@ -83,30 +121,17 @@ export function createStreamProcessor(
     },
 
     async sendDone() {
+      console.log("StreamProcessor: Sending done signal");
       await writer.write(
         encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
       );
+      console.log("StreamProcessor: Done signal sent");
     },
   };
 }
 
 export function getToolsContext(databaseTools: Tool[]): string {
-  return `Available tools:
-${databaseTools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}
-
-You can use these tools to interact with the database. When you want to use a tool, include a special format in your response:
-
-TOOL: toolName
-PARAMS: {"param1": "value1", "param2": "value2"}
-
-This will be detected and the tool will be executed automatically.
-
-IMPORTANT:
-1. Always explain your reasoning before using tools
-2. Show your thought process in the chat
-3. Break down complex operations into steps
-4. Confirm successful creation of each component
-5. Handle errors gracefully and explain what went wrong`;
+  return getCompleteToolsContext(databaseTools);
 }
 
 export function createStreamResponse(): {

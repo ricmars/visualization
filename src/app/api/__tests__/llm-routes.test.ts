@@ -8,26 +8,14 @@ jest.mock("openai", () => {
           chat: {
             completions: {
               create: jest.fn().mockResolvedValue({
-                [Symbol.asyncIterator]: async function* () {
-                  yield {
-                    choices: [
-                      {
-                        delta: {
-                          content: "Test response",
-                        },
-                      },
-                    ],
-                  };
-                  yield {
-                    choices: [
-                      {
-                        delta: {
-                          content: " completed",
-                        },
-                      },
-                    ],
-                  };
-                },
+                choices: [
+                  {
+                    finish_reason: "stop",
+                    message: {
+                      content: "Test response completed with tool execution",
+                    },
+                  },
+                ],
               }),
             },
           },

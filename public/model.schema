@@ -34,13 +34,6 @@
           "description": "Case description - not used",
           "type": "string"
         },
-        "fields": {
-          "description": "Fields are linked to the case type - They will be shown in the Details card or in the SummaryView of the case.",
-          "items": {
-            "$ref": "#/definitions/Field"
-          },
-          "type": "array"
-        },
         "name": {
           "description": "Unique name of the case type",
           "type": "string"

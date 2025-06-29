@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+// @ts-nocheck
 import type { NextRequest } from "next/server";
 import { POST } from "../openai/route";
 
@@ -22,18 +24,17 @@ function createToolMock(name: string, executeImpl?: ToolExecute): ToolMock {
 
 // Default tool mocks for most tests
 const defaultTools: ToolMock[] = [
-  createToolMock("createCase", async (params) => ({
+  createToolMock("saveCase", async (_params) => ({
     id: 1,
     name: "Test Workflow",
     description: "A test workflow",
     model: '{"stages": []}',
   })),
-  createToolMock("createField", async (params) => ({
-    id: 2,
-    name: "Test Field",
+  createToolMock("saveField", async (_params) => ({
+    id: 1,
+    name: "testField",
     type: "Text",
-    caseID: 1,
-    label: "Project Name",
+    caseid: 1,
   })),
 ];
 
@@ -49,74 +50,9 @@ jest.mock("../../lib/llmTools", () => ({
   getDatabaseTools: jest.fn(() => defaultTools),
 }));
 
-// Inline OpenAI mock to avoid hoisting issues
+// Mock OpenAI
 jest.mock("openai", () => {
-  const mockCreate = jest.fn().mockResolvedValue({
-    [Symbol.asyncIterator]: async function* () {
-      // First chunk: text content
-      yield {
-        choices: [
-          {
-            delta: {
-              content: "I'll create a new case for you.\n\n",
-            },
-          },
-        ],
-      };
-      // Second chunk: start of tool call
-      yield {
-        choices: [
-          {
-            delta: {
-              tool_calls: [
-                {
-                  id: "call_123",
-                  function: {
-                    name: "createCase",
-                    arguments: '{"name": "Test Workflow"',
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-      // Third chunk: continue tool call arguments (only arguments field)
-      yield {
-        choices: [
-          {
-            delta: {
-              tool_calls: [
-                {
-                  id: "call_123",
-                  function: {
-                    arguments: ', "description": "A test workflow"',
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-      // Fourth chunk: complete tool call arguments (only arguments field)
-      yield {
-        choices: [
-          {
-            delta: {
-              tool_calls: [
-                {
-                  id: "call_123",
-                  function: {
-                    arguments: ', "model": {"stages": []}}',
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      };
-    },
-  });
+  const mockCreate = jest.fn();
   const mockOpenAI = jest.fn().mockImplementation(() => ({
     chat: {
       completions: {
@@ -172,6 +108,7 @@ async function parseSSEResponse(
 describe("OpenAI API Tool Calls", () => {
   let mockCreate: jest.Mock;
   let getDatabaseTools: jest.Mock;
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Get the mockCreate function from the OpenAI mock
@@ -181,14 +118,72 @@ describe("OpenAI API Tool Calls", () => {
     getDatabaseTools.mockImplementation(() => defaultTools);
   });
 
-  it("should extract and execute tool calls from AI response with multi-chunk arguments", async () => {
+  it("should execute multiple tool calls in sequence and stream all results", async () => {
+    // Mock OpenAI to return a sequence: saveCase -> createField -> final message
+    mockCreate
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              tool_calls: [
+                {
+                  id: "call_1",
+                  function: {
+                    name: "saveCase",
+                    arguments: JSON.stringify({
+                      name: "Test Workflow",
+                      description: "A test workflow",
+                      model: { stages: [] },
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              tool_calls: [
+                {
+                  id: "call_2",
+                  function: {
+                    name: "saveField",
+                    arguments: JSON.stringify({
+                      name: "testField",
+                      type: "Text",
+                      caseID: 1,
+                      label: "Test Field",
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              content: "Workflow creation complete!",
+            },
+          },
+        ],
+      });
+
     const request = new Request("http://localhost:3000/api/openai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        prompt: "Create a new workflow called 'Test Workflow'",
+        prompt: "Create a new workflow called 'Test Workflow' with a field",
         systemContext:
           "You are a helpful AI assistant. Use the function calling API to create cases.",
       }),
@@ -198,25 +193,25 @@ describe("OpenAI API Tool Calls", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
-    const { text, toolResults } = await parseSSEResponse(response);
-    expect(text.join("")).toContain("I'll create a new case for you");
-    expect(toolResults.length).toBeGreaterThan(0);
+    const { text } = await parseSSEResponse(response);
+    expect(text.join(" ")).toContain("Executing saveCase");
+    expect(text.join(" ")).toContain("Successfully executed saveCase");
+    expect(text.join(" ")).toContain("Executing saveField");
+    expect(text.join(" ")).toContain("Successfully executed saveField");
+    expect(text.join(" ")).toContain("Workflow creation complete");
   });
 
   it("should handle responses without tool calls", async () => {
     // Mock OpenAI to return a response without tool calls
     mockCreate.mockResolvedValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: "This is a regular response without tool calls.",
-              },
-            },
-          ],
-        };
-      },
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content: "This is a regular response without tool calls.",
+          },
+        },
+      ],
     });
 
     const request = new Request("http://localhost:3000/api/openai", {
@@ -241,73 +236,36 @@ describe("OpenAI API Tool Calls", () => {
   });
 
   it("should handle tool execution errors gracefully", async () => {
-    // Mock tool execution to throw an error and complete the tool call
-    getDatabaseTools.mockImplementation(() => [
-      createToolMock("createCase", async () => {
+    // Mock a tool that throws an error
+    const errorTools = [
+      createToolMock("saveCase", async () => {
         throw new Error("Database error");
       }),
-    ]);
+    ];
+    getDatabaseTools.mockImplementation(() => errorTools);
+
+    // Mock OpenAI to return a tool call
     mockCreate.mockResolvedValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: "I'll create a new case for you.\n\n",
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            tool_calls: [
+              {
+                id: "call_1",
+                function: {
+                  name: "saveCase",
+                  arguments: JSON.stringify({
+                    name: "Test Workflow",
+                    description: "A test workflow",
+                    model: { stages: [] },
+                  }),
+                },
               },
-            },
-          ],
-        };
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_123",
-                    function: {
-                      name: "createCase",
-                      arguments: '{"name": "Test Workflow"',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        };
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_123",
-                    function: {
-                      arguments: ', "description": "A test workflow"',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        };
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_123",
-                    function: {
-                      arguments: ', "model": {"stages": []}}',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        };
-      },
+            ],
+          },
+        },
+      ],
     });
 
     const request = new Request("http://localhost:3000/api/openai", {
@@ -317,175 +275,78 @@ describe("OpenAI API Tool Calls", () => {
       },
       body: JSON.stringify({
         prompt: "Create a new workflow",
-        systemContext:
-          "You are a helpful AI assistant. Use the function calling API to create cases.",
-      }),
-    });
-
-    const response = await POST(request as NextRequest);
-    expect(response.status).toBe(200); // Streaming responses return 200 even with errors
-    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
-
-    const { text, errors } = await parseSSEResponse(response);
-    const fullText = text.join("");
-    expect(fullText).toContain("I'll create a new case for you");
-    expect(errors.join("")).toContain("Database error");
-  });
-
-  it("should handle incomplete tool call arguments gracefully", async () => {
-    // Mock OpenAI to return incomplete tool call arguments
-    mockCreate.mockResolvedValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: "I'll create a new case for you.\n\n",
-              },
-            },
-          ],
-        };
-        // Start tool call with incomplete arguments
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_123",
-                    function: {
-                      name: "createCase",
-                      arguments: '{"name": "Test Workflow"',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        };
-        // End stream without completing the arguments
-        // This should not cause a JSON parsing error
-      },
-    });
-
-    const request = new Request("http://localhost:3000/api/openai", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        prompt: "Create a new workflow",
-        systemContext:
-          "You are a helpful AI assistant. Use the function calling API to create cases.",
+        systemContext: "You are a helpful AI assistant.",
       }),
     });
 
     const response = await POST(request as NextRequest);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
     const { text } = await parseSSEResponse(response);
-    expect(text.join("")).toContain("I'll create a new case for you");
-    // Should not have executed the tool call due to incomplete arguments
+    expect(text.join(" ")).toContain("Executing saveCase");
+    expect(text.join(" ")).toContain(
+      "Error executing saveCase: Error: Database error",
+    );
   });
 
   it("should handle multiple tool calls with complex arguments", async () => {
-    // Mock OpenAI to return multiple tool calls with complex arguments
-    getDatabaseTools.mockImplementation(() => [
-      createToolMock("createCase", async (params) => ({
-        id: 1,
-        name: "Complex Workflow",
-      })),
-      createToolMock("createField", async (params) => ({
-        id: 2,
-        name: "projectName",
-      })),
-    ]);
-    mockCreate.mockResolvedValueOnce({
-      [Symbol.asyncIterator]: async function* () {
-        yield {
-          choices: [
-            {
-              delta: {
-                content: "I'll create a workflow with multiple components.\n\n",
-              },
-            },
-          ],
-        };
-        // First tool call: createCase
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_1",
-                    function: {
-                      name: "createCase",
-                      arguments:
-                        '{"name": "Complex Workflow", "description": "A workflow with multiple stages"',
-                    },
+    // Mock OpenAI to return multiple tool calls
+    mockCreate
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              tool_calls: [
+                {
+                  id: "call_1",
+                  function: {
+                    name: "saveCase",
+                    arguments: JSON.stringify({
+                      name: "Complex Workflow",
+                      description: "A complex workflow",
+                      model: { stages: [] },
+                    }),
                   },
-                ],
-              },
+                },
+              ],
             },
-          ],
-        };
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_1",
-                    function: {
-                      arguments:
-                        ', "model": {"stages": [{"id": "stage1", "name": "Planning", "order": 1, "processes": []}]}}',
-                    },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "tool_calls",
+            message: {
+              tool_calls: [
+                {
+                  id: "call_2",
+                  function: {
+                    name: "saveField",
+                    arguments: JSON.stringify({
+                      name: "testField",
+                      type: "Text",
+                      caseID: 1,
+                      label: "Test Field",
+                    }),
                   },
-                ],
-              },
+                },
+              ],
             },
-          ],
-        };
-        // Second tool call: createField
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_2",
-                    function: {
-                      name: "createField",
-                      arguments:
-                        '{"name": "projectName", "type": "Text", "caseID": 1, "label": "Project Name"',
-                    },
-                  },
-                ],
-              },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            finish_reason: "stop",
+            message: {
+              content: "Complex workflow creation complete!",
             },
-          ],
-        };
-        yield {
-          choices: [
-            {
-              delta: {
-                tool_calls: [
-                  {
-                    id: "call_2",
-                    function: {
-                      arguments:
-                        ', "description": "Name of the project", "primary": true, "required": true}',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        };
-      },
-    });
+          },
+        ],
+      });
 
     const request = new Request("http://localhost:3000/api/openai", {
       method: "POST",
@@ -494,19 +355,18 @@ describe("OpenAI API Tool Calls", () => {
       },
       body: JSON.stringify({
         prompt: "Create a complex workflow with multiple components",
-        systemContext:
-          "You are a helpful AI assistant. Use the function calling API to create cases and fields.",
+        systemContext: "You are a helpful AI assistant.",
       }),
     });
 
     const response = await POST(request as NextRequest);
     expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
 
-    const { text, toolResults } = await parseSSEResponse(response);
-    expect(text.join("")).toContain(
-      "I'll create a workflow with multiple components",
-    );
-    expect(toolResults.length).toBeGreaterThan(0);
+    const { text } = await parseSSEResponse(response);
+    expect(text.join(" ")).toContain("Executing saveCase");
+    expect(text.join(" ")).toContain("Successfully executed saveCase");
+    expect(text.join(" ")).toContain("Executing saveField");
+    expect(text.join(" ")).toContain("Successfully executed saveField");
+    expect(text.join(" ")).toContain("Complex workflow creation complete");
   });
 });

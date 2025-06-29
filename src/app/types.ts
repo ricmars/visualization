@@ -70,7 +70,7 @@ export interface Step {
   name: string;
   type: StepType;
   fields?: FieldReference[];
-  viewId?: string;
+  viewId?: number;
   order?: number;
 }
 
@@ -84,10 +84,10 @@ export interface Stage {
   id: number; // Database ID
   name: string;
   processes: Process[];
-  isNew?: boolean;
   isDeleting?: boolean;
   isMoving?: boolean;
   moveDirection?: "up" | "down";
+  isNew?: boolean;
 }
 
 export type StepType =
@@ -131,9 +131,7 @@ export interface Message {
 }
 
 export interface WorkflowModel {
-  name?: string;
   stages?: Stage[];
-  fields?: Field[];
   before?: Stage[];
   after?: Stage[];
   action?: {
@@ -198,17 +196,9 @@ export interface Case {
   id: number;
   /** Unique name of the case type */
   name: string;
-  /** Case description - not used */
+  /** Case description */
   description?: string;
-  /**
-   * Fields are linked to the case type - They will be shown in the Details card or in the SummaryView of the case.
-   */
-  fields?: Field[];
-  /**
-   * List of stages and steps
-   */
-  stages?: Stage[];
-  /** Unique name of the case type */
+  /** Workflow model as JSON string containing stages structure */
   model: string;
 }
 

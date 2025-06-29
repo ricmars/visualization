@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FaEllipsisH } from "react-icons/fa";
+import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 
 export interface ChatMessage {
   id: string;
@@ -14,6 +16,47 @@ interface ChatInterfaceProps {
   isLoading: boolean;
   onClear: () => void;
   isProcessing: boolean;
+}
+
+// Function to format content based on its type
+function formatContent(content: string): string {
+  // Check if content is JSON
+  try {
+    const parsed = JSON.parse(content);
+    // If it's a valid JSON object, format it as a code block
+    return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+  } catch {
+    // If it's not JSON, return as is (will be rendered as markdown)
+    return content;
+  }
+}
+
+// Function to check if content should be filtered out
+function shouldFilterContent(content: string): boolean {
+  const lowerContent = content.toLowerCase();
+
+  // Filter out only very specific verbose tool execution messages
+  // Allow through valuable content that contains useful information
+  if (
+    // Only filter out very specific verbose messages
+    (lowerContent.includes("executing listviews") &&
+      lowerContent.length < 50) ||
+    (lowerContent.includes("successfully executed listviews") &&
+      lowerContent.length < 50) ||
+    (lowerContent.includes("executing listfields") &&
+      lowerContent.length < 50) ||
+    (lowerContent.includes("successfully executed listfields") &&
+      lowerContent.length < 50)
+  ) {
+    return true;
+  }
+
+  // Filter out empty or whitespace-only content
+  if (!content.trim()) {
+    return true;
+  }
+
+  return false;
 }
 
 export default function ChatInterface({
@@ -43,13 +86,56 @@ export default function ChatInterface({
     }
   };
 
+  const markdownComponents: Components = {
+    code({ className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || "");
+      const isInline = !match;
+
+      return isInline ? (
+        <code
+          className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm"
+          {...props}
+        >
+          {children}
+        </code>
+      ) : (
+        <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto">
+          <code className={className} {...props}>
+            {children}
+          </code>
+        </pre>
+      );
+    },
+    pre({ children, ...props }) {
+      return (
+        <pre
+          className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto"
+          {...props}
+        >
+          {children}
+        </pre>
+      );
+    },
+  };
+
   const renderMessage = (message: ChatMessage) => {
+    // Filter out content that shouldn't be displayed
+    if (shouldFilterContent(message.content)) {
+      return null;
+    }
+
+    const formattedContent = formatContent(message.content);
+
     return (
       <div className="max-w-xs lg:max-w-md">
         <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
           {message.sender === "user" ? "You" : "Assistant"}
         </div>
-        <div className="whitespace-pre-wrap break-words">{message.content}</div>
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          <ReactMarkdown components={markdownComponents}>
+            {formattedContent}
+          </ReactMarkdown>
+        </div>
       </div>
     );
   };
@@ -70,24 +156,29 @@ export default function ChatInterface({
       </div>
 
       <div className="flex-1 overflow-y-auto" ref={chatContainerRef}>
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${
-              message.sender === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
+        {messages.map((message) => {
+          const renderedMessage = renderMessage(message);
+          if (!renderedMessage) return null;
+
+          return (
             <div
-              className={`rounded-lg p-2 ${
-                message.sender === "user"
-                  ? "bg-blue-50 dark:bg-blue-900/20"
-                  : "bg-gray-50 dark:bg-gray-800/50"
+              key={message.id}
+              className={`flex ${
+                message.sender === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              {renderMessage(message)}
+              <div
+                className={`rounded-lg p-2 ${
+                  message.sender === "user"
+                    ? "bg-blue-50 dark:bg-blue-900/20"
+                    : "bg-gray-50 dark:bg-gray-800/50"
+                }`}
+              >
+                {renderedMessage}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {(isLoading || isProcessing) && (
           <div className="flex justify-start">
             <div className="rounded-lg p-2 bg-gray-50 dark:bg-gray-800/50">

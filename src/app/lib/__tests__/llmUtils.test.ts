@@ -8,34 +8,38 @@ import {
 // Mock tools for testing
 const mockTools = [
   {
-    name: "createCase",
-    description: "Creates a new case",
+    name: "saveCase",
+    description: "Creates or updates a case",
     execute: jest.fn().mockResolvedValue({ id: 1, name: "Test Case" }),
   },
   {
-    name: "createField",
-    description: "Creates a new field",
-    execute: jest.fn().mockResolvedValue({ id: 1, name: "Test Field" }),
+    name: "saveField",
+    description: "Test tool",
+    execute: jest.fn(),
   },
 ];
 
 describe("extractToolCall", () => {
   it("extracts a single tool call", () => {
     const text =
-      'TOOL: createCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": []}}';
+      'TOOL: saveCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": []}}';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createCase",
-      params: { name: "Test", description: "Test case", model: { stages: [] } },
+      toolName: "saveCase",
+      params: {
+        name: "Test",
+        description: "Test case",
+        model: { stages: [] },
+      },
     });
   });
 
   it("extracts a tool call with nested JSON", () => {
     const text =
-      'TOOL: createView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}}';
+      'TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}}';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createView",
+      toolName: "saveView",
       params: {
         name: "View1",
         caseID: 1,
@@ -49,10 +53,10 @@ describe("extractToolCall", () => {
 
   it("extracts a tool call with braces in string values", () => {
     const text =
-      'TOOL: createField PARAMS: {"name": "description", "type": "Text", "caseID": 1, "label": "Description (optional)", "description": "Field with braces {like this}"}';
+      'TOOL: saveField PARAMS: {"name": "description", "type": "Text", "caseID": 1, "label": "Description (optional)", "description": "Field with braces {like this}"}';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createField",
+      toolName: "saveField",
       params: {
         name: "description",
         type: "Text",
@@ -64,9 +68,9 @@ describe("extractToolCall", () => {
   });
 
   it("extracts multiple tool calls sequentially", () => {
-    const text = `TOOL: createCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": []}}
-TOOL: createField PARAMS: {"name": "field1", "type": "Text", "caseID": 1, "label": "Field 1"}
-TOOL: createView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}}`;
+    const text = `TOOL: saveCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": []}}
+TOOL: saveField PARAMS: {"name": "field1", "type": "Text", "caseID": 1, "label": "Field 1"}
+TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}}`;
     let remainingText = text;
     const toolCalls = [];
     while (true) {
@@ -82,7 +86,7 @@ TOOL: createView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], 
         break;
       }
     }
-    expect(toolCalls).toEqual(["createCase", "createField", "createView"]);
+    expect(toolCalls).toEqual(["saveCase", "saveField", "saveView"]);
   });
 
   it("returns null for text without tool calls", () => {
@@ -92,24 +96,24 @@ TOOL: createView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], 
   });
 
   it("returns null for incomplete tool call", () => {
-    const text = 'TOOL: createCase PARAMS: {"name": "Test"';
+    const text = 'TOOL: saveCase PARAMS: {"name": "Test"';
     const result = extractToolCall(text);
     expect(result).toBeNull();
   });
 
   it("returns null for malformed JSON in params", () => {
     const text =
-      'TOOL: createCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": [}}';
+      'TOOL: saveCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": [}}';
     const result = extractToolCall(text);
     expect(result).toBeNull();
   });
 
   it("handles escaped characters in JSON strings", () => {
     const text =
-      'TOOL: createField PARAMS: {"name": "description", "type": "Text", "description": "Field with \\"quotes\\" and \\\\backslashes\\\\"}';
+      'TOOL: saveField PARAMS: {"name": "description", "type": "Text", "description": "Field with \\"quotes\\" and \\\\backslashes\\\\"}';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createField",
+      toolName: "saveField",
       params: {
         name: "description",
         type: "Text",
@@ -120,31 +124,84 @@ TOOL: createView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], 
 
   it("handles tool calls with newlines in the middle", () => {
     const text =
-      'TOOL: createCase PARAMS: {\n  "name": "test",\n  "description": "test"\n}';
+      'TOOL: saveCase PARAMS: {\n  "name": "test",\n  "description": "test"\n}';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createCase",
+      toolName: "saveCase",
       params: { name: "test", description: "test" },
     });
   });
 
   it("extracts tool calls from markdown code blocks", () => {
     const text =
-      '```tool_code\nTOOL: createCase PARAMS: {"name": "test", "description": "test"}\n```';
+      '```tool_code\nTOOL: saveCase PARAMS: {"name": "test", "description": "test"}\n```';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createCase",
+      toolName: "saveCase",
       params: { name: "test", description: "test" },
     });
   });
 
   it("extracts tool calls from regular markdown code blocks", () => {
     const text =
-      '```\nTOOL: createCase PARAMS: {"name": "test", "description": "test"}\n```';
+      '```\nTOOL: saveCase PARAMS: {"name": "test", "description": "test"}\n```';
     const result = extractToolCall(text);
     expect(result).toEqual({
-      toolName: "createCase",
+      toolName: "saveCase",
       params: { name: "test", description: "test" },
+    });
+  });
+
+  it("extracts a tool call with id for update", () => {
+    const toolCallText =
+      'TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseID": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}';
+
+    const result = extractToolCall(toolCallText);
+    expect(result).toEqual({
+      toolName: "saveView",
+      params: {
+        id: 1,
+        name: "View1",
+        caseID: 1,
+        model: {
+          fields: [{ fieldId: 1, required: true }],
+          layout: { type: "form", columns: 1 },
+        },
+        stepName: "Test Step",
+      },
+    });
+  });
+
+  it("extracts a tool call with id for saveField", () => {
+    const toolCallText =
+      'TOOL: saveField PARAMS: {"id": 1, "name": "description", "type": "Text", "description": "Field with \\"quotes\\" and \\\\backslashes\\\\"}';
+
+    const result = extractToolCall(toolCallText);
+    expect(result).toEqual({
+      toolName: "saveField",
+      params: {
+        id: 1,
+        name: "description",
+        type: "Text",
+        description: 'Field with "quotes" and \\backslashes\\',
+      },
+    });
+  });
+
+  it("extracts multiple tool calls with id for updates", () => {
+    const toolCallText = `TOOL: saveField PARAMS: {"id": 1, "name": "field1", "type": "Text", "caseID": 1, "label": "Field 1"}
+TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseID": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}`;
+
+    const result = extractToolCall(toolCallText);
+    expect(result).toEqual({
+      toolName: "saveField",
+      params: {
+        id: 1,
+        name: "field1",
+        type: "Text",
+        caseID: 1,
+        label: "Field 1",
+      },
     });
   });
 });
@@ -177,14 +234,14 @@ describe("createStreamProcessor", () => {
   });
 
   it("processes tool calls successfully", async () => {
-    await processor.processToolCall("createCase", { name: "Test" });
+    await processor.processToolCall("saveCase", { name: "Test" });
 
     expect(mockWriter.write).toHaveBeenCalledWith(
-      encoder.encode('data: {"text":"\\nExecuting createCase...\\n"}\n\n'),
+      encoder.encode('data: {"text":"\\nExecuting saveCase...\\n"}\n\n'),
     );
     expect(mockWriter.write).toHaveBeenCalledWith(
       encoder.encode(
-        'data: {"text":"\\nSuccessfully executed createCase.\\n","toolResult":{"id":1,"name":"Test Case"}}\n\n',
+        'data: {"text":"\\nSuccessfully executed saveCase.\\n\\nIMPORTANT: Continue with the next tool call. Do not stop here. The workflow is not complete until all tools are executed.\\n","toolResult":{"id":1,"name":"Test Case"}}\n\n',
       ),
     );
   });
@@ -193,11 +250,11 @@ describe("createStreamProcessor", () => {
     // Mock the tool to throw an error
     mockTools[0].execute.mockRejectedValueOnce(new Error("Database error"));
 
-    await processor.processToolCall("createCase", { name: "Test" });
+    await processor.processToolCall("saveCase", { name: "Test" });
 
     expect(mockWriter.write).toHaveBeenCalledWith(
       encoder.encode(
-        'data: {"text":"\\nError executing createCase: Database error\\n","error":"Database error"}\n\n',
+        'data: {"text":"\\nError executing saveCase: Database error\\n","error":"Database error"}\n\n',
       ),
     );
   });
@@ -241,10 +298,12 @@ describe("getToolsContext", () => {
   it("returns a string containing tool information", () => {
     const context = getToolsContext(mockTools);
     expect(context).toContain("Available tools:");
-    expect(context).toContain("createCase");
-    expect(context).toContain("createField");
-    expect(context).toContain("TOOL: toolName");
-    expect(context).toContain("PARAMS:");
+    expect(context).toContain("saveCase");
+    expect(context).toContain("saveField");
+    expect(context).toContain(
+      "You can use these tools to interact with the database",
+    );
+    expect(context).toContain("IMPORTANT:");
   });
 });
 

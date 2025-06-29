@@ -20,6 +20,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
   const [label, setLabel] = useState(field.label);
   const [type, setType] = useState(field.type);
   const [isPrimary, setIsPrimary] = useState(field.primary || false);
+  const [isRequired, setIsRequired] = useState(field.required || false);
   const [error, setError] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -34,6 +35,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       setLabel(field.label);
       setType(field.type);
       setIsPrimary(field.primary || false);
+      setIsRequired(field.required || false);
     } else {
       document.body.style.overflow = "unset";
     }
@@ -52,6 +54,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       label: label.trim(),
       type,
       primary: isPrimary,
+      required: isRequired,
       options: field.options,
     });
     setError("");
@@ -163,6 +166,39 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
                     Primary Field
                   </label>
                   <Tooltip content="Primary fields are used as identifiers and are displayed prominently in the workflow">
+                    <span className="text-gray-400 hover:text-gray-500 cursor-help">
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                    </span>
+                  </Tooltip>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="isRequired"
+                    checked={isRequired}
+                    onChange={(e) => setIsRequired(e.target.checked)}
+                    className="rounded border-gray-300 text-blue-500 focus:ring-blue-500"
+                  />
+                  <label
+                    htmlFor="isRequired"
+                    className="text-sm text-gray-700 dark:text-gray-300"
+                  >
+                    Required Field
+                  </label>
+                  <Tooltip content="Required fields must be filled out before proceeding">
                     <span className="text-gray-400 hover:text-gray-500 cursor-help">
                       <svg
                         className="w-4 h-4"

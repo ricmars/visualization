@@ -171,7 +171,7 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 ### View Creation Requirements
 
 - Views must include `caseID` in creation request
-- View names should follow pattern: `${stepName}Form`
+- View names should be unique and descriptive
 - Views can only reference fields that exist in their parent case
 
 ## LLM Provider Configuration
@@ -339,7 +339,7 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 ### Prerequisites
 
 - Node.js (version specified in .nvmrc)
-- pnpm (preferred package manager)
+- npm (package manager - NOT pnpm)
 - Git
 - Neon PostgresDB account and database instance
 
@@ -353,15 +353,15 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 ### Getting Started
 
 1. Clone the repository
-2. Run `pnpm install`
+2. Run `npm install`
 3. Copy `.env.example` to `.env.local`
-4. Run `pnpm dev` to start development server
+4. Run `npm run dev` to start development server on port 3100
 
 ### Running Tests
 
-- Unit tests: `pnpm test`
-- E2E tests: `pnpm test:e2e`
-- Coverage report: `pnpm test:coverage`
+- Unit tests: `npm test`
+- E2E tests: `npm test:e2e`
+- Coverage report: `npm test:coverage`
 
 ## Critical Reminders
 
@@ -383,6 +383,8 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - Not resetting database after schema changes
 - Duplicating system prompt in multiple files
 - Using names instead of IDs for database relationships
+- **Using wrong port (3000 instead of 3100)**
+- **Using wrong package manager (pnpm instead of npm)**
 
 ### Validation Checklist
 
@@ -397,3 +399,5 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - [ ] All tests pass
 - [ ] Error handling is implemented
 - [ ] Security best practices are followed
+- [ ] **Using correct port (3100) in all commands and examples**
+- [ ] **Using correct package manager (npm) in all commands and examples**

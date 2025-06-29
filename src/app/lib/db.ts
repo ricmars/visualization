@@ -1,5 +1,9 @@
 import { Pool } from "pg";
 
+console.log("Database configuration:");
+console.log("DATABASE_URL:", process.env.DATABASE_URL ? "Set" : "Not set");
+console.log("NODE_ENV:", process.env.NODE_ENV);
+
 // Create a new pool using the DATABASE_URL environment variable
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -7,15 +11,24 @@ export const pool = new Pool({
     process.env.NODE_ENV === "production"
       ? { rejectUnauthorized: false }
       : false,
+  // Performance optimizations
+  max: 20, // Increase max connections
+  min: 2, // Keep minimum connections ready
+  idleTimeoutMillis: 30000, // Keep connections alive longer
+  connectionTimeoutMillis: 2000, // Faster connection timeout
 });
 
+console.log("Database pool created");
+
 // Test the connection
-pool.on("connect", () => {
+pool.on("connect", (_client) => {
   console.log("Connected to the database");
+  console.log("Client connected successfully");
 });
 
 pool.on("error", (err) => {
   console.error("Unexpected error on idle client", err);
+  console.error("Error stack:", err.stack);
   process.exit(-1);
 });
 

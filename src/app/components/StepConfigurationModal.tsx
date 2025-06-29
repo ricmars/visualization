@@ -50,12 +50,17 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
 
   // Map field references to actual fields
   const stepFields = useMemo(() => {
-    return step.fields
+    const mappedFields = step.fields
       .map((fieldRef) => {
-        const field = fields.find((f) => f.name === fieldRef.name);
+        // Try to find field by ID first, then by name as fallback
+        const field = fields.find(
+          (f) => f.id === fieldRef.id || f.name === fieldRef.name,
+        );
         return field ? { ...field, ...fieldRef } : null;
       })
       .filter((f): f is Field => f !== null);
+
+    return mappedFields;
   }, [step.fields, fields]);
 
   useEffect(() => {

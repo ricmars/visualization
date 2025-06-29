@@ -29,19 +29,19 @@ interface CaseInput {
   description: string;
   model: {
     stages: {
-      id: string;
+      id: number;
       name: string;
       order: number;
       processes: {
-        id: string;
+        id: number;
         name: string;
         order: number;
         steps: {
-          id: string;
+          id: number;
           type: string;
           name: string;
           order: number;
-          viewId?: string;
+          viewId?: number;
         }[];
       }[];
     }[];
@@ -208,7 +208,11 @@ export async function GET(request: Request) {
       (table === DB_TABLES.FIELDS || table === DB_TABLES.VIEWS)
     ) {
       const validatedCaseId = validateCaseId(caseID);
-      query = `SELECT * FROM "${table}" WHERE ${DB_COLUMNS.CASE_ID} = $1`;
+      if (table === DB_TABLES.FIELDS) {
+        query = `SELECT * FROM "${table}" WHERE ${DB_COLUMNS.CASE_ID} = $1 ORDER BY "order", name`;
+      } else {
+        query = `SELECT * FROM "${table}" WHERE ${DB_COLUMNS.CASE_ID} = $1 ORDER BY name`;
+      }
       values = [validatedCaseId];
     } else {
       query = `SELECT * FROM "${table}"`;
