@@ -258,7 +258,7 @@ export default function WorkflowPage() {
   useEffect(() => {
     fetchCase();
     loadWorkflow();
-  }, [id]);
+  }, [id, fetchCase, loadWorkflow]);
 
   // Handle iframe creation
   useEffect(() => {

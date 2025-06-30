@@ -300,10 +300,8 @@ describe("getToolsContext", () => {
     expect(context).toContain("Available tools:");
     expect(context).toContain("saveCase");
     expect(context).toContain("saveField");
-    expect(context).toContain(
-      "You can use these tools to interact with the database",
-    );
-    expect(context).toContain("IMPORTANT:");
+    expect(context).toContain("Use OpenAI function calling to execute tools");
+    expect(context).toContain("Complete workflow in minimal iterations");
   });
 });
 

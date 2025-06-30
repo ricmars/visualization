@@ -32,3 +32,38 @@ global.console = {
 
 // Add expect to global scope
 global.expect = require("expect");
+
+// Global cleanup function that can be called from individual test files
+global.cleanupTestEnvironment = async () => {
+  try {
+    const { pool } = require("./src/app/lib/db");
+    if (pool && typeof pool.end === "function") {
+      await pool.end();
+    }
+  } catch (e) {
+    // Ignore if pool is not available
+  }
+
+  // Force garbage collection to clean up any remaining handles
+  if (global.gc) {
+    global.gc();
+  }
+
+  // Clear any remaining timers
+  jest.clearAllTimers();
+};
+
+// Process cleanup on exit
+process.on("exit", () => {
+  global.cleanupTestEnvironment?.();
+});
+
+process.on("SIGINT", () => {
+  global.cleanupTestEnvironment?.();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  global.cleanupTestEnvironment?.();
+  process.exit(0);
+});

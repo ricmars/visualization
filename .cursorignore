@@ -1,7 +1,1 @@
-# Files to always include in context
-!CONTRIBUTING.md
-
-# Ignore common patterns
-node_modules/
-.git/
-*.log
+# Ignore other files not listed in .gitignore

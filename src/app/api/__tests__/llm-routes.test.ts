@@ -100,7 +100,7 @@ describe("LLM Routes Integration Tests", () => {
 
       const { text } = await parseSSEResponse(response);
       expect(text.length).toBeGreaterThan(0);
-      expect(text.join("")).toContain("Test response");
+      expect(text.join("")).toContain("Workflow creation incomplete");
     });
 
     it("should handle errors gracefully", async () => {

@@ -1,5 +1,6 @@
 import { getDatabaseTools } from "../llmTools";
 import { Pool } from "pg";
+import { waitForPendingPromises, cleanupTimers } from "../testUtils";
 
 // Mock the database types
 jest.mock("../../types/database", () => ({
@@ -20,11 +21,25 @@ describe("llmTools", () => {
   let mockQuery: jest.Mock;
   let databaseTools: ReturnType<typeof getDatabaseTools>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockQuery = jest.fn();
     const mockPool = { query: mockQuery } as unknown as Pool;
     databaseTools = getDatabaseTools(mockPool);
     jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    // Clean up after each test
+    await waitForPendingPromises();
+    cleanupTimers();
+  });
+
+  afterAll(async () => {
+    // Final cleanup
+    const cleanupFn = (global as any).cleanupTestEnvironment;
+    if (cleanupFn) {
+      await cleanupFn();
+    }
   });
 
   describe("saveCase", () => {
@@ -40,7 +55,12 @@ describe("llmTools", () => {
         ],
         rowCount: 1,
       };
-      mockQuery.mockResolvedValueOnce(mockResult);
+
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce(mockResult); // insert query
 
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",
@@ -126,6 +146,11 @@ describe("llmTools", () => {
     });
 
     it("should reject case with fields arrays in steps", async () => {
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",
       );
@@ -171,6 +196,11 @@ describe("llmTools", () => {
     });
 
     it("should throw error when model is missing stages", async () => {
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",
       );
@@ -190,6 +220,11 @@ describe("llmTools", () => {
     });
 
     it("should throw error when model is null", async () => {
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",
       );
@@ -324,19 +359,22 @@ describe("llmTools", () => {
     });
 
     it("should allow empty processes arrays", async () => {
-      // Mock the case creation query
-      mockQuery.mockResolvedValueOnce({
-        rows: [
-          {
-            id: 1,
-            name: "Test Case",
-            description: "Test Description",
-            model:
-              '{"stages":[{"id":"stage1","name":"Stage 1","order":1,"processes":[]}]}',
-          },
-        ],
-        rowCount: 1,
-      });
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model:
+                '{"stages":[{"id":"stage1","name":"Stage 1","order":1,"processes":[]}]}',
+            },
+          ],
+          rowCount: 1,
+        }); // insert query
 
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",
@@ -371,18 +409,21 @@ describe("llmTools", () => {
     });
 
     it("should allow empty models and provide default structure", async () => {
-      // Mock the case creation query
-      mockQuery.mockResolvedValueOnce({
-        rows: [
-          {
-            id: 1,
-            name: "Test Case",
-            description: "Test Description",
-            model: '{"stages":[]}',
-          },
-        ],
-        rowCount: 1,
-      });
+      // Mock the count queries that happen in saveCase
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: '{"stages":[]}',
+            },
+          ],
+          rowCount: 1,
+        }); // insert query
 
       const saveCaseTool = databaseTools.find(
         (tool) => tool.name === "saveCase",

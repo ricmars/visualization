@@ -17,4 +17,14 @@ module.exports = {
   testPathIgnorePatterns: ["/node_modules/", "/.next/"],
   verbose: true,
   testTimeout: 10000,
+  // Force Jest to exit after tests complete
+  forceExit: true,
+  // Clear mocks between tests
+  clearMocks: true,
+  // Reset modules between tests
+  resetModules: false,
+  // Restore mocks between tests
+  restoreMocks: true,
+  // Detect open handles
+  detectOpenHandles: true,
 };

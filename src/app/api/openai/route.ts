@@ -89,6 +89,36 @@ async function createOpenAIClient() {
   return client;
 }
 
+// Define interfaces for OpenAI response types
+interface OpenAICompletion {
+  [Symbol.asyncIterator](): AsyncIterator<{
+    choices: Array<{
+      delta?: {
+        content?: string;
+        tool_calls?: Array<{
+          index: number;
+          id: string;
+          function?: {
+            name?: string;
+            arguments?: string;
+          };
+        }>;
+      };
+      finish_reason?: string;
+    }>;
+  }>;
+}
+
+interface ToolCall {
+  index: number;
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
 export async function POST(request: Request) {
   console.log("=== OpenAI POST request started ===");
   const startTime = Date.now();
@@ -221,14 +251,8 @@ ${prompt}
 
 ${getToolsContext(databaseTools)}
 
-CRITICAL INSTRUCTIONS:
-1. ALWAYS use helper tools FIRST (getCase, listFields, listViews) before any creation operations
-2. NEVER create anything without checking what exists first
-3. Use saveField, saveView, and saveCase in sequence
-4. Create logical field groupings and distribute them across multiple views
-5. Complete the entire workflow in minimal iterations
-6. Do NOT ask questions - proceed with the workflow creation immediately
-
+CRITICAL: Use helper tools FIRST (getCase, listFields, listViews) before creation
+Create fields, views, then case. Complete workflow in minimal iterations.
 Current case ID: ${currentCaseId || "NEW"}`;
 
     console.log("Building enhanced system prompt...");
@@ -248,8 +272,6 @@ Current case ID: ${currentCaseId || "NEW"}`;
         ];
         let loopCount = 0;
         let done = false;
-        let consecutiveErrors = 0;
-        let lastErrorTool = "";
         let toolCallHistory: Array<{
           tool: string;
           timestamp: number;
@@ -262,8 +284,14 @@ Current case ID: ${currentCaseId || "NEW"}`;
           enhancedPrompt.substring(0, 200) + "...",
         );
 
-        while (!done && loopCount < 10) {
-          // prevent infinite loops
+        while (!done && loopCount < 15) {
+          // Force completion if we're at max iterations
+          if (loopCount >= 15) {
+            console.log("Reached maximum iterations, forcing completion");
+            done = true;
+            break;
+          }
+
           loopCount++;
           const loopStartTime = Date.now();
           console.log(
@@ -272,121 +300,126 @@ Current case ID: ${currentCaseId || "NEW"}`;
             }ms elapsed) ===`,
           );
 
-          // Add early termination for excessive iterations
-          if (loopCount > 8) {
-            console.log("Reached maximum iterations, forcing completion");
-            const finalMessage = {
-              role: "user" as const,
-              content:
-                "Complete the workflow creation with the remaining required fields and views. Do not ask questions - proceed immediately.",
-            };
-            messages.push(finalMessage);
-          }
+          try {
+            console.log(`Calling OpenAI API (iteration ${loopCount})...`);
+            const apiCallStartTime = Date.now();
 
-          // If we have consecutive errors with the same tool, force the AI to use helper tools
-          if (consecutiveErrors >= 1) {
-            console.log(
-              "Detected consecutive errors, forcing helper tool usage",
-            );
-            const forceHelperMessage = {
-              role: "user" as const,
-              content: `🚨 CRITICAL ERROR: You are getting repeated errors because you are NOT following the mandatory first steps!
+            // Add timeout to prevent long delays
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(
+                () => reject(new Error("OpenAI API timeout after 15 seconds")),
+                15000,
+              );
+            });
 
-🚨 STOP ALL CREATION OPERATIONS IMMEDIATELY!
-🚨 You MUST use these helper tools FIRST before creating anything:
-1. Use getCase to see the current workflow structure
-2. Use listFields to see existing fields (to avoid duplicate names)
-3. Use listViews to see existing views (to avoid duplicate names)
+            const completionPromise = openai.chat.completions.create({
+              model: "gpt-35-turbo-16k",
+              messages,
+              max_tokens: 2048, // Reduced from 4096
+              stream: true, // Enable streaming for faster responses
+              tools: openaiToolSchemas,
+              temperature: 0.1,
+              top_p: 0.9, // Add top_p for better performance
+              presence_penalty: 0.1, // Reduce repetition
+              frequency_penalty: 0.1, // Reduce repetition
+            });
 
-🚨 The errors you're getting are because you're trying to create items that already exist.
-🚨 Use getCase, listFields, and listViews NOW before any other operations.
-🚨 Do NOT retry the same failed operation - use the helper tools first!
+            const completion = (await Promise.race([
+              completionPromise,
+              timeoutPromise,
+            ])) as OpenAICompletion;
+            const apiCallDuration = Date.now() - apiCallStartTime;
+            console.log(`OpenAI API call completed in ${apiCallDuration}ms`);
 
-🚨 CRITICAL UNDERSTANDING: WHAT ARE FIELDS VS STAGES/STEPS?
-FIELDS represent BUSINESS DATA that gets collected from users (like forms, surveys, etc.)
-- Examples: "Applicant Name", "Budget", "Start Date", "Cabinet Style", "Contractor Contact"
-- Fields are the actual data points that users fill out
-- Fields are stored in VIEWS, not in steps
+            // Handle streaming response
+            let fullContent = "";
+            let toolCalls: ToolCall[] = [];
+            let finishReason = "";
 
-STAGES/STEPS represent the WORKFLOW STRUCTURE (the process flow)
-- Examples: "Request Stage", "Approval Stage", "Request Details Step", "Approval Step"
-- Stages and steps define the process flow and organization
-- Stages and steps are defined in the case model structure
-- Stages and steps do NOT need fields - they are just containers/organizers
+            try {
+              for await (const chunk of completion) {
+                const choice = chunk.choices[0];
+                if (choice?.delta?.content) {
+                  fullContent += choice.delta.content;
+                }
+                if (choice?.delta?.tool_calls) {
+                  for (const toolCall of choice.delta.tool_calls) {
+                    const existingIndex = toolCalls.findIndex(
+                      (tc) => tc.index === toolCall.index,
+                    );
+                    if (existingIndex >= 0) {
+                      // Update existing tool call
+                      if (toolCall.function?.name) {
+                        toolCalls[existingIndex].function.name =
+                          toolCall.function.name;
+                      }
+                      if (toolCall.function?.arguments) {
+                        toolCalls[existingIndex].function.arguments =
+                          (toolCalls[existingIndex].function.arguments || "") +
+                          toolCall.function.arguments;
+                      }
+                    } else {
+                      // Add new tool call
+                      toolCalls.push({
+                        index: toolCall.index,
+                        id: toolCall.id,
+                        type: "function",
+                        function: {
+                          name: toolCall.function?.name || "",
+                          arguments: toolCall.function?.arguments || "",
+                        },
+                      });
+                    }
+                  }
+                }
+                if (choice?.finish_reason) {
+                  finishReason = choice.finish_reason;
+                }
+              }
+            } catch (streamError) {
+              console.error(
+                "Error processing streaming response:",
+                streamError,
+              );
+              throw new Error(`Streaming error: ${streamError}`);
+            }
 
-🚨 CRITICAL: NEVER CREATE FIELDS FOR WORKFLOW STRUCTURE!
-🚨 WRONG: Creating fields like "Stage1", "Stage2", "Step1", "Step2", "Stage1Name", "Step1Description"
-🚨 RIGHT: Creating fields like "Applicant Name", "Budget", "Start Date", "Cabinet Style"
+            console.log(`Finish reason: ${finishReason}`);
 
-🚨 CRITICAL: For workflow creation, you MUST complete ALL steps:
-- Create case with basic structure
-- Create meaningful business data fields (NOT generic stage/step fields)
-- Create views for "Collect information" steps
-- Update case with viewId references to link views to steps
-
-🚨 CRITICAL FIELD CREATION RULES:
-- Create fields for ACTUAL BUSINESS DATA, not workflow structure
-- DO NOT create generic fields like "Stage1", "Stage2", "Step1", "Step2"
-- Create fields that represent real data to be collected (e.g., "Applicant Name", "Budget", "Start Date")
-- Focus on the business domain of the workflow
-- Fields are for USER INPUT DATA, not for representing workflow structure
-- The workflow structure (stages/steps) is already complete - you don't need fields for it
-
-🚨 NEVER STOP AFTER CREATING FIELDS - COMPLETE THE ENTIRE WORKFLOW!`,
-            };
-            messages.push(forceHelperMessage);
-            consecutiveErrors = 0; // Reset counter
-          }
-
-          console.log(`Calling OpenAI API (iteration ${loopCount})...`);
-          const apiCallStartTime = Date.now();
-          const completion = await openai.chat.completions.create({
-            model: "gpt-35-turbo-16k",
-            messages,
-            max_tokens: 4096,
-            stream: false,
-            tools: openaiToolSchemas,
-            temperature: 0.1,
-          });
-          const apiCallDuration = Date.now() - apiCallStartTime;
-          console.log(`OpenAI API call completed in ${apiCallDuration}ms`);
-
-          const choice = completion.choices[0];
-          console.log(`Finish reason: ${choice.finish_reason}`);
-
-          // Check if first iteration without tool calls and add instruction to proceed
-          if (loopCount === 1 && choice.finish_reason !== "tool_calls") {
-            console.log(
-              "First iteration without tool calls - adding instruction to proceed with tools",
-            );
-            const proceedMessage = {
-              role: "user" as const,
-              content: `🚨 CRITICAL: DO NOT ASK QUESTIONS - PROCEED WITH TOOL CALLS!
+            // Check if first iteration without tool calls and add instruction to proceed
+            if (loopCount === 1 && finishReason !== "tool_calls") {
+              console.log(
+                "First iteration without tool calls - adding instruction to proceed with tools",
+              );
+              const proceedMessage = {
+                role: "user" as const,
+                content: `🚨 CRITICAL: DO NOT ASK QUESTIONS - PROCEED WITH TOOL CALLS!
 🚨 You have all the information you need to proceed
 🚨 Start with getCase, listFields, and listViews to check existing data
 🚨 Then proceed with saveField, saveView, and saveCase in sequence
 🚨 Do NOT ask for case name/description - extract it from the prompt
 🚨 Do NOT stop to ask questions - proceed with the workflow creation!`,
-            };
-            messages.push(proceedMessage);
-            continue; // Continue to next iteration
-          }
+              };
+              messages.push(proceedMessage);
+              continue; // Continue to next iteration
+            }
 
-          // If the model wants to call a function
-          if (
-            choice.finish_reason === "tool_calls" &&
-            choice.message.tool_calls
-          ) {
-            console.log(
-              `Tool calls detected: ${choice.message.tool_calls.length} tools`,
-            );
+            // If the model wants to call a function
+            if (finishReason === "tool_calls" && toolCalls.length > 0) {
+              console.log(`Tool calls detected: ${toolCalls.length} tools`);
 
-            // Add the assistant message with tool calls to the conversation
-            messages.push(choice.message);
+              // Create assistant message with tool calls
+              const assistantMessage = {
+                role: "assistant" as const,
+                content: fullContent,
+                tool_calls: toolCalls,
+              };
 
-            // Execute all tool calls in parallel for better performance
-            const toolCallPromises = choice.message.tool_calls.map(
-              async (toolCall) => {
+              // Add the assistant message with tool calls to the conversation
+              messages.push(assistantMessage);
+
+              // Execute all tool calls in parallel for better performance
+              const toolCallPromises = toolCalls.map(async (toolCall) => {
                 const toolName = toolCall.function.name;
                 const toolArgs = JSON.parse(
                   toolCall.function.arguments || "{}",
@@ -432,16 +465,12 @@ STAGES/STEPS represent the WORKFLOW STRUCTURE (the process flow)
                   );
                   await processor.sendText(JSON.stringify(result));
 
-                  // Add tool result to messages using the new format for o4-mini
+                  // Add tool result to messages
                   messages.push({
                     role: "tool",
                     content: JSON.stringify(result),
                     tool_call_id: toolCall.id,
                   });
-
-                  // Reset error counter on success
-                  consecutiveErrors = 0;
-                  lastErrorTool = "";
 
                   return { success: true, result };
                 } catch (err) {
@@ -462,52 +491,93 @@ STAGES/STEPS represent the WORKFLOW STRUCTURE (the process flow)
                     `\nError executing ${toolName}: ${err}\n`,
                   );
 
-                  // Add tool result to messages using the new format for o4-mini
+                  // Add tool result to messages
                   messages.push({
                     role: "tool",
                     content: JSON.stringify({ error: String(err) }),
                     tool_call_id: toolCall.id,
                   });
 
-                  // Track consecutive errors
-                  if (toolName === lastErrorTool) {
-                    consecutiveErrors++;
-                  } else {
-                    consecutiveErrors = 1;
-                    lastErrorTool = toolName;
-                  }
-
                   return { success: false, error: err };
                 }
-              },
-            );
+              });
 
-            // Wait for all tool calls to complete
-            await Promise.all(toolCallPromises);
+              // Wait for all tool calls to complete
+              await Promise.all(toolCallPromises);
+
+              const loopDuration = Date.now() - loopStartTime;
+              console.log(
+                `=== Loop iteration ${loopCount} completed in ${loopDuration}ms ===`,
+              );
+
+              // Check if saveCase was called in this iteration
+              const saveCaseCalled = toolCalls.some(
+                (tc) => tc.function.name === "saveCase",
+              );
+
+              // If we're at max iterations or saveCase was called, we can complete
+              if (loopCount >= 15 || saveCaseCalled) {
+                console.log(
+                  `Loop completion: ${
+                    saveCaseCalled
+                      ? "saveCase called"
+                      : "max iterations reached"
+                  }`,
+                );
+                done = true;
+                break;
+              }
+
+              // If saveCase wasn't called and we haven't reached max iterations,
+              // add a message to force the LLM to continue with workflow completion
+              if (!saveCaseCalled) {
+                console.log("saveCase not called - adding completion reminder");
+
+                const completionMessage = {
+                  role: "user" as const,
+                  content: `🚨 WORKFLOW INCOMPLETE!
+🚨 You need to complete the workflow by calling saveCase with the workflow model.
+🚨 Create views for data collection steps, then call saveCase with stages, processes, and steps.
+🚨 Do not stop here - complete the workflow!`,
+                };
+                messages.push(completionMessage);
+              }
+
+              // Continue loop for next tool call or final message
+              continue;
+            }
+
+            // If the model returns a final message (no tool call)
+            if (fullContent) {
+              console.log(
+                "Final message received:",
+                fullContent.substring(0, 200) + "...",
+              );
+              await processor.sendText(fullContent);
+            }
 
             const loopDuration = Date.now() - loopStartTime;
             console.log(
-              `=== Loop iteration ${loopCount} completed in ${loopDuration}ms ===`,
+              `=== Final loop iteration completed in ${loopDuration}ms ===`,
             );
-
-            // Continue loop for next tool call or final message
-            continue;
-          }
-
-          // If the model returns a final message (no tool call)
-          if (choice.message.content) {
-            console.log(
-              "Final message received:",
-              choice.message.content.substring(0, 200) + "...",
+            done = true;
+          } catch (error) {
+            const totalDuration = Date.now() - startTime;
+            console.error(
+              `Error in function call loop after ${totalDuration}ms:`,
+              error,
             );
-            await processor.sendText(choice.message.content);
+            try {
+              await processor.sendError(
+                error instanceof Error ? error.message : String(error),
+              );
+              await processor.sendDone();
+            } catch (sendError) {
+              console.error("Error sending error message:", sendError);
+            }
+            // Don't close writer here - let the outer catch handle it
+            break; // Exit the loop
           }
-
-          const loopDuration = Date.now() - loopStartTime;
-          console.log(
-            `=== Final loop iteration completed in ${loopDuration}ms ===`,
-          );
-          done = true;
         }
 
         const totalDuration = Date.now() - startTime;
@@ -516,19 +586,49 @@ STAGES/STEPS represent the WORKFLOW STRUCTURE (the process flow)
         );
         console.log(`Tool call history:`, toolCallHistory);
 
+        // Check if saveCase was called during the entire process
+        const saveCaseWasCalled = toolCallHistory.some(
+          (tc) => tc.tool === "saveCase",
+        );
+
+        if (!saveCaseWasCalled) {
+          console.warn(
+            "WARNING: saveCase was never called - workflow is incomplete!",
+          );
+          await processor.sendText(
+            "\n🚨 WARNING: Workflow creation incomplete! saveCase was never called.\n",
+          );
+          await processor.sendText(
+            "The workflow model with stages, processes, and steps was not created.\n",
+          );
+        } else {
+          console.log(
+            "SUCCESS: saveCase was called - workflow creation completed!",
+          );
+          await processor.sendText(
+            "\n✅ Workflow creation completed successfully!\n",
+          );
+        }
+
         await processor.sendDone();
         await writer.close();
       } catch (error) {
         const totalDuration = Date.now() - startTime;
         console.error(
-          `Error in function call loop after ${totalDuration}ms:`,
-          error,
+          `=== OpenAI POST request failed after ${totalDuration}ms ===`,
         );
-        await processor.sendError(
-          error instanceof Error ? error.message : String(error),
+        console.error("API route error:", error);
+        console.error(
+          "Error stack:",
+          error instanceof Error ? error.stack : "No stack trace",
         );
-        await processor.sendDone();
-        await writer.close();
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error ? error.message : "Internal server error",
+          },
+          { status: 500 },
+        );
       }
     })();
 

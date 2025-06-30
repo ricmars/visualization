@@ -4,8 +4,8 @@
 
 **IMPORTANT**: This project uses:
 
-- **Port**: 3100 (not 3000)
-- **Package Manager**: npm (not pnpm)
+- **Port**: 3100
+- **Package Manager**: npm
 - **Database Reset**: `curl -X POST http://localhost:3100/api/reset-db`
 
 ## Getting Started
