@@ -190,7 +190,7 @@ export function getDatabaseTools(pool: Pool) {
     {
       name: "saveCase",
       description:
-        "Creates a new case or updates an existing case in the database. If id is provided, updates the existing case. If no id is provided, creates a new case. CRITICAL: This should ONLY be called at the END of the workflow creation process, after all fields and views have been created. DO NOT call this early in the process. CRITICAL: The model must follow this exact structure: { stages: [{ id: number, name: string, order: number, processes: [{ id: number, name: string, order: number, steps: [{ id: number, type: string, name: string, order: number, viewId?: number }] }] }] }. Each stage must have a processes array, each process must have a steps array. Only 'Collect information' steps should have viewId. CRITICAL: Only call this after creating all fields and views - this is the FINAL step to create/update the case with the complete workflow model.",
+        "Creates a new case or updates an existing case in the database. If id is provided, updates the existing case. If no id is provided, creates a new case. CRITICAL: This should ONLY be called at the END of the workflow creation process, after all fields and views have been created. DO NOT call this early in the process. CRITICAL: The model must follow this exact structure: { stages: [{ id: number, name: string, order: number, processes: [{ id: number, name: string, order: number, steps: [{ id: number, type: string, name: string, order: number, viewId?: number }] }] }] }. Each stage must have a processes array, each process must have a steps array. Only 'Collect information' steps should have viewId. CRITICAL: Only call this after creating all fields and views - this is the FINAL step to create/update the case with the complete workflow model. CRITICAL: The viewId values must be the actual database IDs returned from saveView calls - do not use hardcoded IDs!",
       execute: async (params: SaveCaseParams) => {
         console.log("=== saveCase EXECUTION STARTED ===");
         console.log("saveCase parameters:", JSON.stringify(params, null, 2));
@@ -328,6 +328,7 @@ export function getDatabaseTools(pool: Pool) {
         let hasCollectInfoSteps = false;
         let missingViewIds = 0;
         let invalidViewIds = 0;
+        let nonExistentViewIds: number[] = [];
 
         for (const stage of params.model.stages) {
           // Only validate view IDs if processes array is not empty
@@ -360,6 +361,43 @@ export function getDatabaseTools(pool: Pool) {
                 }
               }
             }
+          }
+        }
+
+        // Validate that all viewId values actually exist in the database
+        if (viewIds.size > 0) {
+          const viewIdArray = Array.from(viewIds);
+          const placeholders = viewIdArray
+            .map((_, index) => `$${index + 1}`)
+            .join(",");
+          const viewCheckQuery = `
+            SELECT id FROM "${DB_TABLES.VIEWS}"
+            WHERE id IN (${placeholders}) AND caseid = $${
+            viewIdArray.length + 1
+          }
+          `;
+          const viewCheckValues = [...viewIdArray, params.id || 0];
+
+          const viewCheckResult = await pool.query(
+            viewCheckQuery,
+            viewCheckValues,
+          );
+          const existingViewIds = new Set(
+            viewCheckResult.rows.map((row) => row.id),
+          );
+
+          for (const viewId of viewIdArray) {
+            if (!existingViewIds.has(viewId)) {
+              nonExistentViewIds.push(viewId);
+            }
+          }
+
+          if (nonExistentViewIds.length > 0) {
+            throw new Error(
+              `The following viewId values do not exist in the database: ${nonExistentViewIds.join(
+                ", ",
+              )}. Make sure to use the actual IDs returned from saveView calls.`,
+            );
           }
         }
 
@@ -561,7 +599,7 @@ export function getDatabaseTools(pool: Pool) {
     {
       name: "saveView",
       description:
-        "Creates a new view or updates an existing view for the current case. If id is provided, updates the existing view. If no id is provided, creates a new view. Only create views for 'Collect information' steps. Use listFields and listViews first to check existing items. Model must include fields array and layout object. View names should not include 'Form' suffix. The view name you create will be used as the step name in the workflow model.",
+        "Creates a new view or updates an existing view for the current case. If id is provided, updates the existing view. If no id is provided, creates a new view. Only create views for 'Collect information' steps. Use listFields and listViews first to check existing items. Model must include fields array and layout object. View names should not include 'Form' suffix. The view name you create will be used as the step name in the workflow model. CRITICAL: The returned 'id' field MUST be used as the viewId in your workflow model - do not use hardcoded IDs!",
       execute: async (params: SaveViewParams) => {
         console.log("=== saveView EXECUTION STARTED ===");
         console.log("saveView parameters:", JSON.stringify(params, null, 2));

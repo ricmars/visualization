@@ -1,7 +1,7 @@
 /// <reference types="jest" />
 // @ts-nocheck
 import type { NextRequest } from "next/server";
-import { POST } from "../openai/n";
+import { POST } from "../openai/route";
 
 type ToolExecute = (params: unknown) => Promise<unknown>;
 

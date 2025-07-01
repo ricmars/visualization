@@ -358,6 +358,64 @@ describe("llmTools", () => {
       ).rejects.toThrow('Duplicate viewId "view1" found in steps');
     });
 
+    it("should throw error when viewId does not exist in database", async () => {
+      // Mock the case existence check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 1 }],
+        rowCount: 1,
+      });
+
+      // Mock the view existence check to return no views (viewId 999 doesn't exist)
+      mockQuery.mockResolvedValueOnce({
+        rows: [],
+        rowCount: 0,
+      });
+
+      const saveCaseTool = databaseTools.find(
+        (tool) => tool.name === "saveCase",
+      );
+      expect(saveCaseTool).toBeDefined();
+
+      await expect(
+        (
+          saveCaseTool!.execute as unknown as (
+            params: unknown,
+          ) => Promise<unknown>
+        )({
+          id: 1,
+          name: "Test Case",
+          description: "Test Description",
+          model: {
+            stages: [
+              {
+                id: "stage1",
+                name: "Stage 1",
+                order: 1,
+                processes: [
+                  {
+                    id: "process1",
+                    name: "Process 1",
+                    order: 1,
+                    steps: [
+                      {
+                        id: "step1",
+                        type: "Collect information",
+                        name: "Step 1",
+                        order: 1,
+                        viewId: 999, // Non-existent view ID
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ).rejects.toThrow(
+        "The following viewId values do not exist in the database: 999. Make sure to use the actual IDs returned from saveView calls.",
+      );
+    });
+
     it("should allow empty processes arrays", async () => {
       // Mock the count queries that happen in saveCase
       mockQuery

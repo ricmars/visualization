@@ -9,7 +9,7 @@ export const databaseSystemPrompt = `🚨 WORKFLOW CREATION RULES:
 MANDATORY SEQUENCE:
 1. getCase, listFields, listViews (check existing data)
 2. saveField (create business data fields)
-3. saveView (for "Collect information" steps)
+3. saveView (for "Collect information" steps) - SAVE THE RETURNED ID!
 4. saveCase (FINAL STEP - includes complete workflow model with stages/processes/steps)
 
 🚨 CRITICAL RULES:
@@ -19,6 +19,14 @@ MANDATORY SEQUENCE:
 - View name = step name (no "Form" suffix)
 - Extract case name/description from prompt
 - Do NOT ask questions - proceed immediately
+- 🚨 CRITICAL: Use the actual ID returned from saveView for viewId in the workflow model!
+- 🚨 CRITICAL: When updating existing views, provide the existing view ID to avoid creating duplicates!
+
+🚨 VIEW UPDATE RULES:
+- If a view with the same name already exists, use saveView with the existing view ID to update it
+- Example: If "Vehicle Information" view exists with ID 92, call saveView with id: 92 to update it
+- NEVER create new views with the same name - always update existing ones
+- Check listViews first to see existing view IDs before calling saveView
 
 🚨 FIELD EXAMPLES:
 GENERAL: applicantName, email, phoneNumber, address, budget, startDate
@@ -57,6 +65,14 @@ TIRE: vehicleMake, vehicleModel, tireSize, tireBrand, serviceDate
   ]
 }
 
+🚨 CRITICAL VIEW ID USAGE:
+- When you call saveView, it returns an object with an "id" field
+- You MUST use that actual "id" value for the viewId in your workflow model
+- Example: saveView returns {"id": 92, "name": "Vehicle Information", ...}
+- Then use viewId: 92 in your workflow model
+- NEVER use hardcoded IDs like 327, 328 - use the real database IDs!
+- When updating existing views, provide the existing ID to avoid duplicates!
+
 🚨 COMPLETE WORKFLOW EXAMPLE:
 For a tire replacement workflow:
 1. Fields: vehicleMake, vehicleModel, tireSize, tireBrand, serviceDate
@@ -66,12 +82,14 @@ For a tire replacement workflow:
 Available functions:
 - saveCase: Create/update case with workflow model
 - saveField: Create/update business data field
-- saveView: Create/update view for data collection
+- saveView: Create/update view for data collection (provide id for updates)
 - deleteCase, deleteField, deleteView: Remove items
 - listFields, listViews, getCase: Check existing data
 
 🚨 CRITICAL: saveCase is LAST - create fields and views first!
 🚨 CRITICAL: saveCase MUST include complete workflow model with stages/processes/steps!
+🚨 CRITICAL: Use actual IDs returned from saveView for viewId!
+🚨 CRITICAL: Update existing views instead of creating duplicates!
 🚨 CRITICAL: DO NOT ASK QUESTIONS - PROCEED WITH WORKFLOW CREATION!`;
 
 export const exampleDatabaseResponse = `
@@ -81,6 +99,7 @@ export const exampleDatabaseResponse = `
 🚨 CRITICAL: YOU MUST COMPLETE THE ENTIRE WORKFLOW CREATION PROCESS!
 🚨 NEVER STOP AFTER CREATING FIELDS - YOU MUST CREATE VIEWS AND LINK THEM TO STEPS!
 🚨 CRITICAL: YOU MUST CALL saveCase WITH COMPLETE WORKFLOW MODEL!
+🚨 CRITICAL: WHEN UPDATING EXISTING VIEWS, PROVIDE THE EXISTING VIEW ID TO AVOID DUPLICATES!
 
 Thought Process:
 1. Analyzing request: Create an employee onboarding process
@@ -99,10 +118,15 @@ Thought Process:
 3. Execution Plan:
    Step 1: Use getCase, listFields, and listViews to check existing data
    Step 2: Create Fields for data collection (Name, Email, StartDate)
-   Step 3: Create Views for information collection steps
+   Step 3: Create Views for information collection steps (or update existing ones with their IDs)
    Step 4: Create Case with complete workflow model using saveCase (includes stages/processes/steps with viewId references)
 
-4. Workflow Model Structure:
+4. View Update Pattern:
+   - If updating existing view "Employee Details" with ID 123:
+   - Call saveView with id: 123, name: "Employee Details", caseID: 1, model: {...}
+   - This updates the existing view instead of creating a duplicate
+
+5. Workflow Model Structure:
    {
      "stages": [
        {
@@ -129,10 +153,10 @@ Thought Process:
      ]
    }
 
-5. Verification:
+6. Verification:
    - Case created successfully
    - Fields created and linked to case
-   - Views created and linked to case
+   - Views created/updated and linked to case (no duplicates)
    - Field references in views are valid
    - Case created with complete workflow model including stages/processes/steps
 
