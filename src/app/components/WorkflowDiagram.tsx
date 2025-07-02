@@ -53,10 +53,10 @@ interface WorkflowDiagramProps {
   }) => string;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (field: Field) => void;
-  onAddProcess: (stageId: string, processName: string) => void;
+  onAddProcess: (stageId: number, processName: string) => void;
   onAddStep: (
-    stageId: string,
-    processId: string,
+    stageId: number,
+    processId: number,
     stepName: string,
     stepType: StepType,
   ) => void;
@@ -158,7 +158,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   const handleAddProcessSubmit = (data: { name: string }) => {
     if (!selectedStageId) return;
     // Call parent handler with stageId and process name
-    onAddProcess(selectedStageId.toString(), data.name);
+    onAddProcess(selectedStageId, data.name);
     setIsAddProcessModalOpen(false);
     setSelectedStageId(null);
   };
@@ -178,7 +178,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     stepType: StepType,
   ) => {
     console.log("Adding Step:", { stageId, processId, stepName, stepType });
-    onAddStep(stageId.toString(), processId.toString(), stepName, stepType);
+    onAddStep(stageId, processId, stepName, stepType);
     setIsAddStepModalOpen(false);
     setSelectedStageId(null);
     setSelectedProcessId(null);
@@ -325,9 +325,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     let stepFields: FieldReference[] = [];
     if (step && step.type === "Collect information" && step.viewId) {
       console.log("[DEBUG] Step has viewId:", step.viewId);
-      const view = views.find(
-        (v) => v.id.toString() === step.viewId?.toString(),
-      );
+      const view = views.find((v) => v.id === step.viewId);
       console.log("[DEBUG] Found view:", view);
       if (view) {
         try {

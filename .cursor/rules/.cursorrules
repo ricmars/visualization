@@ -71,6 +71,15 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - Implement proper prop types with descriptions
 - Use discriminated unions for complex state
 
+### CRITICAL: No `any` Types Allowed
+
+- **ABSOLUTELY NO `any` types in any code** - this is a hard rule with no exceptions
+- Use `unknown` for values whose type you don't know
+- Use `Partial<T>` for objects that may have missing properties
+- Use proper type guards and validation
+- If you see `any` in code, replace it immediately with proper types
+- This applies to both production and test code
+
 ### Type Validation
 
 - Use Zod for runtime type validation

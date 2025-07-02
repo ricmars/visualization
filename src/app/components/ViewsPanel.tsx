@@ -18,7 +18,8 @@ interface ViewsPanelProps {
   }) => string;
   onUpdateField?: (updates: Partial<Field>) => void;
   onDeleteField?: (field: Field) => void;
-  onAddExistingFieldToStep?: (stepId: number, fieldIds: string[]) => void;
+  onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
+  onAddFieldsToStep?: (stepId: number, fieldNames: string[]) => void;
   onFieldsReorder?: (stepId: number, fieldIds: string[]) => void;
   selectedView?: string | null;
   onViewSelect?: (view: string | null) => void;
@@ -47,7 +48,8 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   onAddField,
   onUpdateField,
   onDeleteField,
-  onAddExistingFieldToStep,
+  onAddFieldsToView,
+  onAddFieldsToStep,
   selectedView,
   onViewSelect,
   onFieldsReorder,
@@ -361,8 +363,37 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
               ...field,
               primary: field.primary ?? false,
             });
-            if (selectedView && onAddExistingFieldToStep) {
-              onAddExistingFieldToStep(Number(selectedView), [fieldName]);
+            if (selectedView) {
+              // Check if this is a database view or a workflow step
+              const databaseView = allViews.find(
+                (v) => v.id.toString() === selectedView && v.isDatabaseView,
+              );
+              if (databaseView && onAddFieldsToView) {
+                // It's a database view
+                onAddFieldsToView(databaseView.viewData!.id, [fieldName]);
+              } else if (onAddFieldsToStep) {
+                // It's a workflow step - find the step ID
+                const step = collectSteps.find((s) => s.id === selectedView);
+                if (step) {
+                  // Find the actual step in the workflow
+                  let stepId: number | undefined;
+                  stages.forEach((stage) => {
+                    stage.processes.forEach((process) => {
+                      process.steps.forEach((step) => {
+                        if (
+                          step.name === step.name &&
+                          step.type === "Collect information"
+                        ) {
+                          stepId = step.id;
+                        }
+                      });
+                    });
+                  });
+                  if (stepId) {
+                    onAddFieldsToStep(stepId, [fieldName]);
+                  }
+                }
+              }
             }
           }
         }}
@@ -370,8 +401,37 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
         existingFields={fields}
         stepFieldIds={selectedViewFieldIds.map(String)}
         onAddExistingField={(fieldIds) => {
-          if (selectedView && onAddExistingFieldToStep) {
-            onAddExistingFieldToStep(Number(selectedView), fieldIds);
+          if (selectedView) {
+            // Check if this is a database view or a workflow step
+            const databaseView = allViews.find(
+              (v) => v.id.toString() === selectedView && v.isDatabaseView,
+            );
+            if (databaseView && onAddFieldsToView) {
+              // It's a database view
+              onAddFieldsToView(databaseView.viewData!.id, fieldIds);
+            } else if (onAddFieldsToStep) {
+              // It's a workflow step - find the step ID
+              const step = collectSteps.find((s) => s.id === selectedView);
+              if (step) {
+                // Find the actual step in the workflow
+                let stepId: number | undefined;
+                stages.forEach((stage) => {
+                  stage.processes.forEach((process) => {
+                    process.steps.forEach((step) => {
+                      if (
+                        step.name === step.name &&
+                        step.type === "Collect information"
+                      ) {
+                        stepId = step.id;
+                      }
+                    });
+                  });
+                });
+                if (stepId) {
+                  onAddFieldsToStep(stepId, fieldIds);
+                }
+              }
+            }
           }
         }}
       />

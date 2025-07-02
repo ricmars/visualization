@@ -59,6 +59,42 @@ interface View {
   caseID: number;
 }
 
+// Helper function to validate that all stages, processes, and steps have IDs
+function validateModelIds(stages: Partial<Stage>[]): Stage[] {
+  return stages.map((stage, stageIndex) => {
+    if (!stage.id) {
+      throw new Error(`Stage at index ${stageIndex} is missing an ID`);
+    }
+
+    return {
+      ...stage,
+      processes: (stage.processes || []).map(
+        (process: Partial<Process>, processIndex: number) => {
+          if (!process.id) {
+            throw new Error(
+              `Process at index ${processIndex} in stage "${stage.name}" is missing an ID`,
+            );
+          }
+
+          return {
+            ...process,
+            steps: (process.steps || []).map(
+              (step: Partial<Step>, stepIndex: number) => {
+                if (!step.id) {
+                  throw new Error(
+                    `Step at index ${stepIndex} in process "${process.name}" of stage "${stage.name}" is missing an ID`,
+                  );
+                }
+                return step as Step;
+              },
+            ),
+          } as Process;
+        },
+      ),
+    } as Stage;
+  });
+}
+
 async function fetchCaseData(caseID: string): Promise<ComposedModel> {
   try {
     // Fetch the case data
@@ -78,11 +114,14 @@ async function fetchCaseData(caseID: string): Promise<ComposedModel> {
     // Parse the model from the case data
     const parsedModel = JSON.parse(selectedCase.model);
 
+    // Validate that all stages, processes, and steps have IDs
+    const stagesWithIds = validateModelIds(parsedModel.stages || []);
+
     // Compose the complete model
     const composedModel: ComposedModel = {
       name: selectedCase.name,
       description: selectedCase.description,
-      stages: parsedModel.stages || [],
+      stages: stagesWithIds,
     };
 
     return composedModel;
@@ -1484,190 +1523,182 @@ export default function WorkflowPage() {
     handleStepsUpdate(updatedStages);
   };
 
-  const handleAddExistingFieldToStep = async (
-    stepId: string,
-    fieldIds: string[],
+  const handleAddFieldsToView = async (
+    viewId: number,
+    fieldNames: string[],
   ) => {
     if (!selectedCase) return;
 
     try {
-      // Check if this is a database view (stepId starts with "db-")
-      if (stepId.startsWith("db-")) {
-        // Handle database view
-        const viewId = parseInt(stepId.replace("db-", ""));
+      // Find the view in the views array
+      const view = views.find((v) => v.id === viewId);
+      if (!view) {
+        throw new Error("View not found");
+      }
 
-        // Find the view in the views array
-        const view = views.find((v) => v.id === viewId);
-        if (!view) {
-          throw new Error("View not found");
-        }
+      // Parse the existing view model
+      let viewModel;
+      try {
+        viewModel = JSON.parse(view.model);
+      } catch (_error) {
+        viewModel = { fields: [] };
+      }
 
-        // Parse the existing view model
-        let viewModel;
-        try {
-          viewModel = JSON.parse(view.model);
-        } catch (_error) {
-          viewModel = { fields: [] };
-        }
+      // Get existing field IDs in the view
+      const existingFieldIds = new Set(
+        viewModel.fields?.map((f: { fieldId: number }) => f.fieldId) || [],
+      );
 
-        // Get existing field IDs in the view
-        const existingFieldIds = new Set(
-          viewModel.fields?.map((f: { fieldId: number }) => f.fieldId) || [],
-        );
-
-        // Add new fields that aren't already in the view
-        const newFields = fieldIds
-          .map((fieldName) => {
-            const field = fields.find((f) => f.name === fieldName);
-            return field ? field.id : null;
-          })
-          .filter((fieldId) => fieldId && !existingFieldIds.has(fieldId))
-          .map((fieldId) => ({
-            fieldId,
-            required: false,
-            order: (viewModel.fields?.length || 0) + 1,
-          }));
-
-        // Update the view model
-        const updatedViewModel = {
-          ...viewModel,
-          fields: [...(viewModel.fields || []), ...newFields],
-        };
-
-        // Update the view in the database
-        const response = await fetch(
-          `/api/database?table=${DB_TABLES.VIEWS}&id=${viewId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              name: view.name,
-              caseID: selectedCase.id,
-              model: {
-                fields: updatedViewModel.fields,
-                layout: {
-                  type: "form",
-                  columns: 1,
-                },
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to update view");
-        }
-
-        const { data: updatedView } = await response.json();
-
-        // Update the local views state
-        setViews((prevViews) =>
-          prevViews.map((v) => (v.id === viewId ? updatedView : v)),
-        );
-
-        addCheckpoint(`Updated database view: ${view.name}`, workflowModel);
-      } else {
-        // Handle workflow step (existing logic)
-        const updatedStages = workflowModel.stages.map((stage: Stage) => ({
-          ...stage,
-          processes: stage.processes.map((process: Process) => ({
-            ...process,
-            steps: process.steps.map((step: Step) => {
-              // Extract step name from unique ID format: "StageName-StepName" or "db-{id}"
-              let stepName = stepId;
-              if (stepId.includes("-") && !stepId.startsWith("db-")) {
-                // For step IDs like "StageName-StepName", extract the step name
-                stepName = stepId.split("-").slice(1).join("-");
-              }
-
-              // Check if stepId matches the step ID or the step name
-              // Convert stepId to number for proper comparison with step.id
-              const stepIdNum = parseInt(stepId, 10);
-              const stepMatches =
-                step.id === stepIdNum ||
-                step.name === stepId ||
-                step.name === stepName;
-
-              if (stepMatches && step.type === "Collect information") {
-                // Get existing fields
-                const existingFields = step.fields || [];
-
-                // Create a map of existing fields to preserve their properties
-                const existingFieldsMap = new Map(
-                  existingFields.map((field) => [field.fieldId, field]),
-                );
-
-                // Add new fields while preserving existing ones
-                fieldIds.forEach((fieldId) => {
-                  // Find the field by name to get its ID
-                  const field = fields.find((f) => f.name === fieldId);
-                  if (field && field.id && !existingFieldsMap.has(field.id)) {
-                    existingFieldsMap.set(field.id, {
-                      fieldId: field.id,
-                      required: false,
-                    });
-                  }
-                });
-
-                // Convert map back to array - this will include both existing and new fields
-                const updatedFields = Array.from(existingFieldsMap.values());
-
-                return {
-                  ...step,
-                  fields: updatedFields,
-                };
-              }
-              return step;
-            }),
-          })),
+      // Add new fields that aren't already in the view
+      const newFields = fieldNames
+        .map((fieldName) => {
+          const field = fields.find((f) => f.name === fieldName);
+          return field ? field.id : null;
+        })
+        .filter((fieldId) => fieldId && !existingFieldIds.has(fieldId))
+        .map((fieldId) => ({
+          fieldId,
+          required: false,
+          order: (viewModel.fields?.length || 0) + 1,
         }));
 
-        const updatedModel: ComposedModel = {
-          name: selectedCase.name,
-          description: selectedCase.description,
-          stages: updatedStages,
-        };
+      // Update the view model
+      const updatedViewModel = {
+        ...viewModel,
+        fields: [...(viewModel.fields || []), ...newFields],
+      };
 
-        addCheckpoint(`Updated step fields: ${stepId}`, updatedModel);
-
-        const response = await fetch(
-          `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              table: DB_TABLES.CASES,
-              data: {
-                id: selectedCase.id,
-                name: selectedCase.name,
-                description: selectedCase.description,
-                model: JSON.stringify(updatedModel),
-              },
-            }),
+      // Update the view in the database
+      const response = await fetch(
+        `/api/database?table=${DB_TABLES.VIEWS}&id=${viewId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify({
+            name: view.name,
+            caseID: selectedCase.id,
+            model: {
+              fields: updatedViewModel.fields,
+              layout: {
+                type: "form",
+                columns: 1,
+              },
+            },
+          }),
+        },
+      );
 
-        if (!response.ok) {
-          throw new Error("Failed to update step fields");
-        }
-
-        const { data: updatedCase } = await response.json();
-        setSelectedCase(updatedCase);
-
-        // Update the local model state to refresh the UI
-        setModel((prev) =>
-          prev
-            ? {
-                ...prev,
-                stages: updatedStages,
-              }
-            : null,
-        );
+      if (!response.ok) {
+        throw new Error("Failed to update view");
       }
+
+      const { data: updatedView } = await response.json();
+
+      // Update the local views state
+      setViews((prevViews) =>
+        prevViews.map((v) => (v.id === viewId ? updatedView : v)),
+      );
+
+      addCheckpoint(`Updated database view: ${view.name}`, workflowModel);
+    } catch (error) {
+      console.error("Error updating view fields:", error);
+      alert("Failed to update view fields. Please try again.");
+    }
+  };
+
+  const handleAddFieldsToStep = async (
+    stepId: number,
+    fieldNames: string[],
+  ) => {
+    if (!selectedCase) return;
+
+    try {
+      // Handle workflow step
+      const updatedStages = workflowModel.stages.map((stage: Stage) => ({
+        ...stage,
+        processes: stage.processes.map((process: Process) => ({
+          ...process,
+          steps: process.steps.map((step: Step) => {
+            // Check if this is the step we're looking for
+            if (step.id === stepId && step.type === "Collect information") {
+              // Get existing fields
+              const existingFields = step.fields || [];
+
+              // Create a map of existing fields to preserve their properties
+              const existingFieldsMap = new Map(
+                existingFields.map((field) => [field.fieldId, field]),
+              );
+
+              // Add new fields while preserving existing ones
+              fieldNames.forEach((fieldName) => {
+                // Find the field by name to get its ID
+                const field = fields.find((f) => f.name === fieldName);
+                if (field && field.id && !existingFieldsMap.has(field.id)) {
+                  existingFieldsMap.set(field.id, {
+                    fieldId: field.id,
+                    required: false,
+                  });
+                }
+              });
+
+              // Convert map back to array - this will include both existing and new fields
+              const updatedFields = Array.from(existingFieldsMap.values());
+
+              return {
+                ...step,
+                fields: updatedFields,
+              };
+            }
+            return step;
+          }),
+        })),
+      }));
+
+      const updatedModel: ComposedModel = {
+        name: selectedCase.name,
+        description: selectedCase.description,
+        stages: updatedStages,
+      };
+
+      addCheckpoint(`Updated step fields: ${stepId}`, updatedModel);
+
+      const response = await fetch(
+        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            table: DB_TABLES.CASES,
+            data: {
+              id: selectedCase.id,
+              name: selectedCase.name,
+              description: selectedCase.description,
+              model: JSON.stringify(updatedModel),
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update step fields");
+      }
+
+      const { data: updatedCase } = await response.json();
+      setSelectedCase(updatedCase);
+
+      // Update the local model state to refresh the UI
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedStages,
+            }
+          : null,
+      );
     } catch (error) {
       console.error("Error updating step fields:", error);
       alert("Failed to update step fields. Please try again.");
@@ -2059,21 +2090,10 @@ export default function WorkflowPage() {
                   onAddField={handleAddField}
                   onUpdateField={handleUpdateField}
                   onDeleteField={handleDeleteField}
-                  onAddExistingFieldToStep={(
-                    stepId: number,
-                    fieldIds: string[],
-                  ) => {
-                    // Convert string fieldIds to numbers for the handler
-                    const numericFieldIds = fieldIds
-                      .map((id) => parseInt(id, 10))
-                      .filter((id) => !isNaN(id));
-                    handleAddExistingFieldToStep(
-                      stepId.toString(),
-                      numericFieldIds.map(String),
-                    );
-                  }}
+                  onAddFieldsToView={handleAddFieldsToView}
+                  onAddFieldsToStep={handleAddFieldsToStep}
                   onFieldsReorder={(stepId: number, fieldIds: string[]) => {
-                    // Convert string fieldIds to numbers for the handler
+                    // Convert number stepId to string and string fieldIds to numbers for the handler
                     const numericFieldIds = fieldIds
                       .map((id) => parseInt(id, 10))
                       .filter((id) => !isNaN(id));
