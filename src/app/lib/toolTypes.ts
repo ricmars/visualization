@@ -1,3 +1,5 @@
+import { FieldType } from "../types/fields";
+
 // Define proper types for tool parameters and results
 export interface ToolParams {
   [key: string]: unknown;
@@ -14,8 +16,13 @@ export interface LLMTool<TParams = ToolParams, TResult = ToolResult> {
 }
 
 // Define specific parameter types for each tool
+export interface CreateCaseParams extends ToolParams {
+  name: string;
+  description: string;
+}
+
 export interface SaveCaseParams extends ToolParams {
-  id?: number;
+  id: number;
   name: string;
   description: string;
   model: WorkflowModel;
@@ -24,7 +31,7 @@ export interface SaveCaseParams extends ToolParams {
 export interface SaveFieldParams extends ToolParams {
   id?: number;
   name: string;
-  type: string;
+  type: FieldType;
   caseID: number;
   primary?: boolean;
   required?: boolean;

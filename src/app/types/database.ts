@@ -1,3 +1,5 @@
+import { fieldTypes, FieldType } from "./fields";
+
 // Database column names
 export const DB_COLUMNS = {
   CASE_ID: "caseid",
@@ -27,35 +29,13 @@ export const STEP_TYPES = {
   NOTIFICATION: "notification",
 } as const;
 
-// Field types mapping
-export const FIELD_TYPES = {
-  TEXT: "Text",
-  ADDRESS: "Address",
-  EMAIL: "Email",
-  DATE: "Date",
-  DATETIME: "DateTime",
-  STATUS: "Status",
-  CURRENCY: "Currency",
-  CHECKBOX: "Checkbox",
-  DROPDOWN: "Dropdown",
-  RADIO_BUTTONS: "RadioButtons",
-  RICH_TEXT: "RichText",
-  TEXT_AREA: "TextArea",
-  TIME: "Time",
-  URL: "URL",
-  AUTO_COMPLETE: "AutoComplete",
-  DECIMAL: "Decimal",
-  INTEGER: "Integer",
-  LOCATION: "Location",
-  REFERENCE_VALUES: "ReferenceValues",
-  DATA_REFERENCE_SINGLE: "DataReferenceSingle",
-  DATA_REFERENCE_MULTI: "DataReferenceMulti",
-  CASE_REFERENCE_SINGLE: "CaseReferenceSingle",
-  CASE_REFERENCE_MULTI: "CaseReferenceMulti",
-  PERCENTAGE: "Percentage",
-  PHONE: "Phone",
-  USER_REFERENCE: "UserReference",
-} as const;
+// Field types mapping - using centralized fieldTypes from fields.ts
+export const FIELD_TYPES = Object.fromEntries(
+  fieldTypes.map((type) => [
+    type.toUpperCase().replace(/[^A-Z0-9]/g, "_"),
+    type,
+  ]),
+) as Record<string, FieldType>;
 
 // Database interfaces
 export interface DatabaseRecord {
@@ -107,9 +87,7 @@ export function validateStepType(type: string): boolean {
 }
 
 export function validateFieldType(type: string): boolean {
-  return Object.values(FIELD_TYPES).includes(
-    type as (typeof FIELD_TYPES)[keyof typeof FIELD_TYPES],
-  );
+  return fieldTypes.includes(type as FieldType);
 }
 
 export function validateCaseId(caseID: string | number): number {

@@ -1,31 +1,7 @@
+import { FieldType } from "./types/fields";
+
 /* Interface definition */
-export type fieldType =
-  | "Address"
-  | "AutoComplete"
-  | "Checkbox"
-  | "Currency"
-  | "Date"
-  | "DateTime"
-  | "Decimal"
-  | "Dropdown"
-  | "Email"
-  | "Integer"
-  | "Location"
-  | "ReferenceValues"
-  | "DataReferenceSingle"
-  | "DataReferenceMulti"
-  | "CaseReferenceSingle"
-  | "CaseReferenceMulti"
-  | "Percentage"
-  | "Phone"
-  | "RadioButtons"
-  | "RichText"
-  | "Status"
-  | "Text"
-  | "TextArea"
-  | "Time"
-  | "URL"
-  | "UserReference";
+export type fieldType = FieldType;
 
 export interface Field {
   /** Unique identifier for the field */

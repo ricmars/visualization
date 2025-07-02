@@ -1,6 +1,13 @@
 # Contributing Guide
 
-This document provides detailed examples, troubleshooting guides, and human-specific guidance for contributing to this workflow application. For AI assistant rules and patterns, see `.cursor/rules/.cursorrules`.
+This document provides detailed examples, troubleshooting guides, and human-specific guidance for contributing to this workflow application.
+
+## Documentation Structure
+
+- **`.cursor/rules/.cursorrules`**: AI assistant behavior rules, code style, testing requirements, and development patterns
+- **`CONTRIBUTING.md`**: Human-focused documentation, setup instructions, troubleshooting, and code review guidelines
+
+For AI assistant rules and patterns, see `.cursor/rules/.cursorrules`.
 
 ## Quick Reference
 
@@ -591,6 +598,16 @@ AZURE_CLIENT_SECRET=your-client-secret
 
 ## Testing Guide
 
+**Note**: Detailed testing rules and requirements are now defined in `.cursor/rules/.cursorrules` for AI assistants. This section provides human-focused testing guidance and examples.
+
+### Testing Requirements
+
+- **ALL code changes MUST be accompanied by passing tests**
+- **Run tests before and after making changes**
+- **Fix any test failures before considering work complete**
+- **Write tests for new functionality**
+- **Keep test code separate from production code**
+
 ### Test Structure
 
 ```
@@ -617,10 +634,68 @@ describe("Field Management", () => {
 ### Test Commands
 
 ```bash
-pnpm test              # Run all tests
-pnpm test:watch        # Run tests in watch mode
-pnpm test:coverage     # Generate coverage report
-pnpm test -- --verbose # Run with verbose output
+npm test                    # Run all tests
+npm test --ci --runInBand   # Run tests in CI mode (recommended)
+npm test --watch            # Run tests in watch mode
+npm test --coverage         # Generate coverage report
+npm test --verbose          # Run with verbose output
+```
+
+### Testing Best Practices
+
+1. **Test the behavior, not the implementation**: Focus on what the code does, not how it does it
+2. **Use descriptive test names**: Test names should clearly describe what is being tested
+3. **One assertion per test**: Each test should verify one specific behavior
+4. **Mock external dependencies**: Use mocks for database, API calls, etc.
+5. **Test error conditions**: Include tests for error cases and edge cases
+6. **Keep tests simple**: Tests should be easy to understand and maintain
+
+### Common Testing Patterns
+
+#### Database Operations
+
+```typescript
+// Mock database queries
+const mockQuery = jest.fn();
+jest.mock("pg", () => ({
+  Pool: jest.fn(() => ({
+    query: mockQuery,
+  })),
+}));
+
+// Test database operations
+it("should create a new field successfully", async () => {
+  mockQuery.mockResolvedValueOnce({
+    rows: [{ id: 1, name: "testField", type: "Text" }],
+    rowCount: 1,
+  });
+
+  const result = await saveField(params);
+  expect(result).toEqual(expectedResult);
+});
+```
+
+#### API Endpoints
+
+```typescript
+// Test API responses
+it("should return 200 for valid request", async () => {
+  const response = await request(app)
+    .post("/api/openai")
+    .send({ prompt: "test" });
+
+  expect(response.status).toBe(200);
+});
+```
+
+#### Component Testing
+
+```typescript
+// Test React components
+it("should render correctly", () => {
+  render(<MyComponent />);
+  expect(screen.getByText("Expected Text")).toBeInTheDocument();
+});
 ```
 
 ## Code Review Guidelines

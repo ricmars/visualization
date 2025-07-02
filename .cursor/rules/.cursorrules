@@ -193,7 +193,37 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - Extract text content from SSE messages
 - Handle SSE parsing errors gracefully
 
-## Testing Requirements
+## Testing Requirements (CRITICAL - MANDATORY)
+
+### Critical Testing Rules (NON-NEGOTIABLE)
+
+**ALL code changes MUST be accompanied by passing tests. This is non-negotiable.**
+
+#### Before Making Changes
+
+1. **Establish baseline**: Run `npm test` to ensure all tests pass
+2. **Understand current behavior**: Review existing tests to understand expected behavior
+
+#### During Development
+
+1. **Test frequently**: Run `npm test` after each significant change
+2. **Fix failures immediately**: If tests fail, fix the code or update tests before proceeding
+3. **Write tests for new features**: Every new feature must have corresponding tests
+
+#### Before Considering Changes Complete
+
+1. **Run full test suite**: `npm test --ci --runInBand`
+2. **Verify all tests pass**: No test failures are acceptable
+3. **Check for regressions**: Ensure no existing functionality is broken
+
+#### If Tests Fail
+
+1. **Read failure output carefully**: Understand which tests failed and why
+2. **Identify root cause**: Is it the code change or the test expectation?
+3. **Fix appropriately**:
+   - If code is wrong: Fix the implementation
+   - If test expectation is wrong: Update the test
+4. **Re-run until green**: Continue until all tests pass
 
 ### Test File Conventions (MANDATORY)
 
@@ -213,6 +243,73 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 
 - **Whenever you make changes to LLM tools, utils, database prompt, or API routes, you MUST run the full test suite**
 - This ensures no regressions are introduced to LLM tool handling, prompt logic, or API route behavior
+
+### Testing Best Practices
+
+1. **Test the behavior, not the implementation**: Focus on what the code does, not how it does it
+2. **Use descriptive test names**: Test names should clearly describe what is being tested
+3. **One assertion per test**: Each test should verify one specific behavior
+4. **Mock external dependencies**: Use mocks for database, API calls, etc.
+5. **Test error conditions**: Include tests for error cases and edge cases
+6. **Keep tests simple**: Tests should be easy to understand and maintain
+
+### Test Commands
+
+```bash
+npm test                    # Run all tests
+npm test --ci --runInBand   # Run tests in CI mode (recommended)
+npm test --watch            # Run tests in watch mode
+npm test --coverage         # Generate coverage report
+npm test --verbose          # Run with verbose output
+```
+
+### Common Testing Patterns
+
+#### Database Operations
+
+```typescript
+// Mock database queries
+const mockQuery = jest.fn();
+jest.mock("pg", () => ({
+  Pool: jest.fn(() => ({
+    query: mockQuery,
+  })),
+}));
+
+// Test database operations
+it("should create a new field successfully", async () => {
+  mockQuery.mockResolvedValueOnce({
+    rows: [{ id: 1, name: "testField", type: "Text" }],
+    rowCount: 1,
+  });
+
+  const result = await saveField(params);
+  expect(result).toEqual(expectedResult);
+});
+```
+
+#### API Endpoints
+
+```typescript
+// Test API responses
+it("should return 200 for valid request", async () => {
+  const response = await request(app)
+    .post("/api/openai")
+    .send({ prompt: "test" });
+
+  expect(response.status).toBe(200);
+});
+```
+
+#### Component Testing
+
+```typescript
+// Test React components
+it("should render correctly", () => {
+  render(<MyComponent />);
+  expect(screen.getByText("Expected Text")).toBeInTheDocument();
+});
+```
 
 ## Error Handling and Validation
 

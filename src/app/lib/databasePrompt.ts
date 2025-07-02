@@ -7,12 +7,13 @@ interface DatabaseTool {
 export const databaseSystemPrompt = `🚨 WORKFLOW CREATION RULES:
 
 MANDATORY SEQUENCE:
-1. getCase, listFields, listViews (check existing data)
-2. saveField (create business data fields)
-3. saveView (for "Collect information" steps) - SAVE THE RETURNED ID!
-4. saveCase (FINAL STEP - includes complete workflow model with stages/processes/steps)
+1. createCase (FIRST STEP - creates case and returns case ID)
+2. saveField (create business data fields using the case ID)
+3. saveView (for "Collect information" steps using the case ID) - SAVE THE RETURNED ID!
+4. saveCase (FINAL STEP - updates case with complete workflow model including viewId references)
 
 🚨 CRITICAL RULES:
+- createCase is FIRST - use the returned case ID for all subsequent operations
 - saveCase is LAST - create fields and views first
 - saveCase MUST include complete workflow model with stages, processes, and steps
 - Only "Collect information" steps need views
@@ -75,17 +76,20 @@ TIRE: vehicleMake, vehicleModel, tireSize, tireBrand, serviceDate
 
 🚨 COMPLETE WORKFLOW EXAMPLE:
 For a tire replacement workflow:
-1. Fields: vehicleMake, vehicleModel, tireSize, tireBrand, serviceDate
-2. Views: "Vehicle Information" (includes vehicleMake, vehicleModel), "Tire Details" (includes tireSize, tireBrand, serviceDate)
-3. Workflow Model: Stages with processes and steps, where "Collect information" steps have viewId references
+1. createCase: "Tire Replacement" - returns case ID (e.g., 1)
+2. Fields: vehicleMake, vehicleModel, tireSize, tireBrand, serviceDate (using case ID 1)
+3. Views: "Vehicle Information" (includes vehicleMake, vehicleModel), "Tire Details" (includes tireSize, tireBrand, serviceDate) - save returned view IDs
+4. Workflow Model: Stages with processes and steps, where "Collect information" steps have viewId references
 
 Available functions:
-- saveCase: Create/update case with workflow model
-- saveField: Create/update business data field
-- saveView: Create/update view for data collection (provide id for updates)
+- createCase: STEP 1 - Create new case with name and description (returns case ID)
+- saveCase: FINAL STEP - Update case with complete workflow model (requires case ID)
+- saveField: STEP 2 - Create/update business data field (requires case ID)
+- saveView: STEP 3 - Create/update view for data collection (requires case ID, returns view ID)
 - deleteCase, deleteField, deleteView: Remove items
 - listFields, listViews, getCase: Check existing data
 
+🚨 CRITICAL: createCase is FIRST - use returned case ID for all operations!
 🚨 CRITICAL: saveCase is LAST - create fields and views first!
 🚨 CRITICAL: saveCase MUST include complete workflow model with stages/processes/steps!
 🚨 CRITICAL: Use actual IDs returned from saveView for viewId!
@@ -93,9 +97,9 @@ Available functions:
 🚨 CRITICAL: DO NOT ASK QUESTIONS - PROCEED WITH WORKFLOW CREATION!`;
 
 export const exampleDatabaseResponse = `
-🚨 CRITICAL: YOU MUST ALWAYS USE HELPER TOOLS FIRST BEFORE ANY CREATION OPERATIONS!
-🚨 NEVER CREATE ANYTHING WITHOUT CHECKING WHAT EXISTS FIRST!
-🚨 ALWAYS USE getCase, listFields, AND listViews BEFORE createField OR createView!
+🚨 CRITICAL: YOU MUST FOLLOW THE EXACT SEQUENCE FOR WORKFLOW CREATION!
+🚨 NEVER SKIP STEPS - ALWAYS CREATE CASE FIRST, THEN FIELDS, THEN VIEWS, THEN UPDATE CASE!
+🚨 ALWAYS USE THE CASE ID RETURNED FROM createCase FOR ALL SUBSEQUENT OPERATIONS!
 🚨 CRITICAL: YOU MUST COMPLETE THE ENTIRE WORKFLOW CREATION PROCESS!
 🚨 NEVER STOP AFTER CREATING FIELDS - YOU MUST CREATE VIEWS AND LINK THEM TO STEPS!
 🚨 CRITICAL: YOU MUST CALL saveCase WITH COMPLETE WORKFLOW MODEL!
@@ -103,23 +107,23 @@ export const exampleDatabaseResponse = `
 
 Thought Process:
 1. Analyzing request: Create an employee onboarding process
-   - Need a case for the overall process
-   - Need fields for employee information
-   - Need views to collect the information
+   - Need to create a case first to get the case ID
+   - Need fields for employee information using the case ID
+   - Need views to collect the information using the case ID
    - Need to create complete workflow model with stages/processes/steps
-   - Need to link views to steps via viewId
+   - Need to link views to steps via viewId using actual view IDs
 
 2. Required Components:
-   - Case: "Employee Onboarding"
-   - Fields: Name (Text), Email (Email), StartDate (Date)
-   - Views: "Employee Details", "Hiring Confirmation"
+   - Case: "Employee Onboarding" (created first)
+   - Fields: Name (Text), Email (Email), StartDate (Date) (using case ID)
+   - Views: "Employee Details", "Hiring Confirmation" (using case ID, save returned IDs)
    - Workflow Model: Stages → Processes → Steps with viewId references
 
 3. Execution Plan:
-   Step 1: Use getCase, listFields, and listViews to check existing data
-   Step 2: Create Fields for data collection (Name, Email, StartDate)
-   Step 3: Create Views for information collection steps (or update existing ones with their IDs)
-   Step 4: Create Case with complete workflow model using saveCase (includes stages/processes/steps with viewId references)
+   Step 1: createCase - "Employee Onboarding" (returns case ID, e.g., 1)
+   Step 2: saveField - Create fields using case ID 1 (Name, Email, StartDate)
+   Step 3: saveView - Create views using case ID 1, save returned view IDs
+   Step 4: saveCase - Update case with complete workflow model using case ID 1 and view IDs
 
 4. View Update Pattern:
    - If updating existing view "Employee Details" with ID 123:
@@ -154,11 +158,11 @@ Thought Process:
    }
 
 6. Verification:
-   - Case created successfully
-   - Fields created and linked to case
-   - Views created/updated and linked to case (no duplicates)
+   - Case created successfully with createCase
+   - Fields created and linked to case using case ID
+   - Views created/updated and linked to case using case ID (no duplicates)
    - Field references in views are valid
-   - Case created with complete workflow model including stages/processes/steps
+   - Case updated with complete workflow model including stages/processes/steps and viewId references
 
 I will now execute this plan using the OpenAI function calling API to create the complete workflow in the database.
 `;

@@ -1,7 +1,7 @@
-import { fieldType } from "../types";
+import { FieldType } from "../types/fields";
 
 // Mapping of technical field types to user-friendly display names
-export const fieldTypeToDisplayName: Record<fieldType, string> = {
+export const fieldTypeToDisplayName: Record<FieldType, string> = {
   Address: "Address",
   AutoComplete: "Auto Complete",
   Checkbox: "Checkbox",
@@ -30,12 +30,12 @@ export const fieldTypeToDisplayName: Record<fieldType, string> = {
   UserReference: "User Reference",
 };
 
-// Get all possible values from the fieldType type
-export const getAllFieldTypes = (): fieldType[] => {
-  return Object.keys(fieldTypeToDisplayName) as fieldType[];
+// Get all possible values from the fieldTypes array
+export const getAllFieldTypes = (): FieldType[] => {
+  return Object.keys(fieldTypeToDisplayName) as FieldType[];
 };
 
 // Function to get the display name for a field type
-export const getFieldTypeDisplayName = (type: fieldType): string => {
+export const getFieldTypeDisplayName = (type: FieldType): string => {
   return fieldTypeToDisplayName[type] || type;
 };

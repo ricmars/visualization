@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { DB_TABLES } from "../types/database";
+import { fieldTypes, FieldType } from "../types/fields";
 import {
   LLMTool,
   SaveCaseParams,
@@ -8,6 +9,7 @@ import {
   DeleteParams,
   ToolParams,
   ToolResult,
+  CreateCaseParams,
 } from "./toolTypes";
 
 // Shared tool interface that works for both LLM and MCP
@@ -24,6 +26,10 @@ export interface SharedTool<TParams, TResult> {
 
 // Convert LLM tools to shared tools with MCP-compatible schemas
 export function createSharedTools(pool: Pool): (
+  | SharedTool<
+      CreateCaseParams,
+      { id: number; name: string; description: string; model: unknown }
+    >
   | SharedTool<
       SaveCaseParams,
       { id: number; name: string; description: string; model: unknown }
@@ -63,6 +69,10 @@ export function createSharedTools(pool: Pool): (
 )[] {
   const tools: (
     | SharedTool<
+        CreateCaseParams,
+        { id: number; name: string; description: string; model: unknown }
+      >
+    | SharedTool<
         SaveCaseParams,
         { id: number; name: string; description: string; model: unknown }
       >
@@ -100,28 +110,147 @@ export function createSharedTools(pool: Pool): (
       >
   )[] = [
     {
+      name: "createCase",
+      description:
+        "STEP 1: Creates a new case with only name and description. Returns the case ID that you MUST use for all subsequent operations (saveField, saveView). This is the FIRST tool to call when creating a new workflow.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Case name" },
+          description: { type: "string", description: "Case description" },
+        },
+        required: ["name", "description"],
+      },
+      execute: async (params: CreateCaseParams) => {
+        console.log("=== createCase EXECUTION STARTED ===");
+        console.log("createCase parameters:", JSON.stringify(params, null, 2));
+        console.log("createCase called at:", new Date().toISOString());
+
+        const { name, description } = params;
+
+        // Validation
+        if (!name) throw new Error("Case name is required for createCase");
+        if (!description)
+          throw new Error("Case description is required for createCase");
+
+        // Create new case with empty model
+        const query = `
+          INSERT INTO "${DB_TABLES.CASES}" (name, description, model)
+          VALUES ($1, $2, $3)
+          RETURNING id, name, description, model
+        `;
+        console.log("createCase INSERT query:", query);
+        console.log("createCase INSERT query values:", [
+          name,
+          description,
+          JSON.stringify({ stages: [] }),
+        ]);
+
+        const result = await pool.query(query, [
+          name,
+          description,
+          JSON.stringify({ stages: [] }),
+        ]);
+        const caseData = result.rows[0] || {};
+
+        console.log("createCase INSERT successful:", {
+          id: caseData?.id,
+          name: caseData?.name,
+        });
+
+        return {
+          id: caseData.id,
+          name: caseData.name,
+          description: caseData.description,
+          model:
+            typeof caseData.model === "string"
+              ? JSON.parse(caseData.model)
+              : { stages: [] },
+        };
+      },
+    },
+    {
       name: "saveCase",
       description:
-        "Creates a new case or updates an existing case. If id is provided, updates the case; otherwise, creates a new case.",
+        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this AFTER creating all fields and views. The model must include viewId values that reference actual view IDs returned from saveView calls.",
       parameters: {
         type: "object",
         properties: {
           id: {
             type: "integer",
-            description: "Case ID (required for update, omit for create)",
+            description:
+              "Case ID (REQUIRED - use the ID returned from createCase)",
           },
           name: { type: "string", description: "Case name" },
           description: { type: "string", description: "Case description" },
           model: {
             type: "object",
-            description: "Workflow model with stages array",
+            description:
+              "Complete workflow model with stages, processes, steps, and viewId references",
             properties: {
-              stages: { type: "array", items: {}, description: "Stages array" },
+              stages: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "integer", description: "Stage ID" },
+                    name: { type: "string", description: "Stage name" },
+                    order: { type: "integer", description: "Stage order" },
+                    processes: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          id: { type: "integer", description: "Process ID" },
+                          name: { type: "string", description: "Process name" },
+                          order: {
+                            type: "integer",
+                            description: "Process order",
+                          },
+                          steps: {
+                            type: "array",
+                            items: {
+                              type: "object",
+                              properties: {
+                                id: { type: "integer", description: "Step ID" },
+                                type: {
+                                  type: "string",
+                                  description:
+                                    "Step type (e.g., 'Collect information', 'Approve/Reject', 'Decision', 'Automation', 'Review', 'Process')",
+                                },
+                                name: {
+                                  type: "string",
+                                  description: "Step name",
+                                },
+                                order: {
+                                  type: "integer",
+                                  description: "Step order",
+                                },
+                                viewId: {
+                                  type: "integer",
+                                  description:
+                                    "View ID for 'Collect information' steps (optional for other step types)",
+                                },
+                              },
+                              required: ["id", "type", "name", "order"],
+                            },
+                            description: "Steps array",
+                          },
+                        },
+                        required: ["id", "name", "order", "steps"],
+                      },
+                      description: "Processes array",
+                    },
+                  },
+                  required: ["id", "name", "order", "processes"],
+                },
+                description: "Stages array with processes and steps",
+              },
             },
             required: ["stages"],
           },
         },
-        required: ["name", "description", "model"],
+        required: ["id", "name", "description", "model"],
       },
       execute: async (params: SaveCaseParams) => {
         console.log("=== saveCase EXECUTION STARTED ===");
@@ -131,15 +260,14 @@ export function createSharedTools(pool: Pool): (
         const { id, name, description, model } = params;
 
         // Validation
+        if (!id)
+          throw new Error(
+            "Case ID is required for saveCase - use the ID returned from createCase",
+          );
         if (!name) throw new Error("Case name is required for saveCase");
         if (!description)
           throw new Error("Case description is required for saveCase");
         if (!model) throw new Error("Case model is required for saveCase");
-
-        // Handle empty model - provide default structure
-        if (Object.keys(model).length === 0) {
-          model.stages = [];
-        }
 
         if (!Array.isArray(model.stages)) {
           throw new Error("Model stages must be an array");
@@ -207,96 +335,56 @@ export function createSharedTools(pool: Pool): (
           }
         }
 
-        if (id) {
-          // Update existing case
-          const query = `
-            UPDATE "${DB_TABLES.CASES}"
-            SET name = $1, description = $2, model = $3
-            WHERE id = $4
-            RETURNING id, name, description, model
-          `;
-          console.log("saveCase UPDATE query:", query);
-          console.log("saveCase UPDATE query values:", [
-            name,
-            description,
-            JSON.stringify(model),
-            id,
-          ]);
+        // Update existing case
+        const query = `
+          UPDATE "${DB_TABLES.CASES}"
+          SET name = $1, description = $2, model = $3
+          WHERE id = $4
+          RETURNING id, name, description, model
+        `;
+        console.log("saveCase UPDATE query:", query);
+        console.log("saveCase UPDATE query values:", [
+          name,
+          description,
+          JSON.stringify(model),
+          id,
+        ]);
 
-          const result = await pool.query(query, [
-            name,
-            description,
-            JSON.stringify(model),
-            id,
-          ]);
-          if (result.rowCount === 0) {
-            console.error(`saveCase ERROR: No case found with id ${id}`);
-            throw new Error(`No case found with id ${id}`);
-          }
-
-          const caseData = result.rows[0] || {};
-          console.log("saveCase UPDATE successful:", {
-            id: caseData?.id,
-            name: caseData?.name,
-            modelStages: caseData?.model
-              ? JSON.parse(caseData.model).stages?.length || 0
-              : 0,
-          });
-
-          return {
-            id: caseData.id ?? id,
-            name: caseData.name ?? name,
-            description: caseData.description ?? description,
-            model:
-              typeof caseData.model === "string"
-                ? JSON.parse(caseData.model)
-                : model ?? null,
-          };
-        } else {
-          // Create new case
-          const query = `
-            INSERT INTO "${DB_TABLES.CASES}" (name, description, model)
-            VALUES ($1, $2, $3)
-            RETURNING id, name, description, model
-          `;
-          console.log("saveCase INSERT query:", query);
-          console.log("saveCase INSERT query values:", [
-            name,
-            description,
-            JSON.stringify(model),
-          ]);
-
-          const result = await pool.query(query, [
-            name,
-            description,
-            JSON.stringify(model),
-          ]);
-          const caseData = result.rows[0] || {};
-
-          console.log("saveCase INSERT successful:", {
-            id: caseData?.id,
-            name: caseData?.name,
-            modelStages: caseData?.model
-              ? JSON.parse(caseData.model).stages?.length || 0
-              : 0,
-          });
-
-          return {
-            id: caseData.id,
-            name: caseData.name,
-            description: caseData.description,
-            model:
-              typeof caseData.model === "string"
-                ? JSON.parse(caseData.model)
-                : model ?? null,
-          };
+        const result = await pool.query(query, [
+          name,
+          description,
+          JSON.stringify(model),
+          id,
+        ]);
+        if (result.rowCount === 0) {
+          console.error(`saveCase ERROR: No case found with id ${id}`);
+          throw new Error(`No case found with id ${id}`);
         }
+
+        const caseData = result.rows[0] || {};
+        console.log("saveCase UPDATE successful:", {
+          id: caseData?.id,
+          name: caseData?.name,
+          modelStages: caseData?.model
+            ? JSON.parse(caseData.model).stages?.length || 0
+            : 0,
+        });
+
+        return {
+          id: caseData.id ?? id,
+          name: caseData.name ?? name,
+          description: caseData.description ?? description,
+          model:
+            typeof caseData.model === "string"
+              ? JSON.parse(caseData.model)
+              : model ?? null,
+        };
       },
     },
     {
       name: "saveField",
       description:
-        "Creates a new field or updates an existing field. If id is provided, updates the field; otherwise, creates a new field.",
+        "STEP 2: Creates a new field or updates an existing field. Use the caseID returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
       parameters: {
         type: "object",
         properties: {
@@ -317,8 +405,9 @@ export function createSharedTools(pool: Pool): (
           description: { type: "string", description: "Field description" },
           order: { type: "integer", description: "Display order" },
           options: {
-            type: "string",
-            description: "JSON string of options for dropdown/radio fields",
+            type: "array",
+            items: { type: "string" },
+            description: "Array of options for dropdown/radio fields",
           },
           required: {
             type: "boolean",
@@ -327,6 +416,10 @@ export function createSharedTools(pool: Pool): (
           primary: {
             type: "boolean",
             description: "Whether this is a primary field",
+          },
+          defaultValue: {
+            type: "string",
+            description: "Default value for the field",
           },
         },
         required: ["name", "type", "caseID", "label"],
@@ -347,6 +440,7 @@ export function createSharedTools(pool: Pool): (
           options,
           required,
           primary,
+          defaultValue,
         } = params;
 
         // Validation
@@ -356,17 +450,7 @@ export function createSharedTools(pool: Pool): (
         if (!label) throw new Error("Field label is required for saveField");
 
         // Validate field type
-        const validFieldTypes = [
-          "Text",
-          "Email",
-          "Date",
-          "Number",
-          "Boolean",
-          "Select",
-          "MultiSelect",
-          "TextArea",
-        ];
-        if (!validFieldTypes.includes(type)) {
+        if (!fieldTypes.includes(type as FieldType)) {
           throw new Error(`Invalid field type "${type}"`);
         }
 
@@ -401,9 +485,22 @@ export function createSharedTools(pool: Pool): (
             label: fieldData.label ?? label,
             description: fieldData.description ?? description ?? "",
             order: fieldData.order ?? order ?? 0,
-            options: fieldData.options ?? options ?? "[]",
+            options: fieldData.options
+              ? Array.isArray(fieldData.options)
+                ? fieldData.options
+                : (() => {
+                    try {
+                      return JSON.parse(fieldData.options);
+                    } catch {
+                      return [];
+                    }
+                  })()
+              : Array.isArray(options)
+              ? options
+              : [],
             required: fieldData.required ?? required ?? false,
             primary: fieldData.primary ?? primary ?? false,
+            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
           };
         }
 
@@ -462,9 +559,22 @@ export function createSharedTools(pool: Pool): (
             label: fieldData.label ?? label,
             description: fieldData.description ?? description ?? "",
             order: fieldData.order ?? order ?? 0,
-            options: fieldData.options ?? options ?? "[]",
+            options: fieldData.options
+              ? Array.isArray(fieldData.options)
+                ? fieldData.options
+                : (() => {
+                    try {
+                      return JSON.parse(fieldData.options);
+                    } catch {
+                      return [];
+                    }
+                  })()
+              : Array.isArray(options)
+              ? options
+              : [],
             required: fieldData.required ?? required ?? false,
             primary: fieldData.primary ?? primary ?? false,
+            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
           };
         } else {
           // Create new field
@@ -514,9 +624,22 @@ export function createSharedTools(pool: Pool): (
             label: fieldData.label ?? label,
             description: fieldData.description ?? description ?? "",
             order: fieldData.order ?? order ?? 0,
-            options: fieldData.options ?? options ?? "[]",
+            options: fieldData.options
+              ? Array.isArray(fieldData.options)
+                ? fieldData.options
+                : (() => {
+                    try {
+                      return JSON.parse(fieldData.options);
+                    } catch {
+                      return [];
+                    }
+                  })()
+              : Array.isArray(options)
+              ? options
+              : [],
             required: fieldData.required ?? required ?? false,
             primary: fieldData.primary ?? primary ?? false,
+            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
           };
         }
       },
@@ -524,7 +647,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveView",
       description:
-        "Creates a new view or updates an existing view. If id is provided, updates the view; otherwise, creates a new view.",
+        "STEP 3: Creates a new view or updates an existing view. Use the caseID returned from createCase. Views contain field references and are used by 'Collect information' steps. SAVE THE RETURNED VIEW ID - you need it for the viewId in the workflow model.",
       parameters: {
         type: "object",
         properties: {
@@ -541,8 +664,44 @@ export function createSharedTools(pool: Pool): (
             type: "object",
             description: "View model with fields and layout",
             properties: {
-              fields: { type: "array", items: {}, description: "Fields array" },
-              layout: { type: "object", description: "Layout configuration" },
+              fields: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    fieldId: {
+                      type: "integer",
+                      description: "Field ID reference",
+                    },
+                    required: {
+                      type: "boolean",
+                      description: "Whether the field is required in this view",
+                    },
+                    order: {
+                      type: "integer",
+                      description: "Display order of the field in this view",
+                    },
+                  },
+                  required: ["fieldId"],
+                },
+                description: "Array of field references for this view",
+              },
+              layout: {
+                type: "object",
+                description: "Layout configuration for the view",
+                properties: {
+                  type: {
+                    type: "string",
+                    description:
+                      "Layout type (e.g., 'single-column', 'two-column', 'grid')",
+                  },
+                  columns: {
+                    type: "integer",
+                    description: "Number of columns for grid layout",
+                  },
+                },
+                required: ["type"],
+              },
             },
             required: ["fields", "layout"],
           },
@@ -598,6 +757,37 @@ export function createSharedTools(pool: Pool): (
               : 0,
           });
 
+          // Validate that all fieldIds in model.fields exist in the database for this caseID
+          if (model && Array.isArray(model.fields) && model.fields.length > 0) {
+            const fieldIds = model.fields.map((f) => f.fieldId);
+            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseID = $2`;
+            const fieldResult = await pool.query(fieldQuery, [
+              fieldIds,
+              caseID,
+            ]);
+            const existingFieldIds = new Set(
+              fieldResult.rows.map((row) => row.id),
+            );
+            const missingFieldIds = fieldIds.filter(
+              (id) => !existingFieldIds.has(id),
+            );
+            if (missingFieldIds.length > 0) {
+              throw new Error(
+                `The following fieldId values do not exist for this case: ${missingFieldIds.join(
+                  ", ",
+                )}`,
+              );
+            }
+            // Validate field types
+            for (const row of fieldResult.rows) {
+              if (!fieldTypes.includes(row.type)) {
+                throw new Error(
+                  `Field ID ${row.id} has invalid type: ${row.type}`,
+                );
+              }
+            }
+          }
+
           return {
             id: viewData?.id,
             name: viewData?.name,
@@ -636,6 +826,37 @@ export function createSharedTools(pool: Pool): (
               ? JSON.parse(viewData.model).fields?.length || 0
               : 0,
           });
+
+          // Validate that all fieldIds in model.fields exist in the database for this caseID
+          if (model && Array.isArray(model.fields) && model.fields.length > 0) {
+            const fieldIds = model.fields.map((f) => f.fieldId);
+            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseID = $2`;
+            const fieldResult = await pool.query(fieldQuery, [
+              fieldIds,
+              caseID,
+            ]);
+            const existingFieldIds = new Set(
+              fieldResult.rows.map((row) => row.id),
+            );
+            const missingFieldIds = fieldIds.filter(
+              (id) => !existingFieldIds.has(id),
+            );
+            if (missingFieldIds.length > 0) {
+              throw new Error(
+                `The following fieldId values do not exist for this case: ${missingFieldIds.join(
+                  ", ",
+                )}`,
+              );
+            }
+            // Validate field types
+            for (const row of fieldResult.rows) {
+              if (!fieldTypes.includes(row.type)) {
+                throw new Error(
+                  `Field ID ${row.id} has invalid type: ${row.type}`,
+                );
+              }
+            }
+          }
 
           return {
             id: viewData?.id,
@@ -884,7 +1105,7 @@ export function createSharedTools(pool: Pool): (
 
         // Extract step names for easier reference
         const steps: Array<{
-          id: string;
+          id: number;
           name: string;
           type: string;
           stage: string;
