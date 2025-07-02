@@ -205,42 +205,32 @@ export async function POST(request: Request) {
     let enhancedPrompt = prompt;
 
     if (isExistingWorkflow && currentCaseId) {
-      enhancedPrompt = `🚨 CRITICAL: YOU MUST ALWAYS USE HELPER TOOLS FIRST BEFORE ANY CREATION OPERATIONS!
-🚨 NEVER CREATE ANYTHING WITHOUT CHECKING WHAT EXISTS FIRST!
-🚨 ALWAYS USE getCase, listFields, AND listViews BEFORE CREATING ANYTHING!
+      enhancedPrompt = `${prompt}
 
-${prompt}
-
-🚨 MANDATORY: You are working with EXISTING Case ID: ${currentCaseId}
-🚨 MANDATORY: Use getCase FIRST to see the current workflow structure
-🚨 MANDATORY: Use listFields and listViews to see existing items
-🚨 MANDATORY: Proceed with the requested modifications using the existing case ID
-🚨 CRITICAL: Do NOT ask for case name/description - you already have an existing case!`;
+You are working with an existing case (ID: ${currentCaseId}). Use the available tools to check the current state and make the requested modifications.`;
     } else {
       // For new workflow creation
-      enhancedPrompt = `🚨 CRITICAL: YOU MUST ALWAYS USE HELPER TOOLS FIRST BEFORE ANY CREATION OPERATIONS!
-🚨 NEVER CREATE ANYTHING WITHOUT CHECKING WHAT EXISTS FIRST!
-🚨 ALWAYS USE getCase, listFields, AND listViews BEFORE CREATING ANYTHING!
+      enhancedPrompt = `${prompt}
 
-${prompt}
-
-🚨 MANDATORY: Extract case name and description from the user's request
-🚨 MANDATORY: Case Name: "${extractedCaseName}"
-🚨 MANDATORY: Case Description: "${extractedCaseDescription}"
-🚨 MANDATORY: Proceed directly with workflow creation using these details
-🚨 CRITICAL: Do NOT ask for case name/description - extract it from the prompt
-🚨 CRITICAL: Follow the exact sequence: getCase → saveField → saveView → saveCase
-🚨 CRITICAL: Do NOT stop to ask questions - proceed with the workflow creation!`;
+Extract the case name and description from the user's request and proceed with workflow creation using the available tools.`;
     }
 
     // Get database tools
     console.log("Getting database tools...");
-    const databaseTools = getDatabaseTools(pool) as Tool[];
+    let databaseTools = getDatabaseTools(pool) as Tool[];
     console.log("Database tools count:", databaseTools.length);
     console.log(
       "Available tools:",
       databaseTools.map((t) => t.name),
     );
+
+    // Filter out createCase if working on an existing workflow
+    let filteredTools = databaseTools;
+    let workflowContextInstruction = "";
+    if (currentCaseId) {
+      filteredTools = databaseTools.filter((t) => t.name !== "createCase");
+      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (saveCase, saveField, saveView, etc).\nDo not create a new case.`;
+    }
 
     // Create OpenAI client with fresh token
     console.log("Creating OpenAI client...");
@@ -249,10 +239,8 @@ ${prompt}
     // Build enhanced system prompt
     const enhancedSystemPrompt = `${databaseSystemPrompt}
 
-${getToolsContext(databaseTools)}
+${getToolsContext(filteredTools)}${workflowContextInstruction}
 
-CRITICAL: Use helper tools FIRST (getCase, listFields, listViews) before creation
-Create fields, views, then case. Complete workflow in minimal iterations.
 Current case ID: ${currentCaseId || "NEW"}`;
 
     console.log("Building enhanced system prompt...");
@@ -261,7 +249,7 @@ Current case ID: ${currentCaseId || "NEW"}`;
     // Create streaming response
     console.log("Creating streaming response...");
     const { writer, encoder, response } = createStreamResponse();
-    const processor = createStreamProcessor(writer, encoder, databaseTools);
+    const processor = createStreamProcessor(writer, encoder, filteredTools);
 
     (async () => {
       try {
@@ -393,12 +381,7 @@ Current case ID: ${currentCaseId || "NEW"}`;
               );
               const proceedMessage = {
                 role: "user" as const,
-                content: `🚨 CRITICAL: DO NOT ASK QUESTIONS - PROCEED WITH TOOL CALLS!
-🚨 You have all the information you need to proceed
-🚨 Start with getCase, listFields, and listViews to check existing data
-🚨 Then proceed with saveField, saveView, and saveCase in sequence
-🚨 Do NOT ask for case name/description - extract it from the prompt
-🚨 Do NOT stop to ask questions - proceed with the workflow creation!`,
+                content: `Please proceed with the workflow creation using the available tools. The tools contain all the information you need to complete this task.`,
               };
               messages.push(proceedMessage);
               continue; // Continue to next iteration
@@ -439,7 +422,7 @@ Current case ID: ${currentCaseId || "NEW"}`;
                 });
 
                 try {
-                  const tool = databaseTools.find((t) => t.name === toolName);
+                  const tool = filteredTools.find((t) => t.name === toolName);
                   if (!tool) throw new Error(`Tool ${toolName} not found`);
 
                   console.log(`Executing tool ${toolName}...`);

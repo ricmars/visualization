@@ -300,8 +300,12 @@ describe("getToolsContext", () => {
     expect(context).toContain("Available tools:");
     expect(context).toContain("saveCase");
     expect(context).toContain("saveField");
-    expect(context).toContain("Use OpenAI function calling to execute tools");
-    expect(context).toContain("Complete workflow in minimal iterations");
+    expect(context).toContain(
+      "Use these tools to complete workflow creation tasks",
+    );
+    expect(context).toContain(
+      "Each tool contains detailed instructions for proper usage",
+    );
   });
 });
 
