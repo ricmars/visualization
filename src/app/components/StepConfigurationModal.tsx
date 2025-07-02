@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Field } from "../types";
+import { Field, FieldReference } from "../types";
 import AddFieldModal from "./AddFieldModal";
 import EditFieldModal from "./EditFieldModal";
 import StepForm from "./StepForm";
@@ -13,11 +13,11 @@ interface StepConfigurationModalProps {
     processId: number;
     stepId: number;
     name: string;
-    fields: Field[];
+    fields: FieldReference[];
     type: string;
   };
   fields: Field[];
-  onFieldChange: (fieldId: string, value: string | number | boolean) => void;
+  onFieldChange: (fieldId: number, value: string | number | boolean) => void;
   onAddField: (field: {
     label: string;
     type: Field["type"];
@@ -25,7 +25,7 @@ interface StepConfigurationModalProps {
     required?: boolean;
     primary?: boolean;
   }) => string;
-  onAddExistingField: (stepId: number, fieldIds: string[]) => void;
+  onAddExistingField: (stepId: number, fieldIds: number[]) => void;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (field: Field) => void;
 }
@@ -48,19 +48,14 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     null,
   ) as React.MutableRefObject<HTMLButtonElement>;
 
-  // Map field references to actual fields
+  // Map field references to actual fields using fieldId
   const stepFields = useMemo(() => {
-    const mappedFields = step.fields
+    return step.fields
       .map((fieldRef) => {
-        // Try to find field by ID first, then by name as fallback
-        const field = fields.find(
-          (f) => f.id === fieldRef.id || f.name === fieldRef.name,
-        );
-        return field ? { ...field, ...fieldRef } : null;
+        const field = fields.find((f) => f.id === fieldRef.fieldId);
+        return field ? { ...field, required: fieldRef.required } : null;
       })
-      .filter((f): f is Field => f !== null);
-
-    return mappedFields;
+      .filter((f): f is Field & { required: boolean } => f !== null);
   }, [step.fields, fields]);
 
   useEffect(() => {
@@ -82,13 +77,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   useEffect(() => {
     if (editingField) {
       const updatedFields = stepFields.map((field) =>
-        field.name === editingField.name
-          ? { ...field, ...editingField }
-          : field,
+        field.id === editingField.id ? { ...field, ...editingField } : field,
       );
       onAddExistingField(
         step.id,
-        updatedFields.map((field) => field.name),
+        updatedFields.map((field) => field.id!),
       );
     }
   }, [editingField, stepFields, step.id, onAddExistingField]);
@@ -100,7 +93,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
 
     onAddExistingField(
       step.id,
-      reorderedFields.map((field) => field.name),
+      reorderedFields.map((field) => field.id!),
     );
   };
 
@@ -110,7 +103,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const stepFieldIds = stepFields.map((field) => field.name);
+  const stepFieldIds = stepFields.map((field) => field.id!);
 
   return (
     <div
@@ -174,7 +167,15 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
                 <div className="relative">
                   <StepForm
                     fields={stepFields}
-                    onFieldChange={onFieldChange}
+                    onFieldChange={(
+                      fieldId: string,
+                      value: string | number | boolean,
+                    ) => {
+                      const numericFieldId = parseInt(fieldId, 10);
+                      if (!isNaN(numericFieldId)) {
+                        onFieldChange(numericFieldId, value);
+                      }
+                    }}
                     onDeleteField={handleRemoveField}
                     onReorderFields={handleReorderFields}
                     onEditField={(field) => setEditingField(field)}
@@ -201,13 +202,21 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
               ...field,
               primary: field.primary ?? false,
             });
-            onAddExistingField(step.id, [newFieldName]);
+            // Convert field name to field ID for the step
+            const newField = fields.find((f) => f.name === newFieldName);
+            if (newField?.id) {
+              onAddExistingField(step.id, [newField.id]);
+            }
           }}
           buttonRef={addFieldButtonRef}
           existingFields={fields}
-          stepFieldIds={stepFieldIds}
+          stepFieldIds={stepFieldIds.map(String)}
           onAddExistingField={(fieldIds) => {
-            onAddExistingField(step.id, fieldIds);
+            // Convert string field IDs back to numbers
+            const numericFieldIds = fieldIds
+              .map((id) => parseInt(id, 10))
+              .filter((id) => !isNaN(id));
+            onAddExistingField(step.id, numericFieldIds);
           }}
         />
 

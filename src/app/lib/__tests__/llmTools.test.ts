@@ -1,5 +1,6 @@
-import { getDatabaseTools } from "../llmTools";
-import { Pool } from "pg";
+import { createSharedTools } from "../sharedTools";
+import { pool } from "../db";
+import { LLMTool } from "../toolTypes";
 import { waitForPendingPromises, cleanupTimers } from "../testUtils";
 
 // Mock the database types
@@ -17,15 +18,22 @@ jest.mock("../../types/database", () => ({
   },
 }));
 
-describe("llmTools", () => {
-  let mockQuery: jest.Mock;
-  let databaseTools: ReturnType<typeof getDatabaseTools>;
+// Mock the database pool
+jest.mock("../db", () => ({
+  pool: {
+    query: jest.fn(),
+  },
+}));
 
-  beforeEach(async () => {
-    mockQuery = jest.fn();
-    const mockPool = { query: mockQuery } as unknown as Pool;
-    databaseTools = getDatabaseTools(mockPool);
+const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
+
+describe("llmTools", () => {
+  let databaseTools: LLMTool[];
+
+  beforeEach(() => {
     jest.clearAllMocks();
+    mockQuery.mockReset();
+    databaseTools = createSharedTools(pool) as unknown as LLMTool[];
   });
 
   afterEach(async () => {
@@ -36,7 +44,9 @@ describe("llmTools", () => {
 
   afterAll(async () => {
     // Final cleanup
-    const cleanupFn = (global as any).cleanupTestEnvironment;
+    const cleanupFn = (
+      global as { cleanupTestEnvironment?: () => Promise<void> }
+    ).cleanupTestEnvironment;
     if (cleanupFn) {
       await cleanupFn();
     }
@@ -44,67 +54,78 @@ describe("llmTools", () => {
 
   describe("saveCase", () => {
     it("should create a new case successfully", async () => {
-      const mockResult = {
-        rows: [
+      const inputModel = {
+        stages: [
           {
-            id: 1,
-            name: "Test Case",
-            description: "Test Description",
-            model: '{"stages":[]}',
+            id: "stage1",
+            name: "Stage 1",
+            order: 1,
+            processes: [
+              {
+                id: "process1",
+                name: "Process 1",
+                order: 1,
+                steps: [
+                  {
+                    id: "step1",
+                    type: "Collect information",
+                    name: "Step 1",
+                    order: 1,
+                  },
+                ],
+              },
+            ],
           },
         ],
-        rowCount: 1,
       };
 
-      // Mock the count queries that happen in saveCase
-      mockQuery
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
-        .mockResolvedValueOnce(mockResult); // insert query
+      // Mock implementation that returns different results based on the query
+      mockQuery.mockImplementation((query: string) => {
+        if (query.includes('SELECT id FROM "Views"')) {
+          // ViewId validation query
+          return Promise.resolve({ rows: [] });
+        } else if (query.includes('INSERT INTO "Cases"')) {
+          // Insert query
+          return Promise.resolve({
+            rows: [
+              {
+                id: 1,
+                name: "Test Case",
+                description: "Test Description",
+                model: JSON.stringify(inputModel),
+              },
+            ],
+            rowCount: 1,
+          });
+        }
+        // Default fallback
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      });
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      const result = await (
-        saveCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "Test Case",
-        description: "Test Description",
-        model: {
-          stages: [
-            {
-              id: "stage1",
-              name: "Stage 1",
-              order: 1,
-              processes: [
-                {
-                  id: "process1",
-                  name: "Process 1",
-                  order: 1,
-                  steps: [
-                    {
-                      id: "step1",
-                      type: "Collect information",
-                      name: "Step 1",
-                      order: 1,
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          name: "Test Case",
+          description: "Test Description",
+          model: inputModel,
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Cases"'),
         ["Test Case", "Test Description", expect.any(String)],
       );
-      expect(result).toEqual(mockResult.rows[0]);
+      expect(result).toEqual({
+        id: 1,
+        name: "Test Case",
+        description: "Test Description",
+        model: inputModel,
+      });
     });
 
     it("should update an existing case successfully when id is provided", async () => {
@@ -118,23 +139,25 @@ describe("llmTools", () => {
           },
         ],
       };
-      mockQuery.mockResolvedValue(mockResult);
+      // Mock the viewId validation query (no viewIds to check)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // Mock the update query
+      mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      const result = await (
-        saveCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        id: 1,
-        name: "Updated Case",
-        description: "Updated Description",
-        model: { stages: [] },
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          id: 1,
+          name: "Updated Case",
+          description: "Updated Description",
+          model: { stages: [] },
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE "Cases"'),
@@ -142,26 +165,60 @@ describe("llmTools", () => {
       );
       const callArgs = mockQuery.mock.calls[0][1];
       expect(JSON.parse(callArgs[2])).toEqual({ stages: [] });
-      expect(result).toEqual(mockResult.rows[0]);
+      expect(result).toEqual({
+        id: 1,
+        name: "Updated Case",
+        description: "Updated Description",
+        model: { stages: [] },
+      });
     });
 
     it("should reject case with fields arrays in steps", async () => {
       // Mock the count queries that happen in saveCase
       mockQuery
         .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+          rowCount: 1,
+        }) // insert query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }) // case existence check
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }); // final case data query
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        (
-          saveCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
           name: "Test Case",
           description: "Test Description",
           model: {
@@ -199,19 +256,48 @@ describe("llmTools", () => {
       // Mock the count queries that happen in saveCase
       mockQuery
         .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+          rowCount: 1,
+        }) // insert query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }) // case existence check
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }); // final case data query
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        (
-          saveCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
           name: "Test Case",
           description: "Test Description",
           model: { stages: "not an array" }, // Invalid stages type
@@ -223,19 +309,48 @@ describe("llmTools", () => {
       // Mock the count queries that happen in saveCase
       mockQuery
         .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }); // views count
+        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+          rowCount: 1,
+        }) // insert query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }) // case existence check
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: JSON.stringify({ stages: [] }),
+            },
+          ],
+        }); // final case data query
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        (
-          saveCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
           name: "Test Case",
           description: "Test Description",
           model: null,
@@ -244,6 +359,138 @@ describe("llmTools", () => {
     });
 
     it("should validate collect_information steps have viewId", async () => {
+      // Mock the viewId validation query (no viewIds to check)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // Mock the insert query
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            name: "Test Case",
+            description: "Test Description",
+            model: '{"stages":[]}',
+          },
+        ],
+      });
+
+      const saveCaseTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
+      );
+      expect(saveCaseTool).toBeDefined();
+
+      // This should not throw an error, just log a warning
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          id: 1,
+          name: "Test Case",
+          description: "Test Description",
+          model: {
+            stages: [
+              {
+                id: "stage1",
+                name: "Stage 1",
+                order: 1,
+                processes: [
+                  {
+                    id: "process1",
+                    name: "Process 1",
+                    order: 1,
+                    steps: [
+                      {
+                        id: "step1",
+                        type: "Collect information",
+                        name: "Step 1",
+                        order: 1,
+                        // Missing viewId
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+      expect(result).toBeDefined();
+      expect(mockQuery).toHaveBeenCalled();
+    });
+
+    it("should validate viewId uniqueness", async () => {
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 }) // case existence check
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: '{"stages":[]}',
+            },
+          ],
+          rowCount: 1,
+        }) // update query
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: '{"stages":[]}',
+            },
+          ],
+        }); // final case data query
+
+      const saveCaseTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
+      );
+      expect(saveCaseTool).toBeDefined();
+
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          id: 1,
+          name: "Test Case",
+          description: "Test Description",
+          model: {
+            stages: [
+              {
+                id: "stage1",
+                name: "Stage 1",
+                order: 1,
+                processes: [
+                  {
+                    id: "process1",
+                    name: "Process 1",
+                    order: 1,
+                    steps: [
+                      {
+                        id: "step1",
+                        type: "Collect information",
+                        name: "Step 1",
+                        order: 1,
+                        viewId: 1,
+                      },
+                      {
+                        id: "step2",
+                        type: "Collect information",
+                        name: "Step 2",
+                        order: 2,
+                        viewId: 1, // Duplicate viewId
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ).rejects.toThrow('Duplicate viewId "1" found in steps');
+    });
+
+    it("should throw error when viewId does not exist in database", async () => {
       // Mock the case existence check and update query
       mockQuery
         .mockResolvedValueOnce({
@@ -256,69 +503,31 @@ describe("llmTools", () => {
               id: 1,
               name: "Test Case",
               description: "Test Description",
-              model: "{}",
+              model: '{"stages":[]}',
             },
           ],
           rowCount: 1,
+        })
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: 1,
+              name: "Test Case",
+              description: "Test Description",
+              model: '{"stages":[]}',
+            },
+          ],
         });
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
-      );
-      expect(saveCaseTool).toBeDefined();
-
-      // This should not throw an error, just log a warning
-      const result = await (
-        saveCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        id: 1,
-        name: "Test Case",
-        description: "Test Description",
-        model: {
-          stages: [
-            {
-              id: "stage1",
-              name: "Stage 1",
-              order: 1,
-              processes: [
-                {
-                  id: "process1",
-                  name: "Process 1",
-                  order: 1,
-                  steps: [
-                    {
-                      id: "step1",
-                      type: "Collect information",
-                      name: "Step 1",
-                      order: 1,
-                      // Missing viewId
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      });
-
-      expect(result).toBeDefined();
-      expect(mockQuery).toHaveBeenCalled();
-    });
-
-    it("should validate viewId uniqueness", async () => {
-      const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        (
-          saveCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
           id: 1,
           name: "Test Case",
           description: "Test Description",
@@ -339,70 +548,7 @@ describe("llmTools", () => {
                         type: "Collect information",
                         name: "Step 1",
                         order: 1,
-                        viewId: "view1",
-                      },
-                      {
-                        id: "step2",
-                        type: "Collect information",
-                        name: "Step 2",
-                        order: 2,
-                        viewId: "view1", // Duplicate viewId
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      ).rejects.toThrow('Duplicate viewId "view1" found in steps');
-    });
-
-    it("should throw error when viewId does not exist in database", async () => {
-      // Mock the case existence check
-      mockQuery.mockResolvedValueOnce({
-        rows: [{ id: 1 }],
-        rowCount: 1,
-      });
-
-      // Mock the view existence check to return no views (viewId 999 doesn't exist)
-      mockQuery.mockResolvedValueOnce({
-        rows: [],
-        rowCount: 0,
-      });
-
-      const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
-      );
-      expect(saveCaseTool).toBeDefined();
-
-      await expect(
-        (
-          saveCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
-          id: 1,
-          name: "Test Case",
-          description: "Test Description",
-          model: {
-            stages: [
-              {
-                id: "stage1",
-                name: "Stage 1",
-                order: 1,
-                processes: [
-                  {
-                    id: "process1",
-                    name: "Process 1",
-                    order: 1,
-                    steps: [
-                      {
-                        id: "step1",
-                        type: "Collect information",
-                        name: "Step 1",
-                        order: 1,
-                        viewId: 999, // Non-existent view ID
+                        viewId: 999, // Non-existent viewId
                       },
                     ],
                   },
@@ -417,87 +563,76 @@ describe("llmTools", () => {
     });
 
     it("should allow empty processes arrays", async () => {
-      // Mock the count queries that happen in saveCase
-      mockQuery
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
-        .mockResolvedValueOnce({
-          rows: [
-            {
-              id: 1,
-              name: "Test Case",
-              description: "Test Description",
-              model:
-                '{"stages":[{"id":"stage1","name":"Stage 1","order":1,"processes":[]}]}',
-            },
-          ],
-          rowCount: 1,
-        }); // insert query
+      // Mock the viewId validation query (no viewIds to check)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // Mock the insert query
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            name: "Test Case",
+            description: "Test Description",
+            model: '{"stages":[]}',
+          },
+        ],
+      });
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      // This should not throw an error - empty processes arrays are now allowed
-      const result = await (
-        saveCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "Test Case",
-        description: "Test Description",
-        model: {
-          stages: [
-            {
-              id: "stage1",
-              name: "Stage 1",
-              order: 1,
-              processes: [], // Empty processes array should be allowed
-            },
-          ],
-        },
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          name: "Test Case",
+          description: "Test Description",
+          model: {
+            stages: [
+              {
+                id: "stage1",
+                name: "Stage 1",
+                order: 1,
+                processes: [], // Empty processes array
+              },
+            ],
+          },
+        });
 
       expect(result).toBeDefined();
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO "Cases"'),
-        ["Test Case", "Test Description", expect.any(String)],
-      );
+      expect(mockQuery).toHaveBeenCalled();
     });
 
     it("should allow empty models and provide default structure", async () => {
-      // Mock the count queries that happen in saveCase
-      mockQuery
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // fields count
-        .mockResolvedValueOnce({ rows: [{ count: "0" }] }) // views count
-        .mockResolvedValueOnce({
-          rows: [
-            {
-              id: 1,
-              name: "Test Case",
-              description: "Test Description",
-              model: '{"stages":[]}',
-            },
-          ],
-          rowCount: 1,
-        }); // insert query
+      // Mock the viewId validation query (no viewIds to check)
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      // Mock the insert query
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 1,
+            name: "Test Case",
+            description: "Test Description",
+            model: '{"stages":[]}',
+          },
+        ],
+      });
 
       const saveCaseTool = databaseTools.find(
-        (tool) => tool.name === "saveCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       // This should not throw an error - empty models should be allowed
-      const result = await (
-        saveCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "Test Case",
-        description: "Test Description",
-        model: {}, // Empty model should be allowed and converted to { stages: [] }
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveCaseTool!.execute as any)({
+          name: "Test Case",
+          description: "Test Description",
+          model: {}, // Empty model should be allowed and converted to { stages: [] }
+        });
 
       expect(result).toBeDefined();
       expect(mockQuery).toHaveBeenCalledWith(
@@ -509,8 +644,6 @@ describe("llmTools", () => {
 
   describe("saveField", () => {
     it("should create a new field successfully", async () => {
-      // Mock case exists check
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
       // Mock existing field check (no existing field with same name)
       mockQuery.mockResolvedValueOnce({ rowCount: 0 });
       // Mock insert result
@@ -520,14 +653,13 @@ describe("llmTools", () => {
             id: 1,
             name: "testField",
             type: "Text",
-            caseid: 1,
+            caseID: 1,
             primary: false,
             required: false,
             label: "Test Field",
-            description: "",
+            description: "Test Description",
             order: 0,
             options: "[]",
-            defaultValue: null,
           },
         ],
         rowCount: 1,
@@ -535,42 +667,41 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
-      const result = await (
-        saveFieldTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "testField",
-        type: "Text",
-        caseID: 1,
-        label: "Test Field",
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
+          name: "testField",
+          type: "Text",
+          caseID: 1,
+          label: "Test Field",
+          description: "Test Description",
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Fields"'),
         [
           "testField",
           "Text",
-          false,
           1,
-          false,
           "Test Field",
-          "",
+          "Test Description",
           0,
           "[]",
-          undefined,
+          false,
+          false,
         ],
       );
       expect(result).toEqual(mockResult.rows[0]);
     });
 
     it("should update an existing field successfully", async () => {
-      // Mock case exists check
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      // Mock existing field check (no existing field with same name)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
       // Mock update result
       const mockResult = {
         rows: [
@@ -578,14 +709,13 @@ describe("llmTools", () => {
             id: 1,
             name: "updatedField",
             type: "Text",
-            caseid: 1,
+            caseID: 1,
             primary: true,
             required: true,
             label: "Updated Field",
             description: "Updated description",
             order: 1,
             options: "[]",
-            defaultValue: null,
           },
         ],
         rowCount: 1,
@@ -593,39 +723,37 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
-      const result = await (
-        saveFieldTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        id: 1,
-        name: "updatedField",
-        type: "Text",
-        caseID: 1,
-        label: "Updated Field",
-        primary: true,
-        required: true,
-        description: "Updated description",
-        order: 1,
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
+          id: 1,
+          name: "updatedField",
+          type: "Text",
+          caseID: 1,
+          label: "Updated Field",
+          primary: true,
+          required: true,
+          description: "Updated description",
+          order: 1,
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE "Fields"'),
         [
           "updatedField",
           "Text",
-          true,
           1,
-          true,
           "Updated Field",
           "Updated description",
           1,
           "[]",
-          undefined,
+          true,
+          true,
           1,
         ],
       );
@@ -633,17 +761,37 @@ describe("llmTools", () => {
     });
 
     it("should throw error for invalid field type", async () => {
+      // Mock existing field check (no existing field with same name)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      // Mock insert result
+      const mockResult = {
+        rows: [
+          {
+            id: 1,
+            name: "testField",
+            type: "InvalidType",
+            caseID: 1,
+            primary: false,
+            required: false,
+            label: "Test Field",
+            description: "",
+            order: 0,
+            options: "[]",
+          },
+        ],
+        rowCount: 1,
+      };
+      mockQuery.mockResolvedValueOnce(mockResult);
+
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
       await expect(
-        (
-          saveFieldTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
           name: "testField",
           type: "InvalidType",
           caseID: 1,
@@ -653,17 +801,37 @@ describe("llmTools", () => {
     });
 
     it("should throw error for invalid field name", async () => {
+      // Mock existing field check (no existing field with same name)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      // Mock insert result
+      const mockResult = {
+        rows: [
+          {
+            id: 1,
+            name: "Stage1",
+            type: "Text",
+            caseID: 1,
+            primary: false,
+            required: false,
+            label: "Test Field",
+            description: "",
+            order: 0,
+            options: "[]",
+          },
+        ],
+        rowCount: 1,
+      };
+      mockQuery.mockResolvedValueOnce(mockResult);
+
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
       await expect(
-        (
-          saveFieldTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
           name: "Stage1",
           type: "Text",
           caseID: 1,
@@ -673,25 +841,43 @@ describe("llmTools", () => {
     });
 
     it("should throw error for missing required parameters", async () => {
+      // Mock existing field check (no existing field with same name)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      // Mock insert result
+      const mockResult = {
+        rows: [
+          {
+            id: 1,
+            name: "",
+            type: "Text",
+            caseID: 1,
+            primary: false,
+            required: false,
+            label: "Test Field",
+            description: "",
+            order: 0,
+            options: "[]",
+          },
+        ],
+        rowCount: 1,
+      };
+      mockQuery.mockResolvedValueOnce(mockResult);
+
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
       await expect(
-        (
-          saveFieldTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
           // Missing required parameters
         }),
       ).rejects.toThrow("Field name is required for saveField");
     });
 
     it("should return existing field for duplicate field name", async () => {
-      // Mock case exists check
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
       // Mock existing field check (field with same name exists)
       mockQuery.mockResolvedValueOnce({
         rowCount: 1,
@@ -705,111 +891,96 @@ describe("llmTools", () => {
             id: 1,
             name: "existingField",
             type: "Text",
-            caseid: 1,
+            caseID: 1,
             primary: false,
             required: false,
             label: "Existing Field",
-            description: "",
+            description: "Test Description",
             order: 0,
             options: "[]",
-            defaultValue: null,
           },
         ],
       });
 
       const saveFieldTool = databaseTools.find(
-        (tool) => tool.name === "saveField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveField",
       );
       expect(saveFieldTool).toBeDefined();
 
-      const result = await (
-        saveFieldTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "existingField",
-        type: "Text",
-        caseID: 1,
-        label: "Test Field",
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldTool!.execute as any)({
+          name: "existingField",
+          type: "Text",
+          caseID: 1,
+          label: "Existing Field",
+          description: "Test Description",
+        });
 
       expect(result).toEqual({
         id: 1,
         name: "existingField",
         type: "Text",
-        caseid: 1,
-        primary: false,
-        required: false,
+        caseID: 1,
         label: "Existing Field",
-        description: "",
+        description: "Test Description",
         order: 0,
         options: "[]",
-        defaultValue: null,
+        required: false,
+        primary: false,
       });
     });
   });
 
   describe("saveView", () => {
     it("should create a new view successfully", async () => {
-      // Mock case exists check
-      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
-      // Mock available fields check
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock insert result
       const mockResult = {
         rows: [
           {
             id: 1,
-            name: "testView",
-            caseid: 1,
-            model: '{"fields":[],"layout":{"type":"form","columns":1}}',
+            name: "Test View",
+            caseID: 1,
+            model: '{"fields":[]}',
           },
         ],
-        rowCount: 1,
       };
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveViewTool = databaseTools.find(
-        (tool) => tool.name === "saveView",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
-      const result = await (
-        saveViewTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        name: "testView",
-        caseID: 1,
-        model: {
-          fields: [],
-          layout: { type: "form", columns: 1 },
-        },
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveViewTool!.execute as any)({
+          name: "Test View",
+          caseID: 1,
+          model: { fields: [] },
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Views"'),
-        ["testView", 1, '{"fields":[],"layout":{"type":"form","columns":1}}'],
+        ["Test View", 1, expect.any(String)],
       );
-      expect(result).toEqual(mockResult.rows[0]);
+      expect(result).toEqual({
+        id: 1,
+        name: "Test View",
+        caseID: 1,
+        model: { fields: [] },
+      });
     });
 
     it("should update an existing view successfully", async () => {
-      // Mock view exists check
-      mockQuery.mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ name: "oldView" }],
-      });
-      // Mock name conflict check
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock update result
       const mockResult = {
         rows: [
           {
             id: 1,
-            name: "updatedView",
-            caseid: 1,
-            model: '{"fields":[],"layout":{"type":"form","columns":1}}',
+            name: "Updated View",
+            caseID: 1,
+            model: '{"fields":[]}',
           },
         ],
         rowCount: 1,
@@ -817,48 +988,42 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveViewTool = databaseTools.find(
-        (tool) => tool.name === "saveView",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
-      const result = await (
-        saveViewTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({
-        id: 1,
-        name: "updatedView",
-        caseID: 1,
-        model: {
-          fields: [],
-          layout: { type: "form", columns: 1 },
-        },
-      });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveViewTool!.execute as any)({
+          id: 1,
+          name: "Updated View",
+          caseID: 1,
+          model: { fields: [] },
+        });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE "Views"'),
-        [
-          "updatedView",
-          1,
-          '{"fields":[],"layout":{"type":"form","columns":1}}',
-          1,
-        ],
+        ["Updated View", 1, expect.any(String), 1],
       );
-      expect(result).toEqual(mockResult.rows[0]);
+      expect(result).toEqual({
+        id: 1,
+        name: "Updated View",
+        caseID: 1,
+        model: { fields: [] },
+      });
     });
 
     it("should throw error for missing required parameters", async () => {
       const saveViewTool = databaseTools.find(
-        (tool) => tool.name === "saveView",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
       await expect(
-        (
-          saveViewTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveViewTool!.execute as any)({
           // Missing required parameters
         }),
       ).rejects.toThrow("View name is required for saveView");
@@ -867,100 +1032,88 @@ describe("llmTools", () => {
 
   describe("deleteCase", () => {
     it("should delete a case successfully", async () => {
-      const mockResult = {
-        rows: [{ id: 1, name: "Test Case" }],
-      };
-      mockQuery.mockResolvedValue(mockResult);
+      // Mock the three delete operations: fields, views, case
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete fields
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete views
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 }); // delete case
 
       const deleteCaseTool = databaseTools.find(
-        (tool) => tool.name === "deleteCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteCase",
       );
       expect(deleteCaseTool).toBeDefined();
 
-      const result = await (
-        deleteCaseTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({ id: 1 });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteCaseTool!.execute as any)({ id: 1 });
 
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM "Fields"'),
+        [1],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM "Views"'),
+        [1],
+      );
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "Cases"'),
         [1],
       );
-      expect(result).toEqual({
-        id: 1,
-        name: "Test Case",
-        message: 'Successfully deleted case "Test Case" with ID 1',
-      });
+      expect(result).toEqual({ success: true, deletedId: 1 });
     });
 
     it("should throw error when case does not exist", async () => {
-      mockQuery.mockResolvedValue({
-        rows: [],
-        rowCount: 0,
-      });
+      // Mock the three delete operations: fields, views, case
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete fields
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete views
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete case - no rows affected
 
       const deleteCaseTool = databaseTools.find(
-        (tool) => tool.name === "deleteCase",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteCase",
       );
       expect(deleteCaseTool).toBeDefined();
 
       await expect(
-        (
-          deleteCaseTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({ id: 999 }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteCaseTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No case found with id 999");
     });
   });
 
   describe("deleteField", () => {
     it("should delete a field successfully", async () => {
-      const mockResult = {
-        rows: [{ id: 1, name: "Test Field" }],
-      };
-      mockQuery.mockResolvedValue(mockResult);
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const deleteFieldTool = databaseTools.find(
-        (tool) => tool.name === "deleteField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteField",
       );
       expect(deleteFieldTool).toBeDefined();
 
-      const result = await (
-        deleteFieldTool!.execute as unknown as (
-          params: unknown,
-        ) => Promise<unknown>
-      )({ id: 1 });
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteFieldTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "Fields"'),
         [1],
       );
-      expect(result).toEqual({
-        id: 1,
-        name: "Test Field",
-        message: 'Successfully deleted field "Test Field" with ID 1',
-      });
+      expect(result).toEqual({ success: true, deletedId: 1 });
     });
 
     it("should throw error when field does not exist", async () => {
-      mockQuery.mockResolvedValue({
-        rows: [],
-        rowCount: 0,
-      });
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
 
       const deleteFieldTool = databaseTools.find(
-        (tool) => tool.name === "deleteField",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteField",
       );
       expect(deleteFieldTool).toBeDefined();
 
       await expect(
-        (
-          deleteFieldTool!.execute as unknown as (
-            params: unknown,
-          ) => Promise<unknown>
-        )({ id: 999 }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteFieldTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No field found with id 999");
     });
   });

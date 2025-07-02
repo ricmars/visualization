@@ -18,8 +18,8 @@ interface ViewsPanelProps {
   }) => string;
   onUpdateField?: (updates: Partial<Field>) => void;
   onDeleteField?: (field: Field) => void;
-  onAddExistingFieldToStep?: (stepId: string, fieldIds: string[]) => void;
-  onFieldsReorder?: (stepId: string, fieldIds: string[]) => void;
+  onAddExistingFieldToStep?: (stepId: number, fieldIds: string[]) => void;
+  onFieldsReorder?: (stepId: number, fieldIds: string[]) => void;
   selectedView?: string | null;
   onViewSelect?: (view: string | null) => void;
 }
@@ -118,13 +118,13 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
 
     // First try to find it as a database view
     const databaseView = allViews.find(
-      (v) => v.id === selectedView && v.isDatabaseView,
+      (v) => v.id.toString() === selectedView && v.isDatabaseView,
     );
     if (databaseView && databaseView.viewData) {
       try {
         const viewModel = JSON.parse(databaseView.viewData.model);
         if (viewModel.fields && Array.isArray(viewModel.fields)) {
-          // Map field IDs to actual field objects
+          // Map fieldIds to actual field objects
           const viewFields: Field[] = [];
           viewModel.fields.forEach(
             (fieldRef: {
@@ -152,15 +152,15 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     // If not found as a database view, try to find it as a linked step
     const step = collectSteps.find((s) => s.id === selectedView);
     if (step) {
-      // Create a map to store unique fields by name
-      const uniqueFieldsMap = new Map<string, Field>();
+      // Create a map to store unique fields by fieldId
+      const uniqueFieldsMap = new Map<number, Field>();
 
       step.fields.forEach((fieldRef) => {
         // Only add the field if it hasn't been added yet
-        if (!uniqueFieldsMap.has(fieldRef.name)) {
-          const field = fields.find((f) => f.name === fieldRef.name);
+        if (!uniqueFieldsMap.has(fieldRef.fieldId)) {
+          const field = fields.find((f) => f.id === fieldRef.fieldId);
           if (field) {
-            uniqueFieldsMap.set(fieldRef.name, { ...field, ...fieldRef });
+            uniqueFieldsMap.set(fieldRef.fieldId, { ...field, ...fieldRef });
           }
         }
       });
@@ -182,20 +182,19 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
 
     // First try to find it as a database view
     const databaseView = allViews.find(
-      (v) => v.id === selectedView && v.isDatabaseView,
+      (v) => v.id.toString() === selectedView && v.isDatabaseView,
     );
     if (databaseView && databaseView.viewData) {
       try {
         const viewModel = JSON.parse(databaseView.viewData.model);
         if (viewModel.fields && Array.isArray(viewModel.fields)) {
-          const fieldNames: string[] = [];
+          const fieldIds: number[] = [];
           viewModel.fields.forEach((fieldRef: { fieldId: number }) => {
-            const field = fields.find((f) => f.id === fieldRef.fieldId);
-            if (field && field.name) {
-              fieldNames.push(field.name);
+            if (typeof fieldRef.fieldId === "number") {
+              fieldIds.push(fieldRef.fieldId);
             }
           });
-          return fieldNames;
+          return fieldIds;
         }
       } catch (error) {
         console.error("Error parsing view model:", error);
@@ -205,11 +204,11 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     // If not found as a database view, try to find it as a linked step
     const step = collectSteps.find((s) => s.id === selectedView);
     if (step) {
-      return step.fields.map((f) => f.name);
+      return step.fields.map((f) => f.fieldId);
     }
 
     return [];
-  }, [selectedView, collectSteps, fields, allViews]);
+  }, [selectedView, collectSteps, allViews]);
 
   const handleEditSubmit = (updates: {
     label: string;
@@ -244,15 +243,15 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     if (!selectedView || !onFieldsReorder) return;
 
     // Get the current field order
-    const currentFieldIds = selectedViewFields.map((field) => field.name);
+    const currentFieldIds = selectedViewFields.map((field) => field.id);
 
     // Reorder the fields
     const reorderedFieldIds = Array.from(currentFieldIds);
     const [removed] = reorderedFieldIds.splice(startIndex, 1);
     reorderedFieldIds.splice(endIndex, 0, removed);
 
-    // Call the parent handler with the reordered field IDs
-    onFieldsReorder(selectedView, reorderedFieldIds);
+    // Call the parent handler with the reordered field IDs, converting selectedView to number
+    onFieldsReorder(Number(selectedView), reorderedFieldIds.map(String));
   };
 
   const onEditField = (field: Field) => {
@@ -273,9 +272,9 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
             {allViews.map((view) => (
               <button
                 key={view.id}
-                onClick={() => handleViewSelect(view.id)}
+                onClick={() => handleViewSelect(view.id.toString())}
                 className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-                  selectedView === view.id
+                  selectedView === view.id.toString()
                     ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
                     : "hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
@@ -298,7 +297,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-                {allViews.find((v) => v.id === selectedView)?.name ||
+                {allViews.find((v) => v.id.toString() === selectedView)?.name ||
                   selectedView}
               </h3>
               <Tooltip content="Add new field">
@@ -363,16 +362,16 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
               primary: field.primary ?? false,
             });
             if (selectedView && onAddExistingFieldToStep) {
-              onAddExistingFieldToStep(selectedView, [fieldName]);
+              onAddExistingFieldToStep(Number(selectedView), [fieldName]);
             }
           }
         }}
         buttonRef={addFieldButtonRef}
         existingFields={fields}
-        stepFieldIds={selectedViewFieldIds}
+        stepFieldIds={selectedViewFieldIds.map(String)}
         onAddExistingField={(fieldIds) => {
           if (selectedView && onAddExistingFieldToStep) {
-            onAddExistingFieldToStep(selectedView, fieldIds);
+            onAddExistingFieldToStep(Number(selectedView), fieldIds);
           }
         }}
       />

@@ -612,9 +612,12 @@ export default function WorkflowPage() {
             steps: process.steps.map((step: Step) => ({
               ...step,
               fields:
-                step.fields?.filter(
-                  (f: FieldReference) => f.name !== field.name,
-                ) || [],
+                step.fields?.filter((f: FieldReference) => {
+                  const referencedField = fields.find(
+                    (fieldObj) => fieldObj.id === f.fieldId,
+                  );
+                  return referencedField?.name !== field.name;
+                }) || [],
             })),
           })),
         })),
@@ -1509,7 +1512,7 @@ export default function WorkflowPage() {
 
         // Get existing field IDs in the view
         const existingFieldIds = new Set(
-          viewModel.fields?.map((f: any) => f.fieldId) || [],
+          viewModel.fields?.map((f: { fieldId: number }) => f.fieldId) || [],
         );
 
         // Add new fields that aren't already in the view
@@ -1580,8 +1583,10 @@ export default function WorkflowPage() {
               }
 
               // Check if stepId matches the step ID or the step name
+              // Convert stepId to number for proper comparison with step.id
+              const stepIdNum = parseInt(stepId, 10);
               const stepMatches =
-                step.id.toString() === stepId ||
+                step.id === stepIdNum ||
                 step.name === stepId ||
                 step.name === stepName;
 
@@ -1591,14 +1596,16 @@ export default function WorkflowPage() {
 
                 // Create a map of existing fields to preserve their properties
                 const existingFieldsMap = new Map(
-                  existingFields.map((field) => [field.name, field]),
+                  existingFields.map((field) => [field.fieldId, field]),
                 );
 
                 // Add new fields while preserving existing ones
                 fieldIds.forEach((fieldId) => {
-                  if (!existingFieldsMap.has(fieldId)) {
-                    existingFieldsMap.set(fieldId, {
-                      name: fieldId,
+                  // Find the field by name to get its ID
+                  const field = fields.find((f) => f.name === fieldId);
+                  if (field && field.id && !existingFieldsMap.has(field.id)) {
+                    existingFieldsMap.set(field.id, {
+                      fieldId: field.id,
                       required: false,
                     });
                   }
@@ -1667,7 +1674,7 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleFieldsReorder = async (stepId: string, fieldIds: string[]) => {
+  const handleFieldsReorder = async (stepId: string, fieldIds: number[]) => {
     if (!selectedCase) return;
 
     try {
@@ -1684,9 +1691,10 @@ export default function WorkflowPage() {
               stepName = stepId.split("-").slice(1).join("-");
             }
 
-            // Check if stepId matches the step ID or the step name
+            // Convert stepId to number for proper comparison with step.id
+            const stepIdNum = parseInt(stepId, 10);
             const stepMatches =
-              step.id.toString() === stepId ||
+              step.id === stepIdNum ||
               step.name === stepId ||
               step.name === stepName;
 
@@ -1696,10 +1704,11 @@ export default function WorkflowPage() {
               return {
                 ...step,
                 fields: uniqueFieldIds.map((fieldId) => ({
-                  name: fieldId,
+                  fieldId,
                   required:
-                    step.fields?.find((f: FieldReference) => f.name === fieldId)
-                      ?.required ?? false,
+                    step.fields?.find(
+                      (f: FieldReference) => f.fieldId === fieldId,
+                    )?.required ?? false,
                 })),
               };
             }
@@ -1713,8 +1722,8 @@ export default function WorkflowPage() {
 
       // Now update the database field order for all fields in this case
       const fieldUpdates = fieldIds
-        .map((fieldName, index) => {
-          const field = fields.find((f) => f.name === fieldName);
+        .map((fieldId, index) => {
+          const field = fields.find((f) => f.id === fieldId);
           if (field && field.id) {
             return fetch(
               `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
@@ -1730,12 +1739,12 @@ export default function WorkflowPage() {
                     name: field.name,
                     label: field.label,
                     type: field.type,
-                    primary: field.primary || false,
+                    primary: field.primary,
                     caseID: selectedCase.id,
-                    options: field.options || [],
-                    required: field.required || false,
-                    order: index + 1, // Update order based on new position
-                    description: field.description || field.label || field.name, // Use label or name as fallback
+                    options: field.options,
+                    required: field.required,
+                    order: index + 1, // Only update the order, preserve all other properties
+                    description: field.description,
                   },
                 }),
               },
@@ -1792,12 +1801,12 @@ export default function WorkflowPage() {
                     name: field.name,
                     label: field.label,
                     type: field.type,
-                    primary: field.primary || false,
+                    primary: field.primary,
                     caseID: selectedCase.id,
-                    options: field.options || [],
-                    required: field.required || false,
-                    order: index + 1, // Update order based on new position
-                    description: field.description || field.label || field.name, // Use label or name as fallback
+                    options: field.options,
+                    required: field.required,
+                    order: index + 1, // Only update the order, preserve all other properties
+                    description: field.description,
                   },
                 }),
               },
@@ -2050,8 +2059,26 @@ export default function WorkflowPage() {
                   onAddField={handleAddField}
                   onUpdateField={handleUpdateField}
                   onDeleteField={handleDeleteField}
-                  onAddExistingFieldToStep={handleAddExistingFieldToStep}
-                  onFieldsReorder={handleFieldsReorder}
+                  onAddExistingFieldToStep={(
+                    stepId: number,
+                    fieldIds: string[],
+                  ) => {
+                    // Convert string fieldIds to numbers for the handler
+                    const numericFieldIds = fieldIds
+                      .map((id) => parseInt(id, 10))
+                      .filter((id) => !isNaN(id));
+                    handleAddExistingFieldToStep(
+                      stepId.toString(),
+                      numericFieldIds.map(String),
+                    );
+                  }}
+                  onFieldsReorder={(stepId: number, fieldIds: string[]) => {
+                    // Convert string fieldIds to numbers for the handler
+                    const numericFieldIds = fieldIds
+                      .map((id) => parseInt(id, 10))
+                      .filter((id) => !isNaN(id));
+                    handleFieldsReorder(stepId.toString(), numericFieldIds);
+                  }}
                   onViewSelect={setSelectedView}
                   selectedView={selectedView}
                 />

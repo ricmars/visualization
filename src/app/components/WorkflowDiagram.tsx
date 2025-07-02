@@ -120,7 +120,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     processId: number;
     stepId: number;
     name: string;
-    fields: Field[];
+    fields: FieldReference[];
     type: string;
   } | null>(null);
 
@@ -322,7 +322,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     const step = process?.steps.find((s: Step) => s.id === stepId);
 
     console.log("[DEBUG] Clicked step:", step);
-    let stepFields: Field[] = [];
+    let stepFields: FieldReference[] = [];
     if (step && step.type === "Collect information" && step.viewId) {
       console.log("[DEBUG] Step has viewId:", step.viewId);
       const view = views.find(
@@ -350,16 +350,16 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                   );
                   if (field) {
                     return {
-                      ...field,
-                      required: fieldRef.required ?? field.required,
-                      order: fieldRef.order ?? field.order,
-                    };
+                      fieldId: field.id,
+                      required: fieldRef.required ?? false,
+                    } as FieldReference;
                   }
                   return null;
                 },
               )
-              .filter((f: Field | null): f is Field => f !== null)
-              .sort((a: Field, b: Field) => (a.order || 0) - (b.order || 0));
+              .filter(
+                (f: FieldReference | null): f is FieldReference => f !== null,
+              );
             console.log("[DEBUG] Final mapped stepFields:", stepFields);
           }
         } catch (_e) {
@@ -385,7 +385,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   };
 
   const _handleFieldChange = (
-    fieldId: string,
+    fieldId: number,
     value: string | number | boolean,
   ) => {
     const updatedStages = stages.map((stage: Stage) => ({
@@ -394,13 +394,13 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
         ...process,
         steps: process.steps.map((step: Step) => {
           const field = step.fields?.find(
-            (f: FieldReference) => f.name === fieldId,
+            (f: FieldReference) => f.fieldId === fieldId,
           );
           if (field) {
             return {
               ...step,
               fields: step.fields?.map((f: FieldReference) =>
-                f.name === fieldId ? { ...f, value } : f,
+                f.fieldId === fieldId ? { ...f, value } : f,
               ),
             };
           }
@@ -442,8 +442,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                     const updatedFields = [
                       ...(step.fields || []),
                       {
-                        id: field?.id, // Include the field ID if available
-                        name: fieldId,
+                        fieldId: field?.id || 0,
                         required: false,
                       } as FieldReference,
                     ];
@@ -470,7 +469,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
 
   const handleAddExistingFieldToStep = (
     stepId: number,
-    fieldIds: string[],
+    fieldIds: number[],
   ): void => {
     if (!selectedStep) return;
 
@@ -487,12 +486,11 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                     // Create new field references from the field IDs
                     const newFields = fieldIds
                       .map((fieldId) => {
-                        // Try to find field by name (since fieldIds are field names)
-                        const field = fields.find((f) => f.name === fieldId);
+                        // Find field by ID
+                        const field = fields.find((f) => f.id === fieldId);
                         if (field) {
                           return {
-                            id: field.id, // Include the field ID (optional)
-                            name: field.name,
+                            fieldId: field.id,
                             required: false,
                           } as FieldReference;
                         }
@@ -509,31 +507,9 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
 
                     // Update selectedStep state if this is the current step
                     if (selectedStep && selectedStep.stepId === step.id) {
-                      const updatedStepFields = newFields.map(
-                        (fieldRef: FieldReference): Field => {
-                          // Try to find field by ID first, then by name as fallback
-                          const fullField = fields.find(
-                            (f) =>
-                              f.id === fieldRef.id || f.name === fieldRef.name,
-                          );
-                          if (fullField) {
-                            return {
-                              ...fullField,
-                              ...fieldRef,
-                            };
-                          }
-                          return {
-                            label: fieldRef.name,
-                            type: "Text" as const,
-                            value: undefined,
-                            ...fieldRef,
-                          };
-                        },
-                      );
-
                       setSelectedStep({
                         ...selectedStep,
-                        fields: updatedStepFields,
+                        fields: newFields,
                       });
                     }
 
@@ -915,7 +891,12 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             }}
             step={selectedStep}
             fields={fields}
-            onFieldChange={_handleFieldChange}
+            onFieldChange={(
+              fieldId: number,
+              value: string | number | boolean,
+            ) => {
+              _handleFieldChange(fieldId, value);
+            }}
             onAddField={handleAddFieldToStep}
             onAddExistingField={handleAddExistingFieldToStep}
             onUpdateField={onUpdateField}

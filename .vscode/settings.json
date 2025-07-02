@@ -63,6 +63,7 @@
     "dbname",
     "fkey",
     "headlessui",
+    "modelcontextprotocol",
     "pangea",
     "pega",
     "pkey",

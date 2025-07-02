@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@modelcontextprotocol/sdk": "^1.13.3",
     "@tailwindcss/typography": "^0.5.16",
     "@types/pg": "^8.15.4",
     "@types/uuid": "^10.0.0",

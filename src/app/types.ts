@@ -57,10 +57,8 @@ export interface Field {
 }
 
 export interface FieldReference {
-  /** Unique identifier for the field */
-  id?: number;
-  /** Unique name of the field for the case type - used as key - should match the name of a field in the fields object */
-  name: string;
+  /** Unique identifier for the field (database ID) */
+  fieldId: number;
   /** set to true if the field is required */
   required: boolean;
 }
