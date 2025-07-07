@@ -301,15 +301,11 @@ Current case ID: ${currentCaseId || "NEW"}`;
             });
 
             const completionPromise = openai.chat.completions.create({
-              model: "gpt-35-turbo-16k",
+              model: "o4-mini",
               messages,
-              max_tokens: 2048, // Reduced from 4096
+              max_completion_tokens: 40000,
               stream: true, // Enable streaming for faster responses
               tools: openaiToolSchemas,
-              temperature: 0.1,
-              top_p: 0.9, // Add top_p for better performance
-              presence_penalty: 0.1, // Reduce repetition
-              frequency_penalty: 0.1, // Reduce repetition
             });
 
             const completion = (await Promise.race([

@@ -18,6 +18,20 @@ When creating workflows:
 3. Pay attention to returned IDs and use them in subsequent operations
 4. Complete the entire workflow creation process
 
+CRITICAL VIEW CREATION GUIDELINES:
+- When creating views for workflow steps, use descriptive names that clearly indicate the step's purpose
+- View names should match or closely relate to the step names they will be used for
+- For example: if creating a step called "Enter Rocket Details", create a view called "Enter Rocket Details"
+- Always save the returned view ID and use it in the corresponding step's viewId field
+- Ensure view names are unique and meaningful to avoid confusion
+- The view should contain only the fields relevant to that specific step's purpose
+
+WORKFLOW CREATION SEQUENCE:
+1. Create the case with createCase
+2. Create fields with saveField (use the case ID from step 1)
+3. Create views with saveView (use the case ID from step 1, save the returned view IDs)
+4. Update the case with saveCase (use the view IDs from step 3 in the workflow model)
+
 Available tools are listed below with their descriptions.`;
 
 export const exampleDatabaseResponse = `

@@ -15,10 +15,11 @@ import { databaseSystemPrompt } from "./lib/databasePrompt";
  */
 export default function Home() {
   const [cases, setCases] = useState<Case[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreatingWorkflow, setIsCreatingWorkflow] = useState(false);
+  const [creationProgress, setCreationProgress] = useState<string>("");
   const router = useRouter();
 
   const refreshCases = async () => {
@@ -45,8 +46,9 @@ export default function Home() {
 
   const handleCreateWorkflow = async (name: string, description: string) => {
     try {
-      setLoading(true);
+      setIsCreatingWorkflow(true);
       setError(null);
+      setCreationProgress("Initializing workflow creation...");
 
       console.log("=== Creating New Workflow ===");
       console.log("Input:", { name, description });
@@ -69,15 +71,97 @@ export default function Home() {
         );
       }
 
-      setSuccessMessage("Workflow created successfully!");
+      // Process the streaming response
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body available");
+      }
+
+      const decoder = new TextDecoder();
+      let createdCaseId: number | null = null;
+      let isComplete = false;
+
+      setCreationProgress("Creating workflow...");
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.text) {
+                  setCreationProgress((prev) => prev + "\n" + data.text);
+                }
+
+                if (data.toolResult && data.toolResult.id) {
+                  // Check if this is a case creation result
+                  if (data.toolResult.name === name) {
+                    createdCaseId = data.toolResult.id;
+                    setCreationProgress(
+                      (prev) => prev + "\n✅ Case created successfully!",
+                    );
+                  }
+                }
+
+                if (data.done) {
+                  isComplete = true;
+                  setCreationProgress(
+                    (prev) => prev + "\n✅ Workflow creation completed!",
+                  );
+                }
+
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (parseError) {
+                console.warn("Failed to parse SSE data:", parseError);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (!isComplete) {
+        throw new Error("Workflow creation did not complete properly");
+      }
+
+      // Refresh cases to get the latest data
       await refreshCases();
+
+      // Find the newly created case
+      const newCase = cases.find((c) => c.name === name);
+      if (newCase) {
+        setSuccessMessage("Workflow created successfully!");
+        // Close the modal and navigate to the workflow page
+        setIsCreateModalOpen(false);
+        router.push(`/workflow/${newCase.id}`);
+      } else if (createdCaseId) {
+        // If we have the case ID but it's not in the cases list yet, navigate directly
+        setIsCreateModalOpen(false);
+        router.push(`/workflow/${createdCaseId}`);
+      } else {
+        setSuccessMessage("Workflow created successfully!");
+        setIsCreateModalOpen(false);
+      }
     } catch (error) {
       console.error("Error creating workflow:", error);
       setError(
         error instanceof Error ? error.message : "Failed to create workflow",
       );
+      // Close modal on error as well
+      setIsCreateModalOpen(false);
     } finally {
-      setLoading(false);
+      setIsCreatingWorkflow(false);
+      setCreationProgress("");
     }
   };
 
@@ -127,7 +211,7 @@ export default function Home() {
           Create New Workflow
         </button>
       </div>
-      {loading ? (
+      {cases.length === 0 ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
         </div>
@@ -154,7 +238,8 @@ export default function Home() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={handleCreateWorkflow}
-        isCreating={loading}
+        isCreating={isCreatingWorkflow}
+        creationProgress={creationProgress}
       />
     </div>
   );

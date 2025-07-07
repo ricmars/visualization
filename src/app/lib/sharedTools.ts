@@ -66,6 +66,16 @@ export function createSharedTools(pool: Pool): (
         steps: unknown[];
       }
     >
+  | SharedTool<
+      {},
+      {
+        cases: Array<{
+          id: number;
+          name: string;
+          description: string;
+        }>;
+      }
+    >
 )[] {
   const tools: (
     | SharedTool<
@@ -106,6 +116,16 @@ export function createSharedTools(pool: Pool): (
           description: string;
           model: unknown;
           steps: unknown[];
+        }
+      >
+    | SharedTool<
+        {},
+        {
+          cases: Array<{
+            id: number;
+            name: string;
+            description: string;
+          }>;
         }
       >
   )[] = [
@@ -172,7 +192,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveCase",
       description:
-        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this AFTER creating all fields and views. The model must include viewId values that reference actual view IDs returned from saveView calls.",
+        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this AFTER creating all fields and views. The model must include viewId values that reference actual view IDs returned from saveView calls. IMPORTANT: Ensure viewId values correspond to the appropriate step names and contain the relevant fields for each step.",
       parameters: {
         type: "object",
         properties: {
@@ -319,7 +339,7 @@ export function createSharedTools(pool: Pool): (
         // Validate that viewIds exist in database
         if (viewIds.size > 0) {
           const viewIdsArray = Array.from(viewIds);
-          const viewQuery = `SELECT id FROM "${DB_TABLES.VIEWS}" WHERE id = ANY($1)`;
+          const viewQuery = `SELECT id, name FROM "${DB_TABLES.VIEWS}" WHERE id = ANY($1)`;
           const viewResult = await pool.query(viewQuery, [viewIdsArray]);
           const existingViewIds = new Set(viewResult.rows.map((row) => row.id));
           const missingViewIds = viewIdsArray.filter(
@@ -333,6 +353,17 @@ export function createSharedTools(pool: Pool): (
               )}. Make sure to use the actual IDs returned from saveView calls.`,
             );
           }
+
+          // Provide guidance on view usage
+          const viewMap = new Map(
+            viewResult.rows.map((row) => [row.id, row.name]),
+          );
+          console.log(
+            "Available views for this case:",
+            Array.from(viewMap.entries()).map(
+              ([id, name]) => `ID ${id}: "${name}"`,
+            ),
+          );
         }
 
         // Update existing case
@@ -452,11 +483,6 @@ export function createSharedTools(pool: Pool): (
         // Validate field type
         if (!fieldTypes.includes(type as FieldType)) {
           throw new Error(`Invalid field type "${type}"`);
-        }
-
-        // Validate field name format - allow camelCase
-        if (!/^[a-z][a-zA-Z0-9_]*$/.test(name)) {
-          throw new Error(`Invalid field name "${name}"`);
         }
 
         // Check for existing field with same name in the same case
@@ -647,7 +673,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveView",
       description:
-        "STEP 3: Creates a new view or updates an existing view. Use the caseID returned from createCase. Views contain field references and are used by 'Collect information' steps. SAVE THE RETURNED VIEW ID - you need it for the viewId in the workflow model.",
+        "STEP 3: Creates a new view or updates an existing view. Use the caseID returned from createCase. Views contain field references and are used by 'Collect information' steps. CRITICAL: SAVE THE RETURNED VIEW ID - you need it for the viewId in the workflow model. IMPORTANT: Use descriptive view names that match the step purpose (e.g., 'Rocket Details View' for 'Enter Rocket Details' step). Each view should contain only the fields relevant to that specific step.",
       parameters: {
         type: "object",
         properties: {
@@ -1132,6 +1158,40 @@ export function createSharedTools(pool: Pool): (
           model,
           steps,
         };
+      },
+    },
+    {
+      name: "getCases",
+      description:
+        "Gets all cases with their names and descriptions, excluding the workflow model. Use this to list available cases without loading the full workflow structure.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+      execute: async () => {
+        console.log("=== getCases EXECUTION STARTED ===");
+        console.log("getCases called at:", new Date().toISOString());
+
+        const query = `
+          SELECT id, name, description
+          FROM "${DB_TABLES.CASES}"
+          ORDER BY name
+        `;
+        console.log("getCases query:", query);
+
+        const result = await pool.query(query);
+        const cases = result.rows.map((row) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+        }));
+
+        console.log("getCases successful:", {
+          caseCount: cases.length,
+        });
+
+        return { cases };
       },
     },
   ];

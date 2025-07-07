@@ -25,6 +25,26 @@ describe("Database Prompt", () => {
     it("should mention critical rules", () => {
       expect(databaseSystemPrompt).toContain("critical rules");
     });
+
+    it("should include enhanced view creation guidelines", () => {
+      expect(databaseSystemPrompt).toContain(
+        "CRITICAL VIEW CREATION GUIDELINES",
+      );
+      expect(databaseSystemPrompt).toContain(
+        "View names should match or closely relate to the step names they will be used for",
+      );
+      expect(databaseSystemPrompt).toContain(
+        "Always save the returned view ID and use it in the corresponding step's viewId field",
+      );
+    });
+
+    it("should include workflow creation sequence", () => {
+      expect(databaseSystemPrompt).toContain("WORKFLOW CREATION SEQUENCE");
+      expect(databaseSystemPrompt).toContain("Create the case with createCase");
+      expect(databaseSystemPrompt).toContain("Create fields with saveField");
+      expect(databaseSystemPrompt).toContain("Create views with saveView");
+      expect(databaseSystemPrompt).toContain("Update the case with saveCase");
+    });
   });
 
   describe("getCompleteToolsContext", () => {

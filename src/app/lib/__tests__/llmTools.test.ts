@@ -707,7 +707,7 @@ describe("llmTools", () => {
       ).rejects.toThrow('Invalid field type "InvalidType"');
     });
 
-    it("should throw error for invalid field name", async () => {
+    it("should create a field with Stage prefix successfully", async () => {
       // Mock existing field check (no existing field with same name)
       mockQuery.mockResolvedValueOnce({ rowCount: 0 });
       // Mock insert result
@@ -736,15 +736,24 @@ describe("llmTools", () => {
       );
       expect(saveFieldTool).toBeDefined();
 
-      await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveFieldTool!.execute as any)({
           name: "Stage1",
           type: "Text",
           caseID: 1,
           label: "Test Field",
-        }),
-      ).rejects.toThrow('Invalid field name "Stage1"');
+        });
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO "Fields"'),
+        ["Stage1", "Text", 1, "Test Field", "", 0, "[]", false, false],
+      );
+      expect(result).toEqual({
+        ...mockResult.rows[0],
+        options: [],
+        defaultValue: null,
+      });
     });
 
     it("should throw error for missing required parameters", async () => {
@@ -935,6 +944,23 @@ describe("llmTools", () => {
           // Missing required parameters
         }),
       ).rejects.toThrow("View name is required for saveView");
+    });
+
+    it("should provide enhanced guidance in tool description", () => {
+      const saveViewTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveView",
+      );
+      expect(saveViewTool).toBeDefined();
+
+      // Check that the enhanced description includes guidance about view naming
+      expect(saveViewTool!.description).toContain(
+        "Use descriptive view names that match the step purpose",
+      );
+      expect(saveViewTool!.description).toContain("Rocket Details View");
+      expect(saveViewTool!.description).toContain(
+        "Each view should contain only the fields relevant to that specific step",
+      );
     });
   });
 

@@ -5,6 +5,7 @@ interface CreateWorkflowModalProps {
   onClose: () => void;
   onCreate: (name: string, description: string) => Promise<void>;
   isCreating: boolean;
+  creationProgress?: string;
 }
 
 /**
@@ -19,6 +20,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   onClose,
   onCreate,
   isCreating,
+  creationProgress,
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,13 +39,15 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
     try {
       const trimmedDescription = description.trim().slice(0, 500);
       await onCreate(name.trim(), trimmedDescription);
-      setName("");
-      setDescription("");
+      // Don't close the modal here - let the parent component handle it
+      // The modal will be closed when navigation happens or on error
     } catch (_error) {
       setIsSubmitting(false);
       return;
     }
-    onClose();
+    // Reset form only on success
+    setName("");
+    setDescription("");
   };
 
   const handleDescriptionChange = (
@@ -60,13 +64,32 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   const remainingChars = 500 - description.length;
 
   return (
-    <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+    <div
+      className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50"
+      onClick={isCreating ? undefined : onClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-md w-full"
+        onClick={(e) => e.stopPropagation()}
+      >
         <form onSubmit={handleSubmit} className="p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">
             Create New Workflow
           </h2>
           <div className="space-y-4">
+            {isCreating && creationProgress && (
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                <div className="flex items-center mb-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent mr-2"></div>
+                  <span className="text-sm font-medium text-blue-800">
+                    Creating workflow...
+                  </span>
+                </div>
+                <div className="text-sm text-blue-700 whitespace-pre-line max-h-32 overflow-y-auto">
+                  {creationProgress}
+                </div>
+              </div>
+            )}
             <div>
               <label
                 htmlFor="name"
@@ -114,7 +137,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
               disabled={isSubmitting || isCreating}
             >
-              Cancel
+              {isCreating ? "Creating..." : "Cancel"}
             </button>
             <button
               type="submit"
