@@ -331,7 +331,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
           if (cleanedMessages.length < messages.length) {
             const originalCount = messages.length;
             messages.length = 0;
-            messages.push(...cleanedMessag
+            messages.push(...cleanedMessages);
 
             const approximateTokens = messages.reduce((total, msg) => {
               const content =
