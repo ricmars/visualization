@@ -673,7 +673,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveView",
       description:
-        "STEP 3: Creates a new view or updates an existing view. Use the caseID returned from createCase. Views contain field references and are used by 'Collect information' steps. CRITICAL: SAVE THE RETURNED VIEW ID - you need it for the viewId in the workflow model. IMPORTANT: Use descriptive view names that match the step purpose (e.g., 'Rocket Details View' for 'Enter Rocket Details' step). Each view should contain only the fields relevant to that specific step.",
+        "Creates or updates a view for a case. Save the returned view ID for workflow model.",
       parameters: {
         type: "object",
         properties: {
@@ -1004,7 +1004,7 @@ export function createSharedTools(pool: Pool): (
     },
     {
       name: "listFields",
-      description: "Lists all fields for a specific case.",
+      description: "Lists all fields for a case.",
       parameters: {
         type: "object",
         properties: {
@@ -1094,7 +1094,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "getCase",
       description:
-        "Gets the details of a specific case including its workflow model. CRITICAL: Use this FIRST before any other operations to see the current workflow structure.",
+        "Gets case details including workflow model. Use first to see current structure.",
       parameters: {
         type: "object",
         properties: {
@@ -1162,8 +1162,7 @@ export function createSharedTools(pool: Pool): (
     },
     {
       name: "getCases",
-      description:
-        "Gets all cases with their names and descriptions, excluding the workflow model. Use this to list available cases without loading the full workflow structure.",
+      description: "Lists all cases with names and descriptions.",
       parameters: {
         type: "object",
         properties: {},

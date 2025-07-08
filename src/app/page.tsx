@@ -55,7 +55,7 @@ export default function Home() {
 
       // Use the AI service to create the workflow
       const response = await Service.generateResponse(
-        `Create a new workflow with name "${name}" and description "${description}". Follow the exact sequence: 1) Create case with empty model, 2) Create all fields, 3) Create all views, 4) Update case with complete model.`,
+        `Create a new workflow with name "${name}" and description "${description}".`,
         databaseSystemPrompt,
       );
 
@@ -117,7 +117,25 @@ export default function Home() {
                   );
                 }
 
+                // Check for timeout or other errors in the text content
+                if (data.text && data.text.includes("timeout")) {
+                  throw new Error(
+                    "Workflow creation timed out. Please try again.",
+                  );
+                }
+
+                // Check for incomplete workflow warnings
+                if (
+                  data.text &&
+                  data.text.includes("WARNING: Workflow creation incomplete")
+                ) {
+                  throw new Error(
+                    "Workflow creation was incomplete. Please try again.",
+                  );
+                }
+
                 if (data.error) {
+                  console.error("Streaming error received:", data.error);
                   throw new Error(data.error);
                 }
               } catch (parseError) {
@@ -154,14 +172,13 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error creating workflow:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to create workflow",
-      );
-      // Close modal on error as well
-      setIsCreateModalOpen(false);
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create workflow";
+      setError(errorMessage);
+      setCreationProgress((prev) => prev + "\n❌ " + errorMessage);
+      // Don't close modal on error - let the user see the error in the modal
     } finally {
       setIsCreatingWorkflow(false);
-      setCreationProgress("");
     }
   };
 
@@ -192,11 +209,6 @@ export default function Home() {
 
   return (
     <div className="container mx-auto p-4">
-      {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
-        </div>
-      )}
       {successMessage && (
         <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
           {successMessage}
@@ -236,10 +248,15 @@ export default function Home() {
       )}
       <CreateWorkflowModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setError(null); // Clear error when modal is closed
+          setCreationProgress(""); // Clear progress when modal is closed
+        }}
         onCreate={handleCreateWorkflow}
         isCreating={isCreatingWorkflow}
         creationProgress={creationProgress}
+        creationError={error}
       />
     </div>
   );

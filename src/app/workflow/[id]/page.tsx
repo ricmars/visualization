@@ -1256,8 +1256,25 @@ export default function WorkflowPage() {
                   }
 
                   // Track if we should reload the workflow
-                  if (lowerText.includes("successfully executed")) {
-                    shouldReloadWorkflow = true;
+                  // Check if this is a tool result (JSON data) that indicates a tool was executed
+                  if (
+                    data.text &&
+                    data.text.trim().startsWith("{") &&
+                    data.text.trim().endsWith("}")
+                  ) {
+                    try {
+                      const jsonData = JSON.parse(data.text);
+                      // If it's a valid JSON object with an 'id' field, it's likely a tool result
+                      if (
+                        jsonData &&
+                        typeof jsonData === "object" &&
+                        jsonData.id
+                      ) {
+                        shouldReloadWorkflow = true;
+                      }
+                    } catch (_e) {
+                      // Not valid JSON, ignore
+                    }
                   }
                 }
 

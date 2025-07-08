@@ -207,12 +207,12 @@ export async function POST(request: Request) {
     if (isExistingWorkflow && currentCaseId) {
       enhancedPrompt = `${prompt}
 
-You are working with an existing case (ID: ${currentCaseId}). Use the available tools to check the current state and make the requested modifications.`;
+Working with existing case ID: ${currentCaseId}. Check state, create fields/views, then call saveCase.`;
     } else {
       // For new workflow creation
       enhancedPrompt = `${prompt}
 
-Extract the case name and description from the user's request and proceed with workflow creation using the available tools.`;
+Create case, fields, views, then call saveCase with complete workflow model.`;
     }
 
     // Get database tools
@@ -241,7 +241,23 @@ Extract the case name and description from the user's request and proceed with w
 
 ${getToolsContext(filteredTools)}${workflowContextInstruction}
 
-Current case ID: ${currentCaseId || "NEW"}`;
+Current case ID: ${currentCaseId || "NEW"}
+
+CRITICAL WORKFLOW COMPLETION RULES:
+1. For existing workflows: Check current state with getCase, then create missing fields/views, then call saveCase
+2. For new workflows: Create case → Create fields → Create views → Call saveCase with complete model
+3. NEVER stop without calling saveCase - this is the final step that creates the workflow structure
+4. After creating fields, you MUST create MULTIPLE views before calling saveCase
+5. Each workflow step needs its own view - create separate views for different data collection steps
+6. The saveCase call must include stages, processes, and steps with UNIQUE viewId references
+7. Create COMPREHENSIVE workflows with multiple fields and views - don't create minimal workflows
+8. Think about all the data that needs to be collected and managed in the workflow
+9. DO NOT reuse the same viewId for multiple steps - each step needs its own view
+10. IMPORTANT: Use the exact viewIds and fieldIds returned from previous tool calls - do not make up IDs
+
+VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, Decimal, Dropdown, Email, Integer, Location, ReferenceValues, DataReferenceSingle, DataReferenceMulti, CaseReferenceSingle, CaseReferenceMulti, Percentage, Phone, RadioButtons, RichText, Status, Text, TextArea, Time, URL, UserReference
+- Use "Integer" for whole numbers, "Decimal" for numbers with decimals
+- Use "Text" for single line text, "TextArea" for multi-line text`;
 
     console.log("Building enhanced system prompt...");
     console.log("Enhanced system prompt length:", enhancedSystemPrompt.length);
@@ -265,6 +281,83 @@ Current case ID: ${currentCaseId || "NEW"}`;
           timestamp: number;
           duration?: number;
         }> = [];
+
+        // Context management: Remove duplicates and keep only essential messages
+        const trimMessages = () => {
+          // Remove duplicate system prompts and error messages
+          const cleanedMessages: ChatCompletionMessageParam[] = [];
+          const seenContent = new Set<string>();
+
+          for (const message of messages) {
+            const content =
+              typeof message.content === "string"
+                ? message.content
+                : JSON.stringify(message);
+
+            // Skip duplicate system prompts and error messages
+            if (message.role === "system") {
+              if (!seenContent.has("system")) {
+                cleanedMessages.push(message);
+                seenContent.add("system");
+              }
+            } else if (
+              message.role === "user" &&
+              content.includes("🚨 WORKFLOW INCOMPLETE")
+            ) {
+              // Keep only the most recent error message
+              const existingErrorIndex = cleanedMessages.findIndex(
+                (m) =>
+                  typeof m.content === "string" &&
+                  m.content.includes("🚨 WORKFLOW INCOMPLETE"),
+              );
+              if (existingErrorIndex >= 0) {
+                cleanedMessages[existingErrorIndex] = message;
+              } else {
+                cleanedMessages.push(message);
+              }
+            } else if (message.role === "tool") {
+              // Always keep tool results (they contain important IDs)
+              cleanedMessages.push(message);
+            } else if (message.role === "assistant") {
+              // Always keep assistant messages (they contain tool calls)
+              cleanedMessages.push(message);
+            } else {
+              // Keep other user messages
+              cleanedMessages.push(message);
+            }
+          }
+
+          // Only update if we actually removed duplicates
+          if (cleanedMessages.length < messages.length) {
+            const originalCount = messages.length;
+            messages.length = 0;
+            messages.push(...cleanedMessag
+
+            const approximateTokens = messages.reduce((total, msg) => {
+              const content =
+                typeof msg.content === "string"
+                  ? msg.content
+                  : JSON.stringify(msg);
+              return total + Math.ceil(content.length / 4);
+            }, 0);
+
+            console.log(
+              `Cleaned context: ${originalCount} → ${messages.length} messages, ~${approximateTokens} tokens`,
+            );
+          } else {
+            const approximateTokens = messages.reduce((total, msg) => {
+              const content =
+                typeof msg.content === "string"
+                  ? msg.content
+                  : JSON.stringify(msg);
+              return total + Math.ceil(content.length / 4);
+            }, 0);
+
+            console.log(
+              `Context: ${messages.length} messages, ~${approximateTokens} tokens`,
+            );
+          }
+        };
 
         console.log("=== Starting LLM function call loop ===");
         console.log(
@@ -292,18 +385,32 @@ Current case ID: ${currentCaseId || "NEW"}`;
             console.log(`Calling OpenAI API (iteration ${loopCount})...`);
             const apiCallStartTime = Date.now();
 
-            // Add timeout to prevent long delays
+            // Add timeout to prevent long delays (1 minute)
             const timeoutPromise = new Promise((_, reject) => {
               setTimeout(
-                () => reject(new Error("OpenAI API timeout after 15 seconds")),
-                15000,
+                () => reject(new Error("OpenAI API timeout after 1 minute")),
+                60000,
               );
             });
+
+            // Log message count and approximate token usage
+            const messageCount = messages.length;
+            const approximateTokens = messages.reduce((total, msg) => {
+              const content =
+                typeof msg.content === "string"
+                  ? msg.content
+                  : JSON.stringify(msg);
+              return total + Math.ceil(content.length / 4); // Rough estimate: 4 chars per token
+            }, 0);
+            console.log(
+              `Message count: ${messageCount}, Approximate tokens: ${approximateTokens}`,
+            );
+            console.log("messages XXXX:", messages);
 
             const completionPromise = openai.chat.completions.create({
               model: "o4-mini",
               messages,
-              max_completion_tokens: 40000,
+              max_completion_tokens: 6000, // Reduced for faster generation
               stream: true, // Enable streaming for faster responses
               tools: openaiToolSchemas,
             });
@@ -313,12 +420,17 @@ Current case ID: ${currentCaseId || "NEW"}`;
               timeoutPromise,
             ])) as OpenAICompletion;
             const apiCallDuration = Date.now() - apiCallStartTime;
-            console.log(`OpenAI API call completed in ${apiCallDuration}ms`);
+            console.log(
+              `OpenAI API call completed in ${apiCallDuration}ms (${Math.round(
+                apiCallDuration / 1000,
+              )}s)`,
+            );
 
             // Handle streaming response
             let fullContent = "";
             let toolCalls: ToolCall[] = [];
             let finishReason = "";
+            const streamingStartTime = Date.now();
 
             try {
               for await (const chunk of completion) {
@@ -368,17 +480,39 @@ Current case ID: ${currentCaseId || "NEW"}`;
               throw new Error(`Streaming error: ${streamError}`);
             }
 
+            const streamingDuration = Date.now() - streamingStartTime;
+            console.log(
+              `Streaming processing completed in ${streamingDuration}ms (${Math.round(
+                streamingDuration / 1000,
+              )}s)`,
+            );
             console.log(`Finish reason: ${finishReason}`);
 
-            // Check if first iteration without tool calls and add instruction to proceed
-            if (loopCount === 1 && finishReason !== "tool_calls") {
+            // Handle cases where the model doesn't make tool calls
+            if (finishReason !== "tool_calls") {
               console.log(
-                "First iteration without tool calls - adding instruction to proceed with tools",
+                `Model finished without tool calls (reason: ${finishReason}) - adding instruction to proceed with tools`,
               );
-              const proceedMessage = {
-                role: "user" as const,
-                content: `Please proceed with the workflow creation using the available tools. The tools contain all the information you need to complete this task.`,
-              };
+
+              // Different messages based on the situation
+              let proceedMessage;
+              if (loopCount === 1) {
+                proceedMessage = {
+                  role: "user" as const,
+                  content: `Please proceed with the workflow creation using the available tools. The tools contain all the information you need to complete this task.`,
+                };
+              } else if (finishReason === "length") {
+                proceedMessage = {
+                  role: "user" as const,
+                  content: `The response was cut off due to length limits. Please continue with the workflow creation using the available tools. Focus on creating the workflow stages, processes, and steps, then call saveCase to complete the workflow.`,
+                };
+              } else {
+                proceedMessage = {
+                  role: "user" as const,
+                  content: `Please continue with the workflow creation using the available tools. You need to create stages, processes, and steps, then call saveCase to complete the workflow.`,
+                };
+              }
+
               messages.push(proceedMessage);
               continue; // Continue to next iteration
             }
@@ -397,6 +531,9 @@ Current case ID: ${currentCaseId || "NEW"}`;
               // Add the assistant message with tool calls to the conversation
               messages.push(assistantMessage);
 
+              // Log context size (no trimming)
+              trimMessages();
+
               // Execute all tool calls in parallel for better performance
               const toolCallPromises = toolCalls.map(async (toolCall) => {
                 const toolName = toolCall.function.name;
@@ -410,6 +547,32 @@ Current case ID: ${currentCaseId || "NEW"}`;
                   `Tool arguments:`,
                   JSON.stringify(toolArgs, null, 2),
                 );
+
+                // Check for duplicate field creation and encourage view creation
+                if (toolName === "saveField" && toolArgs.name) {
+                  const existingFieldCalls = toolCallHistory.filter(
+                    (tc) => tc.tool === "saveField",
+                  );
+                  const existingViewCalls = toolCallHistory.filter(
+                    (tc) => tc.tool === "saveView",
+                  );
+
+                  if (existingFieldCalls.length > 0) {
+                    console.log(
+                      `WARNING: Field creation detected - ensure this is not a duplicate: ${toolArgs.name}`,
+                    );
+                  }
+
+                  // If we have many fields but few views, encourage view creation
+                  if (
+                    existingFieldCalls.length >= 5 &&
+                    existingViewCalls.length < 2
+                  ) {
+                    console.log(
+                      `WARNING: Many fields created (${existingFieldCalls.length}) but few views (${existingViewCalls.length}). Consider creating views now.`,
+                    );
+                  }
+                }
 
                 // Track tool call history
                 toolCallHistory.push({
@@ -435,13 +598,12 @@ Current case ID: ${currentCaseId || "NEW"}`;
                   }
 
                   console.log(
-                    `Tool ${toolName} executed successfully in ${toolExecutionDuration}ms`,
+                    `Tool ${toolName} executed successfully in ${toolExecutionDuration}ms (${Math.round(
+                      toolExecutionDuration / 1000,
+                    )}s)`,
                   );
                   console.log(`Tool result:`, JSON.stringify(result, null, 2));
 
-                  await processor.sendText(
-                    `\nSuccessfully executed ${toolName}.\n`,
-                  );
                   await processor.sendText(JSON.stringify(result));
 
                   // Add tool result to messages
@@ -450,6 +612,9 @@ Current case ID: ${currentCaseId || "NEW"}`;
                     content: JSON.stringify(result),
                     tool_call_id: toolCall.id,
                   });
+
+                  // Log context size (no trimming)
+                  trimMessages();
 
                   return { success: true, result };
                 } catch (err) {
@@ -477,6 +642,9 @@ Current case ID: ${currentCaseId || "NEW"}`;
                     tool_call_id: toolCall.id,
                   });
 
+                  // Log context size (no trimming)
+                  trimMessages();
+
                   return { success: false, error: err };
                 }
               });
@@ -486,7 +654,9 @@ Current case ID: ${currentCaseId || "NEW"}`;
 
               const loopDuration = Date.now() - loopStartTime;
               console.log(
-                `=== Loop iteration ${loopCount} completed in ${loopDuration}ms ===`,
+                `=== Loop iteration ${loopCount} completed in ${loopDuration}ms (${Math.round(
+                  loopDuration / 1000,
+                )}s) ===`,
               );
 
               // Check if saveCase was called in this iteration
@@ -512,13 +682,72 @@ Current case ID: ${currentCaseId || "NEW"}`;
               if (!saveCaseCalled) {
                 console.log("saveCase not called - adding completion reminder");
 
-                const completionMessage = {
-                  role: "user" as const,
-                  content: `🚨 WORKFLOW INCOMPLETE!
-🚨 You need to complete the workflow by calling saveCase with the workflow model.
-🚨 Create views for data collection steps, then call saveCase with stages, processes, and steps.
-🚨 Do not stop here - complete the workflow!`,
-                };
+                // Check what has been created so far
+                const hasFields = toolCallHistory.some(
+                  (tc) => tc.tool === "saveField",
+                );
+                const hasViews = toolCallHistory.some(
+                  (tc) => tc.tool === "saveView",
+                );
+
+                // Count what's been created
+                const fieldCount = toolCallHistory.filter(
+                  (tc) => tc.tool === "saveField",
+                ).length;
+                const viewCount = toolCallHistory.filter(
+                  (tc) => tc.tool === "saveView",
+                ).length;
+
+                console.log(
+                  `Progress: ${fieldCount} fields, ${viewCount} views created`,
+                );
+
+                let completionMessage;
+
+                // If we're getting close to max iterations, be more aggressive
+                if (loopCount >= 12) {
+                  completionMessage = {
+                    role: "user" as const,
+                    content: `URGENT: ${fieldCount} fields, ${viewCount} views. Call saveCase NOW with workflow model.`,
+                  };
+                } else if (hasFields && !hasViews) {
+                  // Check if we have enough fields for a comprehensive workflow
+                  if (fieldCount < 3) {
+                    completionMessage = {
+                      role: "user" as const,
+                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create more fields then views.`,
+                    };
+                  } else if (fieldCount >= 8) {
+                    // Force view creation if we have too many fields
+                    completionMessage = {
+                      role: "user" as const,
+                      content: `STOP: ${fieldCount} fields created. Create views now for each workflow step.`,
+                    };
+                  } else {
+                    completionMessage = {
+                      role: "user" as const,
+                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create views for each workflow step.`,
+                    };
+                  }
+                } else if (hasViews) {
+                  // Check if we have enough views for a proper workflow
+                  if (viewCount < 3) {
+                    completionMessage = {
+                      role: "user" as const,
+                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create more views then call saveCase.`,
+                    };
+                  } else {
+                    completionMessage = {
+                      role: "user" as const,
+                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Call saveCase with workflow model now.`,
+                    };
+                  }
+                } else {
+                  completionMessage = {
+                    role: "user" as const,
+                    content: `Progress: ${fieldCount} fields, ${viewCount} views. Create workflow and call saveCase.`,
+                  };
+                }
                 messages.push(completionMessage);
               }
 

@@ -33,24 +33,6 @@ function formatContent(content: string): string {
 
 // Function to check if content should be filtered out
 function shouldFilterContent(content: string): boolean {
-  const lowerContent = content.toLowerCase();
-
-  // Filter out only very specific verbose tool execution messages
-  // Allow through valuable content that contains useful information
-  if (
-    // Only filter out very specific verbose messages
-    (lowerContent.includes("executing listviews") &&
-      lowerContent.length < 50) ||
-    (lowerContent.includes("successfully executed listviews") &&
-      lowerContent.length < 50) ||
-    (lowerContent.includes("executing listfields") &&
-      lowerContent.length < 50) ||
-    (lowerContent.includes("successfully executed listfields") &&
-      lowerContent.length < 50)
-  ) {
-    return true;
-  }
-
   // Filter out empty or whitespace-only content
   if (!content.trim()) {
     return true;

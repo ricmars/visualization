@@ -6,6 +6,7 @@ interface CreateWorkflowModalProps {
   onCreate: (name: string, description: string) => Promise<void>;
   isCreating: boolean;
   creationProgress?: string;
+  creationError?: string | null;
 }
 
 /**
@@ -21,6 +22,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
   onCreate,
   isCreating,
   creationProgress,
+  creationError,
 }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -77,6 +79,16 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
             Create New Workflow
           </h2>
           <div className="space-y-4">
+            {creationError && (
+              <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                <div className="flex items-center mb-2">
+                  <span className="text-sm font-medium text-red-800">
+                    Error creating workflow
+                  </span>
+                </div>
+                <div className="text-sm text-red-700">{creationError}</div>
+              </div>
+            )}
             {isCreating && creationProgress && (
               <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
                 <div className="flex items-center mb-2">
@@ -124,7 +136,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
                   required
                   disabled={isSubmitting || isCreating}
                 />
-                <div className="absolute bottom-2 right-2 text-sm text-gray-500">
+                <div className="absolute right-2 text-sm text-gray-500">
                   {remainingChars} characters remaining
                 </div>
               </div>

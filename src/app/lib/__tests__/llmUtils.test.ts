@@ -240,9 +240,7 @@ describe("createStreamProcessor", () => {
       encoder.encode('data: {"text":"\\nExecuting saveCase...\\n"}\n\n'),
     );
     expect(mockWriter.write).toHaveBeenCalledWith(
-      encoder.encode(
-        'data: {"text":"\\nSuccessfully executed saveCase.\\n\\nIMPORTANT: Continue with the next tool call. Do not stop here. The workflow is not complete until all tools are executed.\\n","toolResult":{"id":1,"name":"Test Case"}}\n\n',
-      ),
+      encoder.encode('data: {"toolResult":{"id":1,"name":"Test Case"}}\n\n'),
     );
   });
 

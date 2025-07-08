@@ -945,23 +945,6 @@ describe("llmTools", () => {
         }),
       ).rejects.toThrow("View name is required for saveView");
     });
-
-    it("should provide enhanced guidance in tool description", () => {
-      const saveViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveView",
-      );
-      expect(saveViewTool).toBeDefined();
-
-      // Check that the enhanced description includes guidance about view naming
-      expect(saveViewTool!.description).toContain(
-        "Use descriptive view names that match the step purpose",
-      );
-      expect(saveViewTool!.description).toContain("Rocket Details View");
-      expect(saveViewTool!.description).toContain(
-        "Each view should contain only the fields relevant to that specific step",
-      );
-    });
   });
 
   describe("deleteCase", () => {

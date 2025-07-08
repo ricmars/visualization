@@ -69,17 +69,16 @@ export function createStreamProcessor(
           JSON.stringify(result, null, 2),
         );
 
-        // Send success message
-        console.log("StreamProcessor: Sending success message to client");
+        // Send tool result without verbose success message
+        console.log("StreamProcessor: Sending tool result to client");
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
-              text: `\nSuccessfully executed ${tool.name}.\n\nIMPORTANT: Continue with the next tool call. Do not stop here. The workflow is not complete until all tools are executed.\n`,
               toolResult: result,
             })}\n\n`,
           ),
         );
-        console.log("StreamProcessor: Success message sent to client");
+        console.log("StreamProcessor: Tool result sent to client");
       } catch (error: unknown) {
         console.error("StreamProcessor: Error executing tool:", error);
         console.error(
