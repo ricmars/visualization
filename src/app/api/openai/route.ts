@@ -549,9 +549,9 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 );
 
                 // Check for duplicate field creation and encourage view creation
-                if (toolName === "saveField" && toolArgs.name) {
+                if (toolName === "saveFields" && toolArgs.name) {
                   const existingFieldCalls = toolCallHistory.filter(
-                    (tc) => tc.tool === "saveField",
+                    (tc) => tc.tool === "saveFields",
                   );
                   const existingViewCalls = toolCallHistory.filter(
                     (tc) => tc.tool === "saveView",
@@ -684,16 +684,45 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
 
                 // Check what has been created so far
                 const hasFields = toolCallHistory.some(
-                  (tc) => tc.tool === "saveField",
+                  (tc) => tc.tool === "saveFields",
                 );
                 const hasViews = toolCallHistory.some(
                   (tc) => tc.tool === "saveView",
                 );
 
                 // Count what's been created
-                const fieldCount = toolCallHistory.filter(
-                  (tc) => tc.tool === "saveField",
-                ).length;
+                // For saveFields, we need to count the actual number of fields created, not the number of calls
+                // Each saveFields call can create multiple fields
+                const saveFieldsCalls = toolCallHistory.filter(
+                  (tc) => tc.tool === "saveFields",
+                );
+
+                // Get the actual field count from the tool results in messages
+                let fieldCount = 0;
+                for (const message of messages) {
+                  if (
+                    message.role === "tool" &&
+                    typeof message.content === "string"
+                  ) {
+                    try {
+                      const result = JSON.parse(message.content);
+                      // Check if this is a saveFields result
+                      if (result.fields && Array.isArray(result.fields)) {
+                        fieldCount += result.fields.length;
+                      } else if (result.ids && Array.isArray(result.ids)) {
+                        fieldCount += result.ids.length;
+                      }
+                    } catch (_parseError) {
+                      // Ignore parsing errors for non-JSON messages
+                    }
+                  }
+                }
+
+                // If we couldn't parse any results, fall back to counting calls
+                if (fieldCount === 0) {
+                  fieldCount = saveFieldsCalls.length;
+                }
+
                 const viewCount = toolCallHistory.filter(
                   (tc) => tc.tool === "saveView",
                 ).length;

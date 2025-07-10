@@ -28,18 +28,20 @@ export interface SaveCaseParams extends ToolParams {
   model: WorkflowModel;
 }
 
-export interface SaveFieldParams extends ToolParams {
-  id?: number;
-  name: string;
-  type: FieldType;
-  caseID: number;
-  primary?: boolean;
-  required?: boolean;
-  label: string;
-  description?: string;
-  order?: number;
-  options?: unknown[];
-  defaultValue?: unknown;
+export interface SaveFieldsParams extends ToolParams {
+  fields: Array<{
+    id?: number;
+    name: string;
+    type: FieldType;
+    caseID: number;
+    primary?: boolean;
+    required?: boolean;
+    label: string;
+    description?: string;
+    order?: number;
+    options?: unknown[];
+    defaultValue?: unknown;
+  }>;
 }
 
 export interface SaveViewParams extends ToolParams {

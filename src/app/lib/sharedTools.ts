@@ -4,7 +4,7 @@ import { fieldTypes, FieldType } from "../types/fields";
 import {
   LLMTool,
   SaveCaseParams,
-  SaveFieldParams,
+  SaveFieldsParams,
   SaveViewParams,
   DeleteParams,
   ToolParams,
@@ -35,18 +35,21 @@ export function createSharedTools(pool: Pool): (
       { id: number; name: string; description: string; model: unknown }
     >
   | SharedTool<
-      SaveFieldParams,
+      SaveFieldsParams,
       {
-        id: number;
-        name: string;
-        type: string;
-        caseID: number;
-        label: string;
-        description: string;
-        order: number;
-        options: unknown;
-        required: boolean;
-        primary: boolean;
+        ids: number[];
+        fields: Array<{
+          id: number;
+          name: string;
+          type: string;
+          caseID: number;
+          label: string;
+          description: string;
+          order: number;
+          options: unknown;
+          required: boolean;
+          primary: boolean;
+        }>;
       }
     >
   | SharedTool<
@@ -87,18 +90,21 @@ export function createSharedTools(pool: Pool): (
         { id: number; name: string; description: string; model: unknown }
       >
     | SharedTool<
-        SaveFieldParams,
+        SaveFieldsParams,
         {
-          id: number;
-          name: string;
-          type: string;
-          caseID: number;
-          label: string;
-          description: string;
-          order: number;
-          options: unknown;
-          required: boolean;
-          primary: boolean;
+          ids: number[];
+          fields: Array<{
+            id: number;
+            name: string;
+            type: string;
+            caseID: number;
+            label: string;
+            description: string;
+            order: number;
+            options: unknown;
+            required: boolean;
+            primary: boolean;
+          }>;
         }
       >
     | SharedTool<
@@ -413,261 +419,314 @@ export function createSharedTools(pool: Pool): (
       },
     },
     {
-      name: "saveField",
+      name: "saveFields",
       description:
-        "STEP 2: Creates a new field or updates an existing field. Use the caseID returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
+        "STEP 2: Creates multiple fields or updates existing fields in a single operation for better performance. Use the caseID returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
       parameters: {
         type: "object",
         properties: {
-          id: {
-            type: "integer",
-            description: "Field ID (required for update, omit for create)",
-          },
-          name: { type: "string", description: "Field name" },
-          type: {
-            type: "string",
-            description: "Field type (Text, Email, Date, etc.)",
-          },
-          caseID: {
-            type: "integer",
-            description: "Case ID this field belongs to",
-          },
-          label: { type: "string", description: "Display label for the field" },
-          description: { type: "string", description: "Field description" },
-          order: { type: "integer", description: "Display order" },
-          options: {
+          fields: {
             type: "array",
-            items: { type: "string" },
-            description: "Array of options for dropdown/radio fields",
-          },
-          required: {
-            type: "boolean",
-            description: "Whether the field is required",
-          },
-          primary: {
-            type: "boolean",
-            description: "Whether this is a primary field",
-          },
-          defaultValue: {
-            type: "string",
-            description: "Default value for the field",
+            items: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "integer",
+                  description:
+                    "Field ID (required for update, omit for create)",
+                },
+                name: { type: "string", description: "Field name" },
+                type: {
+                  type: "string",
+                  description: "Field type (Text, Email, Date, etc.)",
+                },
+                caseID: {
+                  type: "integer",
+                  description: "Case ID this field belongs to",
+                },
+                label: {
+                  type: "string",
+                  description: "Display label for the field",
+                },
+                description: {
+                  type: "string",
+                  description: "Field description",
+                },
+                order: { type: "integer", description: "Display order" },
+                options: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Array of options for dropdown/radio fields",
+                },
+                required: {
+                  type: "boolean",
+                  description: "Whether the field is required",
+                },
+                primary: {
+                  type: "boolean",
+                  description: "Whether this is a primary field",
+                },
+                defaultValue: {
+                  type: "string",
+                  description: "Default value for the field",
+                },
+              },
+              required: ["name", "type", "caseID", "label"],
+            },
+            description: "Array of fields to create or update",
           },
         },
-        required: ["name", "type", "caseID", "label"],
+        required: ["fields"],
       },
-      execute: async (params: SaveFieldParams) => {
-        console.log("=== saveField EXECUTION STARTED ===");
-        console.log("saveField parameters:", JSON.stringify(params, null, 2));
-        console.log("saveField called at:", new Date().toISOString());
+      execute: async (params: SaveFieldsParams) => {
+        console.log("=== saveFields EXECUTION STARTED ===");
+        console.log("saveFields parameters:", JSON.stringify(params, null, 2));
+        console.log("saveFields called at:", new Date().toISOString());
 
-        const {
-          id,
-          name,
-          type,
-          caseID,
-          label,
-          description,
-          order,
-          options,
-          required,
-          primary,
-          defaultValue,
-        } = params;
+        const { fields } = params;
 
         // Validation
-        if (!name) throw new Error("Field name is required for saveField");
-        if (!type) throw new Error("Field type is required for saveField");
-        if (!caseID) throw new Error("Case ID is required for saveField");
-        if (!label) throw new Error("Field label is required for saveField");
-
-        // Validate field type
-        if (!fieldTypes.includes(type as FieldType)) {
-          throw new Error(`Invalid field type "${type}"`);
+        if (!Array.isArray(fields) || fields.length === 0) {
+          throw new Error(
+            "Fields array is required and must not be empty for saveFields",
+          );
         }
 
-        // Check for existing field with same name in the same case
-        const existingFieldQuery = `SELECT id FROM "${DB_TABLES.FIELDS}" WHERE name = $1 AND caseID = $2`;
-        const existingFieldResult = await pool.query(existingFieldQuery, [
-          name,
-          caseID,
-        ]);
+        const results: Array<{
+          id: number;
+          name: string;
+          type: string;
+          caseID: number;
+          label: string;
+          description: string;
+          order: number;
+          options: unknown;
+          required: boolean;
+          primary: boolean;
+        }> = [];
 
-        if (existingFieldResult.rowCount && existingFieldResult.rowCount > 0) {
-          // Return existing field
-          const existingFieldId = existingFieldResult.rows[0].id;
-          const fullFieldQuery = `SELECT * FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
-          const fullFieldResult = await pool.query(fullFieldQuery, [
-            existingFieldId,
-          ]);
-          const fieldData =
-            fullFieldResult && fullFieldResult.rows && fullFieldResult.rows[0]
-              ? fullFieldResult.rows[0]
-              : {};
-          return {
-            id: fieldData.id ?? existingFieldId,
-            name: fieldData.name ?? name,
-            type: fieldData.type ?? type,
-            caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
-            label: fieldData.label ?? label,
-            description: fieldData.description ?? description ?? "",
-            order: fieldData.order ?? order ?? 0,
-            options: fieldData.options
-              ? Array.isArray(fieldData.options)
-                ? fieldData.options
-                : (() => {
-                    try {
-                      return JSON.parse(fieldData.options);
-                    } catch {
-                      return [];
-                    }
-                  })()
-              : Array.isArray(options)
-              ? options
-              : [],
-            required: fieldData.required ?? required ?? false,
-            primary: fieldData.primary ?? primary ?? false,
-            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
-          };
-        }
-
-        if (id) {
-          // Update existing field
-          const query = `
-            UPDATE "${DB_TABLES.FIELDS}"
-            SET name = $1, type = $2, caseID = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9
-            WHERE id = $10
-            RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
-          `;
-          console.log("saveField UPDATE query:", query);
-          console.log("saveField UPDATE query values:", [
+        // Process each field
+        for (const field of fields) {
+          const {
+            id,
             name,
             type,
             caseID,
             label,
-            description ?? "",
-            order ?? 0,
-            options ?? "[]",
-            required ?? false,
-            primary ?? false,
-            id,
-          ]);
+            description,
+            order,
+            options,
+            required,
+            primary,
+          } = field;
 
-          const result = await pool.query(query, [
-            name,
-            type,
-            caseID,
-            label,
-            description ?? "",
-            order ?? 0,
-            options ?? "[]",
-            required ?? false,
-            primary ?? false,
-            id,
-          ]);
-          if (result.rowCount === 0) {
-            console.error(`saveField ERROR: No field found with id ${id}`);
-            throw new Error(`No field found with id ${id}`);
+          // Validation
+          if (!name) throw new Error("Field name is required for saveFields");
+          if (!type) throw new Error("Field type is required for saveFields");
+          if (!caseID) throw new Error("Case ID is required for saveFields");
+          if (!label) throw new Error("Field label is required for saveFields");
+
+          // Validate field type
+          if (!fieldTypes.includes(type as FieldType)) {
+            throw new Error(`Invalid field type "${type}"`);
           }
 
-          const fieldData = result.rows[0] || {};
-          console.log("saveField UPDATE successful:", {
-            id: fieldData?.id,
-            name: fieldData?.name,
-            type: fieldData?.type,
-            caseID: fieldData?.caseID ?? fieldData?.caseid,
-          });
-
-          return {
-            id: fieldData.id ?? id,
-            name: fieldData.name ?? name,
-            type: fieldData.type ?? type,
-            caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
-            label: fieldData.label ?? label,
-            description: fieldData.description ?? description ?? "",
-            order: fieldData.order ?? order ?? 0,
-            options: fieldData.options
-              ? Array.isArray(fieldData.options)
-                ? fieldData.options
-                : (() => {
-                    try {
-                      return JSON.parse(fieldData.options);
-                    } catch {
-                      return [];
-                    }
-                  })()
-              : Array.isArray(options)
-              ? options
-              : [],
-            required: fieldData.required ?? required ?? false,
-            primary: fieldData.primary ?? primary ?? false,
-            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
-          };
-        } else {
-          // Create new field
-          const query = `
-            INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseID, label, description, "order", options, required, "primary")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
-          `;
-          console.log("saveField INSERT query:", query);
-          console.log("saveField INSERT query values:", [
+          // Check for existing field with same name in the same case
+          const existingFieldQuery = `SELECT id FROM "${DB_TABLES.FIELDS}" WHERE name = $1 AND caseID = $2`;
+          const existingFieldResult = await pool.query(existingFieldQuery, [
             name,
-            type,
             caseID,
-            label,
-            description ?? "",
-            order ?? 0,
-            options ?? "[]",
-            required ?? false,
-            primary ?? false,
           ]);
 
-          const result = await pool.query(query, [
-            name,
-            type,
-            caseID,
-            label,
-            description ?? "",
-            order ?? 0,
-            options ?? "[]",
-            required ?? false,
-            primary ?? false,
-          ]);
-          const fieldData = result.rows[0] || {};
+          if (
+            existingFieldResult.rowCount &&
+            existingFieldResult.rowCount > 0
+          ) {
+            // Return existing field
+            const existingFieldId = existingFieldResult.rows[0].id;
+            const fullFieldQuery = `SELECT * FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
+            const fullFieldResult = await pool.query(fullFieldQuery, [
+              existingFieldId,
+            ]);
+            const fieldData =
+              fullFieldResult && fullFieldResult.rows && fullFieldResult.rows[0]
+                ? fullFieldResult.rows[0]
+                : {};
 
-          console.log("saveField INSERT successful:", {
-            id: fieldData?.id,
-            name: fieldData?.name,
-            type: fieldData?.type,
-            caseID: fieldData?.caseID ?? fieldData?.caseid,
-          });
+            results.push({
+              id: fieldData.id ?? existingFieldId,
+              name: fieldData.name ?? name,
+              type: fieldData.type ?? type,
+              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              label: fieldData.label ?? label,
+              description: fieldData.description ?? description ?? "",
+              order: fieldData.order ?? order ?? 0,
+              options: fieldData.options
+                ? Array.isArray(fieldData.options)
+                  ? fieldData.options
+                  : (() => {
+                      try {
+                        return JSON.parse(fieldData.options);
+                      } catch {
+                        return [];
+                      }
+                    })()
+                : Array.isArray(options)
+                ? options
+                : [],
+              required: fieldData.required ?? required ?? false,
+              primary: fieldData.primary ?? primary ?? false,
+            });
+            continue;
+          }
 
-          return {
-            id: fieldData.id ?? id,
-            name: fieldData.name ?? name,
-            type: fieldData.type ?? type,
-            caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
-            label: fieldData.label ?? label,
-            description: fieldData.description ?? description ?? "",
-            order: fieldData.order ?? order ?? 0,
-            options: fieldData.options
-              ? Array.isArray(fieldData.options)
-                ? fieldData.options
-                : (() => {
-                    try {
-                      return JSON.parse(fieldData.options);
-                    } catch {
-                      return [];
-                    }
-                  })()
-              : Array.isArray(options)
-              ? options
-              : [],
-            required: fieldData.required ?? required ?? false,
-            primary: fieldData.primary ?? primary ?? false,
-            defaultValue: fieldData.defaultValue ?? defaultValue ?? null,
-          };
+          if (id) {
+            // Update existing field
+            const query = `
+              UPDATE "${DB_TABLES.FIELDS}"
+              SET name = $1, type = $2, caseID = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9
+              WHERE id = $10
+              RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
+            `;
+            console.log("saveFields UPDATE query:", query);
+            console.log("saveFields UPDATE query values:", [
+              name,
+              type,
+              caseID,
+              label,
+              description ?? "",
+              order ?? 0,
+              options ?? "[]",
+              required ?? false,
+              primary ?? false,
+              id,
+            ]);
+
+            const result = await pool.query(query, [
+              name,
+              type,
+              caseID,
+              label,
+              description ?? "",
+              order ?? 0,
+              options ?? "[]",
+              required ?? false,
+              primary ?? false,
+              id,
+            ]);
+            if (result.rowCount === 0) {
+              console.error(`saveFields ERROR: No field found with id ${id}`);
+              throw new Error(`No field found with id ${id}`);
+            }
+
+            const fieldData = result.rows[0] || {};
+            console.log("saveFields UPDATE successful:", {
+              id: fieldData?.id,
+              name: fieldData?.name,
+              type: fieldData?.type,
+              caseID: fieldData?.caseID ?? fieldData?.caseid,
+            });
+
+            results.push({
+              id: fieldData.id ?? id,
+              name: fieldData.name ?? name,
+              type: fieldData.type ?? type,
+              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              label: fieldData.label ?? label,
+              description: fieldData.description ?? description ?? "",
+              order: fieldData.order ?? order ?? 0,
+              options: fieldData.options
+                ? Array.isArray(fieldData.options)
+                  ? fieldData.options
+                  : (() => {
+                      try {
+                        return JSON.parse(fieldData.options);
+                      } catch {
+                        return [];
+                      }
+                    })()
+                : Array.isArray(options)
+                ? options
+                : [],
+              required: fieldData.required ?? required ?? false,
+              primary: fieldData.primary ?? primary ?? false,
+            });
+          } else {
+            // Create new field
+            const query = `
+              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseID, label, description, "order", options, required, "primary")
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
+            `;
+            console.log("saveFields INSERT query:", query);
+            console.log("saveFields INSERT query values:", [
+              name,
+              type,
+              caseID,
+              label,
+              description ?? "",
+              order ?? 0,
+              options ?? "[]",
+              required ?? false,
+              primary ?? false,
+            ]);
+
+            const result = await pool.query(query, [
+              name,
+              type,
+              caseID,
+              label,
+              description ?? "",
+              order ?? 0,
+              options ?? "[]",
+              required ?? false,
+              primary ?? false,
+            ]);
+            const fieldData = result.rows[0] || {};
+
+            console.log("saveFields INSERT successful:", {
+              id: fieldData?.id,
+              name: fieldData?.name,
+              type: fieldData?.type,
+              caseID: fieldData?.caseID ?? fieldData?.caseid,
+            });
+
+            results.push({
+              id: fieldData.id ?? id,
+              name: fieldData.name ?? name,
+              type: fieldData.type ?? type,
+              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              label: fieldData.label ?? label,
+              description: fieldData.description ?? description ?? "",
+              order: fieldData.order ?? order ?? 0,
+              options: fieldData.options
+                ? Array.isArray(fieldData.options)
+                  ? fieldData.options
+                  : (() => {
+                      try {
+                        return JSON.parse(fieldData.options);
+                      } catch {
+                        return [];
+                      }
+                    })()
+                : Array.isArray(options)
+                ? options
+                : [],
+              required: fieldData.required ?? required ?? false,
+              primary: fieldData.primary ?? primary ?? false,
+            });
+          }
         }
+
+        console.log("saveFields completed successfully:", {
+          totalFields: results.length,
+          fieldIds: results.map((f) => f.id),
+        });
+
+        return {
+          ids: results.map((f) => f.id),
+          fields: results,
+        };
       },
     },
     {

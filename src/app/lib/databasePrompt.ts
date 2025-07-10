@@ -28,7 +28,7 @@ CRITICAL VIEW CREATION GUIDELINES:
 
 WORKFLOW CREATION SEQUENCE:
 1. Create the case with createCase
-2. Create fields with saveField (use the case ID from step 1)
+2. Create fields with saveFields (use the case ID from step 1) - this is the optimized version that handles multiple fields at once
 3. Create views with saveView (use the case ID from step 1, save the returned view IDs)
 4. Update the case with saveCase (use the view IDs from step 3 in the workflow model)
 

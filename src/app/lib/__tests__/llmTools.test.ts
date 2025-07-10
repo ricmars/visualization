@@ -541,82 +541,162 @@ describe("llmTools", () => {
     });
   });
 
-  describe("saveField", () => {
-    it("should create a new field successfully", async () => {
-      // Mock existing field check (no existing field with same name)
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock insert result
-      const mockResult = {
+  describe("saveFields", () => {
+    it("should create multiple new fields successfully", async () => {
+      // Mock insert results
+      const mockResult1 = {
         rows: [
           {
             id: 1,
-            name: "testField",
+            name: "field1",
             type: "Text",
             caseID: 1,
             primary: false,
             required: false,
-            label: "Test Field",
-            description: "Test Description",
+            label: "Field 1",
+            description: "Test Description 1",
             order: 0,
             options: "[]",
           },
         ],
         rowCount: 1,
       };
-      mockQuery.mockResolvedValueOnce(mockResult);
+      const mockResult2 = {
+        rows: [
+          {
+            id: 2,
+            name: "field2",
+            type: "Email",
+            caseID: 1,
+            primary: true,
+            required: true,
+            label: "Field 2",
+            description: "Test Description 2",
+            order: 1,
+            options: "[]",
+          },
+        ],
+        rowCount: 1,
+      };
+      // Mock existing field checks and inserts in correct order
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // First field check
+      mockQuery.mockResolvedValueOnce(mockResult1); // First field insert
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // Second field check
+      mockQuery.mockResolvedValueOnce(mockResult2); // Second field insert
 
-      const saveFieldTool = databaseTools.find(
+      const saveFieldsTool = databaseTools.find(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
+        (tool: any) => tool.name === "saveFields",
       );
-      expect(saveFieldTool).toBeDefined();
+      expect(saveFieldsTool).toBeDefined();
 
       const result =
         await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          name: "testField",
-          type: "Text",
-          caseID: 1,
-          label: "Test Field",
-          description: "Test Description",
+        (saveFieldsTool!.execute as any)({
+          fields: [
+            {
+              name: "field1",
+              type: "Text",
+              caseID: 1,
+              label: "Field 1",
+              description: "Test Description 1",
+            },
+            {
+              name: "field2",
+              type: "Email",
+              caseID: 1,
+              label: "Field 2",
+              description: "Test Description 2",
+              primary: true,
+              required: true,
+              order: 1,
+            },
+          ],
         });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Fields"'),
         [
-          "testField",
+          "field1",
           "Text",
           1,
-          "Test Field",
-          "Test Description",
+          "Field 1",
+          "Test Description 1",
           0,
           "[]",
           false,
           false,
         ],
       );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO "Fields"'),
+        [
+          "field2",
+          "Email",
+          1,
+          "Field 2",
+          "Test Description 2",
+          1,
+          "[]",
+          true,
+          true,
+        ],
+      );
       expect(result).toEqual({
-        ...mockResult.rows[0],
-        options: [],
-        defaultValue: null,
+        ids: [1, 2],
+        fields: [
+          {
+            ...mockResult1.rows[0],
+            options: [],
+          },
+          {
+            ...mockResult2.rows[0],
+            options: [],
+          },
+        ],
       });
     });
 
-    it("should update an existing field successfully", async () => {
-      // Mock existing field check (no existing field with same name)
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock update result
-      const mockResult = {
+    it("should handle mixed create and update operations", async () => {
+      // Mock existing field check for first field (exists)
+      mockQuery.mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ id: 1, name: "existingField" }],
+      });
+      // Mock full field data query for existing field
+      mockQuery.mockResolvedValueOnce({
+        rowCount: 1,
         rows: [
           {
             id: 1,
-            name: "updatedField",
+            name: "existingField",
             type: "Text",
             caseID: 1,
-            primary: true,
-            required: true,
-            label: "Updated Field",
-            description: "Updated description",
+            primary: false,
+            required: false,
+            label: "Existing Field",
+            description: "Existing Description",
+            order: 0,
+            options: "[]",
+          },
+        ],
+      });
+
+      // Mock existing field check for second field (doesn't exist)
+      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+
+      // Mock insert result for new field
+      const mockResult = {
+        rows: [
+          {
+            id: 2,
+            name: "newField",
+            type: "Email",
+            caseID: 1,
+            primary: false,
+            required: false,
+            label: "New Field",
+            description: "New Description",
             order: 1,
             options: "[]",
           },
@@ -625,51 +705,78 @@ describe("llmTools", () => {
       };
       mockQuery.mockResolvedValueOnce(mockResult);
 
-      const saveFieldTool = databaseTools.find(
+      const saveFieldsTool = databaseTools.find(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
+        (tool: any) => tool.name === "saveFields",
       );
-      expect(saveFieldTool).toBeDefined();
+      expect(saveFieldsTool).toBeDefined();
 
       const result =
         await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          id: 1,
-          name: "updatedField",
-          type: "Text",
-          caseID: 1,
-          label: "Updated Field",
-          primary: true,
-          required: true,
-          description: "Updated description",
-          order: 1,
+        (saveFieldsTool!.execute as any)({
+          fields: [
+            {
+              name: "existingField",
+              type: "Text",
+              caseID: 1,
+              label: "Existing Field",
+              description: "Existing Description",
+            },
+            {
+              name: "newField",
+              type: "Email",
+              caseID: 1,
+              label: "New Field",
+              description: "New Description",
+              order: 1,
+            },
+          ],
         });
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('UPDATE "Fields"'),
-        [
-          "updatedField",
-          "Text",
-          1,
-          "Updated Field",
-          "Updated description",
-          1,
-          "[]",
-          true,
-          true,
-          1,
-        ],
-      );
       expect(result).toEqual({
-        ...mockResult.rows[0],
-        options: [],
-        defaultValue: null,
+        ids: [1, 2],
+        fields: [
+          {
+            id: 1,
+            name: "existingField",
+            type: "Text",
+            caseID: 1,
+            label: "Existing Field",
+            description: "Existing Description",
+            order: 0,
+            options: [],
+            required: false,
+            primary: false,
+          },
+          {
+            ...mockResult.rows[0],
+            options: [],
+          },
+        ],
       });
     });
 
-    it("should throw error for invalid field type", async () => {
+    it("should throw error for empty fields array", async () => {
+      const saveFieldsTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "saveFields",
+      );
+      expect(saveFieldsTool).toBeDefined();
+
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (saveFieldsTool!.execute as any)({
+          fields: [],
+        }),
+      ).rejects.toThrow(
+        "Fields array is required and must not be empty for saveFields",
+      );
+    });
+
+    it("should throw error for invalid field type in array", async () => {
       // Mock existing field check (no existing field with same name)
       mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+
       // Mock insert result
       const mockResult = {
         rows: [
@@ -690,163 +797,44 @@ describe("llmTools", () => {
       };
       mockQuery.mockResolvedValueOnce(mockResult);
 
-      const saveFieldTool = databaseTools.find(
+      const saveFieldsTool = databaseTools.find(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
+        (tool: any) => tool.name === "saveFields",
       );
-      expect(saveFieldTool).toBeDefined();
+      expect(saveFieldsTool).toBeDefined();
 
       await expect(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          name: "testField",
-          type: "InvalidType",
-          caseID: 1,
-          label: "Test Field",
+        (saveFieldsTool!.execute as any)({
+          fields: [
+            {
+              name: "testField",
+              type: "InvalidType",
+              caseID: 1,
+              label: "Test Field",
+            },
+          ],
         }),
       ).rejects.toThrow('Invalid field type "InvalidType"');
     });
 
-    it("should create a field with Stage prefix successfully", async () => {
-      // Mock existing field check (no existing field with same name)
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock insert result
-      const mockResult = {
-        rows: [
-          {
-            id: 1,
-            name: "Stage1",
-            type: "Text",
-            caseID: 1,
-            primary: false,
-            required: false,
-            label: "Test Field",
-            description: "",
-            order: 0,
-            options: "[]",
-          },
-        ],
-        rowCount: 1,
-      };
-      mockQuery.mockResolvedValueOnce(mockResult);
-
-      const saveFieldTool = databaseTools.find(
+    it("should throw error for missing required parameters in array", async () => {
+      const saveFieldsTool = databaseTools.find(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
+        (tool: any) => tool.name === "saveFields",
       );
-      expect(saveFieldTool).toBeDefined();
-
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          name: "Stage1",
-          type: "Text",
-          caseID: 1,
-          label: "Test Field",
-        });
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('INSERT INTO "Fields"'),
-        ["Stage1", "Text", 1, "Test Field", "", 0, "[]", false, false],
-      );
-      expect(result).toEqual({
-        ...mockResult.rows[0],
-        options: [],
-        defaultValue: null,
-      });
-    });
-
-    it("should throw error for missing required parameters", async () => {
-      // Mock existing field check (no existing field with same name)
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
-      // Mock insert result
-      const mockResult = {
-        rows: [
-          {
-            id: 1,
-            name: "",
-            type: "Text",
-            caseID: 1,
-            primary: false,
-            required: false,
-            label: "Test Field",
-            description: "",
-            order: 0,
-            options: "[]",
-          },
-        ],
-        rowCount: 1,
-      };
-      mockQuery.mockResolvedValueOnce(mockResult);
-
-      const saveFieldTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
-      );
-      expect(saveFieldTool).toBeDefined();
+      expect(saveFieldsTool).toBeDefined();
 
       await expect(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          // Missing required parameters
+        (saveFieldsTool!.execute as any)({
+          fields: [
+            {
+              // Missing required parameters
+            },
+          ],
         }),
-      ).rejects.toThrow("Field name is required for saveField");
-    });
-
-    it("should return existing field for duplicate field name", async () => {
-      // Mock existing field check (field with same name exists)
-      mockQuery.mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ id: 1, name: "existingField" }],
-      });
-      // Mock full field data query
-      mockQuery.mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [
-          {
-            id: 1,
-            name: "existingField",
-            type: "Text",
-            caseID: 1,
-            primary: false,
-            required: false,
-            label: "Existing Field",
-            description: "Test Description",
-            order: 0,
-            options: "[]",
-          },
-        ],
-      });
-
-      const saveFieldTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (tool: any) => tool.name === "saveField",
-      );
-      expect(saveFieldTool).toBeDefined();
-
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldTool!.execute as any)({
-          name: "existingField",
-          type: "Text",
-          caseID: 1,
-          label: "Existing Field",
-          description: "Test Description",
-        });
-
-      expect(result).toEqual({
-        id: 1,
-        name: "existingField",
-        type: "Text",
-        caseID: 1,
-        label: "Existing Field",
-        description: "Test Description",
-        order: 0,
-        options: [],
-        required: false,
-        primary: false,
-        defaultValue: null,
-      });
+      ).rejects.toThrow("Field name is required for saveFields");
     });
   });
 
