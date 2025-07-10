@@ -1366,6 +1366,23 @@ export default function WorkflowPage() {
     try {
       const jsonData = JSON.parse(text);
       if (typeof jsonData === "object" && jsonData !== null) {
+        // Handle saveFields response format (has both ids and fields arrays)
+        if (
+          jsonData.ids &&
+          Array.isArray(jsonData.ids) &&
+          jsonData.fields &&
+          Array.isArray(jsonData.fields)
+        ) {
+          const fieldCount = jsonData.fields.length;
+          const fieldTypes = [
+            ...new Set(jsonData.fields.map((f: any) => f.type)),
+          ];
+          return `Created ${fieldCount} field${
+            fieldCount === 1 ? "" : "s"
+          } of type${fieldTypes.length === 1 ? "" : "s"}: ${fieldTypes.join(
+            ", ",
+          )}`;
+        }
         // Create readable messages based on the tool result
         if (jsonData.name && jsonData.type && jsonData.id) {
           // This looks like a field result

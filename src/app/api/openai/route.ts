@@ -405,7 +405,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
             console.log(
               `Message count: ${messageCount}, Approximate tokens: ${approximateTokens}`,
             );
-            console.log("messages XXXX:", messages);
+            // console.log("messages XXXX:", messages);
 
             const completionPromise = openai.chat.completions.create({
               model: "o4-mini",
@@ -542,12 +542,12 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 );
                 const toolCallStartTime = Date.now();
 
-                console.log(`=== Executing tool: ${toolName} ===`);
+                /*  console.log(`=== Executing tool: ${toolName} ===`);
                 console.log(
                   `Tool arguments:`,
                   JSON.stringify(toolArgs, null, 2),
                 );
-
+*/
                 // Check for duplicate field creation and encourage view creation
                 if (toolName === "saveFields" && toolArgs.name) {
                   const existingFieldCalls = toolCallHistory.filter(
