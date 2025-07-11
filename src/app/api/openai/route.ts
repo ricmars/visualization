@@ -119,6 +119,12 @@ interface ToolCall {
   };
 }
 
+type ToolResult = {
+  name?: string;
+  fields?: unknown[];
+  ids?: unknown[];
+};
+
 export async function POST(request: Request) {
   console.log("=== OpenAI POST request started ===");
   const startTime = Date.now();
@@ -408,7 +414,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
             // console.log("messages XXXX:", messages);
 
             const completionPromise = openai.chat.completions.create({
-              model: "o4-mini",
+              model: process.env.AZURE_OPENAI_DEPLOYMENT!,
               messages,
               max_completion_tokens: 6000, // Reduced for faster generation
               stream: true, // Enable streaming for faster responses
@@ -604,7 +610,39 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                   );
                   console.log(`Tool result:`, JSON.stringify(result, null, 2));
 
-                  await processor.sendText(JSON.stringify(result));
+                  // Don't send raw JSON tool results to the client
+                  // Only send user-friendly messages for specific tools
+                  const resultObj: ToolResult = result as ToolResult;
+                  if (toolName === "saveCase") {
+                    await processor.sendText(
+                      `Workflow '${
+                        resultObj.name || "Unknown"
+                      }' saved successfully`,
+                    );
+                  } else if (toolName === "saveView") {
+                    await processor.sendText(
+                      `Saved '${resultObj.name || "Unknown"}'`,
+                    );
+                  } else if (toolName === "saveFields") {
+                    const fieldCount =
+                      resultObj.fields?.length || resultObj.ids?.length || 0;
+                    await processor.sendText(
+                      `Created ${fieldCount} field${
+                        fieldCount === 1 ? "" : "s"
+                      }`,
+                    );
+                  } else if (
+                    toolName.startsWith("get") ||
+                    toolName.startsWith("list")
+                  ) {
+                    // Don't send any message for get/list tools - they're read-only operations
+                    // These tools are used to check current state, no user notification needed
+                  } else {
+                    // For other tools, send a generic success message
+                    await processor.sendText(
+                      `Operation completed successfully`,
+                    );
+                  }
 
                   // Add tool result to messages
                   messages.push({

@@ -32,6 +32,19 @@ WORKFLOW CREATION SEQUENCE:
 3. Create views with saveView (use the case ID from step 1, save the returned view IDs)
 4. Update the case with saveCase (use the view IDs from step 3 in the workflow model)
 
+IMPORTANT: saveCase should ONLY be used for:
+- Creating a new workflow from scratch
+- Making structural changes to the workflow model (adding/removing stages, processes, or steps)
+- Finalizing workflow creation
+
+DO NOT use saveCase for:
+- Renaming steps, fields, or views
+- Adding fields to existing views
+- Updating view configurations
+- Simple modifications that don't change the workflow structure
+
+For these operations, use the specific tools (saveView, saveFields) instead.
+
 Available tools are listed below with their descriptions.`;
 
 export const exampleDatabaseResponse = `

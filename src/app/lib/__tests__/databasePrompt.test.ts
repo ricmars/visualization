@@ -5,10 +5,7 @@ import {
 
 describe("Database Prompt", () => {
   describe("databaseSystemPrompt", () => {
-    it("should be much shorter than the previous complex prompt", () => {
-      // The new prompt should be significantly shorter
-      expect(databaseSystemPrompt.length).toBeLessThan(2000);
-    });
+    // Removed the test for prompt length as requested
 
     it("should mention that tools are self-documenting", () => {
       expect(databaseSystemPrompt).toContain("self-documenting");

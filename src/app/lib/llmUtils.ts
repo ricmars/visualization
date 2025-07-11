@@ -1,5 +1,12 @@
 import { getCompleteToolsContext } from "./databasePrompt";
 
+// Add ToolResult type for tool result objects
+export type ToolResult = {
+  name?: string;
+  fields?: unknown[];
+  ids?: unknown[];
+};
+
 export interface Tool {
   name: string;
   description: string;
@@ -69,12 +76,29 @@ export function createStreamProcessor(
           JSON.stringify(result, null, 2),
         );
 
-        // Send tool result without verbose success message
+        // Send user-friendly tool result message instead of raw JSON
         console.log("StreamProcessor: Sending tool result to client");
+        const resultObj: ToolResult = result as ToolResult;
+        let userMessage = "Operation completed successfully";
+
+        if (toolName === "saveCase") {
+          userMessage = `Workflow '${
+            resultObj.name || "Unknown"
+          }' saved successfully`;
+        } else if (toolName === "saveView") {
+          userMessage = `Saved '${resultObj.name || "Unknown"}'`;
+        } else if (toolName === "saveFields") {
+          const fieldCount =
+            resultObj.fields?.length || resultObj.ids?.length || 0;
+          userMessage = `Created ${fieldCount} field${
+            fieldCount === 1 ? "" : "s"
+          }`;
+        }
+
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
-              toolResult: result,
+              text: userMessage,
             })}\n\n`,
           ),
         );

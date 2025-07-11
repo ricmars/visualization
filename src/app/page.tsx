@@ -100,15 +100,8 @@ export default function Home() {
                   setCreationProgress((prev) => prev + "\n" + data.text);
                 }
 
-                if (data.toolResult && data.toolResult.id) {
-                  // Check if this is a case creation result
-                  if (data.toolResult.name === name) {
-                    createdCaseId = data.toolResult.id;
-                    setCreationProgress(
-                      (prev) => prev + "\n✅ Case created successfully!",
-                    );
-                  }
-                }
+                // Tool results are now sent as text messages, not as toolResult objects
+                // The case creation success is handled in the text messages above
 
                 if (data.done) {
                   isComplete = true;

@@ -12,10 +12,11 @@ export default [
   {
     files: ["**/*.ts", "**/*.tsx"],
     ignores: [
-      ".next/**/*",
-      ".next/static/**/*",
-      ".next/types/**/*",
-      "node_modules/**/*",
+      ".next/**",
+      "node_modules/**",
+      "coverage/**",
+      "dist/**",
+      "build/**",
     ],
     languageOptions: {
       parser: tsParser,

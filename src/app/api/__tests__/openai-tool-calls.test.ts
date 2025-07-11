@@ -76,11 +76,10 @@ global.fetch = jest.fn().mockResolvedValue({
 // Helper function to parse SSE response
 async function parseSSEResponse(
   response: Response,
-): Promise<{ text: string[]; toolResults: unknown[]; errors: string[] }> {
+): Promise<{ text: string[]; errors: string[] }> {
   const text = await response.text();
   const lines = text.split("\n");
   const textMessages: string[] = [];
-  const toolResults: unknown[] = [];
   const errors: string[] = [];
 
   for (const line of lines) {
@@ -89,9 +88,6 @@ async function parseSSEResponse(
         const data = JSON.parse(line.slice(6));
         if (data.text) {
           textMessages.push(data.text);
-        }
-        if (data.toolResult) {
-          toolResults.push(data.toolResult);
         }
         if (data.error) {
           errors.push(data.error);
@@ -102,7 +98,7 @@ async function parseSSEResponse(
     }
   }
 
-  return { text: textMessages, toolResults, errors };
+  return { text: textMessages, errors };
 }
 
 describe("OpenAI API Tool Calls", () => {

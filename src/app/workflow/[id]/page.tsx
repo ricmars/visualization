@@ -29,6 +29,17 @@ import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
 
+// Add ToolResult type for tool result objects
+export type ToolResult = {
+  id?: number;
+  name?: string;
+};
+
+// Add FieldWithType type for fields with a 'type' property
+export type FieldWithType = {
+  type: string;
+};
+
 const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
 const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
@@ -1155,7 +1166,6 @@ export default function WorkflowPage() {
       }
 
       const decoder = new TextDecoder();
-      let accumulatedContent = "";
       let shouldReloadWorkflow = false;
 
       try {
@@ -1205,7 +1215,24 @@ export default function WorkflowPage() {
                     !lowerText.includes("breakdown") &&
                     !lowerText.includes("summary");
 
-                  if (!shouldFilter) {
+                  // Also filter out raw JSON tool results that are being displayed to the user
+                  const isRawJsonToolResult =
+                    data.text.trim().startsWith("{") &&
+                    data.text.trim().endsWith("}") &&
+                    (lowerText.includes('"id":') ||
+                      lowerText.includes('"name":') ||
+                      lowerText.includes('"type":') ||
+                      lowerText.includes('"caseid":') ||
+                      lowerText.includes('"model":') ||
+                      lowerText.includes('"primary":') ||
+                      lowerText.includes('"required":') ||
+                      lowerText.includes('"label":') ||
+                      lowerText.includes('"description":') ||
+                      lowerText.includes('"order":') ||
+                      lowerText.includes('"options":') ||
+                      lowerText.includes('"defaultvalue":'));
+
+                  if (!shouldFilter && !isRawJsonToolResult) {
                     // Check if this is a JSON response that should be made more readable
                     let processedText = data.text;
 
@@ -1222,58 +1249,31 @@ export default function WorkflowPage() {
                       console.log("Processed text:", processedText);
                     }
 
-                    // If the processed text is different from the original, it means we successfully converted JSON to readable text
-                    if (processedText !== data.text) {
-                      // Add the processed text as a separate message
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id: uuidv4(),
-                          content: processedText,
-                          sender: "assistant",
-                          timestamp: new Date(),
-                        },
-                      ]);
-                    } else {
-                      // For non-JSON messages (like execution status), accumulate them
-                      accumulatedContent += processedText;
-
-                      // Update the AI message with accumulated content
-                      setMessages((prev) => {
-                        const newMessages = [...prev];
-                        const aiMessageIndex = newMessages.findIndex(
-                          (msg) => msg.id === aiMessageId,
-                        );
-                        if (aiMessageIndex !== -1) {
-                          newMessages[aiMessageIndex] = {
-                            ...newMessages[aiMessageIndex],
-                            content: accumulatedContent,
-                          };
-                        }
-                        return newMessages;
-                      });
-                    }
+                    // Add each message as a separate message instead of accumulating
+                    setMessages((prev) => [
+                      ...prev,
+                      {
+                        id: uuidv4(),
+                        content: processedText,
+                        sender: "assistant",
+                        timestamp: new Date(),
+                      },
+                    ]);
                   }
 
                   // Track if we should reload the workflow
-                  // Check if this is a tool result (JSON data) that indicates a tool was executed
-                  if (
-                    data.text &&
-                    data.text.trim().startsWith("{") &&
-                    data.text.trim().endsWith("}")
-                  ) {
-                    try {
-                      const jsonData = JSON.parse(data.text);
-                      // If it's a valid JSON object with an 'id' field, it's likely a tool result
-                      if (
-                        jsonData &&
-                        typeof jsonData === "object" &&
-                        jsonData.id
-                      ) {
-                        shouldReloadWorkflow = true;
-                      }
-                    } catch (_e) {
-                      // Not valid JSON, ignore
+                  // Check if this is a tool execution message that indicates a tool was executed
+                  if (data.text) {
+                    const lowerText = data.text.toLowerCase();
+                    // Check for tool execution success messages
+                    if (
+                      lowerText.includes("created") ||
+                      lowerText.includes("saved") ||
+                      lowerText.includes("operation completed successfully") ||
+                      (lowerText.includes("workflow") &&
+                        lowerText.includes("saved successfully"))
+                    ) {
+                      shouldReloadWorkflow = true;
                     }
                   }
                 }
@@ -1375,7 +1375,7 @@ export default function WorkflowPage() {
         ) {
           const fieldCount = jsonData.fields.length;
           const fieldTypes = [
-            ...new Set(jsonData.fields.map((f: any) => f.type)),
+            ...new Set((jsonData.fields as FieldWithType[]).map((f) => f.type)),
           ];
           return `Created ${fieldCount} field${
             fieldCount === 1 ? "" : "s"

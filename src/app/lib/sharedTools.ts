@@ -198,7 +198,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveCase",
       description:
-        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this AFTER creating all fields and views. The model must include viewId values that reference actual view IDs returned from saveView calls. IMPORTANT: Ensure viewId values correspond to the appropriate step names and contain the relevant fields for each step.",
+        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this ONLY when creating a new workflow or when making structural changes that require updating the entire workflow model. DO NOT use this for simple operations like renaming steps, adding fields, or updating views - use the specific tools (saveView, saveFields) for those operations. The model must include viewId values that reference actual view IDs returned from saveView calls. IMPORTANT: Ensure viewId values correspond to the appropriate step names and contain the relevant fields for each step.",
       parameters: {
         type: "object",
         properties: {
