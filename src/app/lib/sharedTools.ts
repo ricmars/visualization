@@ -56,7 +56,15 @@ export function createSharedTools(pool: Pool): (
       SaveViewParams,
       { id: number; name: string; caseID: number; model: unknown }
     >
-  | SharedTool<DeleteParams, { success: boolean; deletedId: number }>
+  | SharedTool<
+      DeleteParams,
+      {
+        success: boolean;
+        deletedId: number;
+        deletedName?: string;
+        type?: string;
+      }
+    >
   | SharedTool<{ caseID: number }, { fields: unknown[] }>
   | SharedTool<{ caseID: number }, { views: unknown[] }>
   | SharedTool<
@@ -111,7 +119,15 @@ export function createSharedTools(pool: Pool): (
         SaveViewParams,
         { id: number; name: string; caseID: number; model: unknown }
       >
-    | SharedTool<DeleteParams, { success: boolean; deletedId: number }>
+    | SharedTool<
+        DeleteParams,
+        {
+          success: boolean;
+          deletedId: number;
+          deletedName?: string;
+          type?: string;
+        }
+      >
     | SharedTool<{ caseID: number }, { fields: unknown[] }>
     | SharedTool<{ caseID: number }, { views: unknown[] }>
     | SharedTool<
@@ -1016,6 +1032,15 @@ export function createSharedTools(pool: Pool): (
 
         const { id } = params;
 
+        // First, get the field name before deleting
+        const getFieldQuery = `SELECT name FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
+        const getFieldResult = await pool.query(getFieldQuery, [id]);
+        if (getFieldResult.rowCount === 0) {
+          console.error(`deleteField ERROR: No field found with id ${id}`);
+          throw new Error(`No field found with id ${id}`);
+        }
+        const fieldName = getFieldResult.rows[0].name;
+
         const query = `DELETE FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
         console.log("deleteField query:", query);
         console.log("deleteField query values:", [id]);
@@ -1026,8 +1051,13 @@ export function createSharedTools(pool: Pool): (
           throw new Error(`No field found with id ${id}`);
         }
 
-        console.log("deleteField successful:", { id });
-        return { success: true, deletedId: id };
+        console.log("deleteField successful:", { id, name: fieldName });
+        return {
+          success: true,
+          deletedId: id,
+          deletedName: fieldName,
+          type: "field",
+        };
       },
     },
     {
@@ -1047,6 +1077,15 @@ export function createSharedTools(pool: Pool): (
 
         const { id } = params;
 
+        // First, get the view name before deleting
+        const getViewQuery = `SELECT name FROM "${DB_TABLES.VIEWS}" WHERE id = $1`;
+        const getViewResult = await pool.query(getViewQuery, [id]);
+        if (getViewResult.rowCount === 0) {
+          console.error(`deleteView ERROR: No view found with id ${id}`);
+          throw new Error(`No view found with id ${id}`);
+        }
+        const viewName = getViewResult.rows[0].name;
+
         const query = `DELETE FROM "${DB_TABLES.VIEWS}" WHERE id = $1`;
         console.log("deleteView query:", query);
         console.log("deleteView query values:", [id]);
@@ -1057,8 +1096,13 @@ export function createSharedTools(pool: Pool): (
           throw new Error(`No view found with id ${id}`);
         }
 
-        console.log("deleteView successful:", { id });
-        return { success: true, deletedId: id };
+        console.log("deleteView successful:", { id, name: viewName });
+        return {
+          success: true,
+          deletedId: id,
+          deletedName: viewName,
+          type: "view",
+        };
       },
     },
     {

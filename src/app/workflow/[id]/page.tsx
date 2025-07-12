@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import WorkflowDiagram from "../../components/WorkflowDiagram";
+import WorkflowLifecycleView from "../../components/WorkflowLifecycleView";
 import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
 import { Service } from "../../services/service";
 import {
@@ -37,6 +38,7 @@ export type ToolResult = {
 
 // Add FieldWithType type for fields with a 'type' property
 export type FieldWithType = {
+  name: string;
   type: string;
 };
 
@@ -1182,6 +1184,9 @@ export default function WorkflowPage() {
                 const data = JSON.parse(line.slice(6));
 
                 if (data.text) {
+                  // Debug logging for all responses
+                  console.log("Received data.text:", data.text);
+
                   // Check if this is a tool execution message that should be filtered
                   const lowerText = data.text.toLowerCase();
                   const isListTool =
@@ -1216,6 +1221,7 @@ export default function WorkflowPage() {
                     !lowerText.includes("summary");
 
                   // Also filter out raw JSON tool results that are being displayed to the user
+                  // But allow saveFields responses through (they have both ids and fields arrays)
                   const isRawJsonToolResult =
                     data.text.trim().startsWith("{") &&
                     data.text.trim().endsWith("}") &&
@@ -1230,9 +1236,19 @@ export default function WorkflowPage() {
                       lowerText.includes('"description":') ||
                       lowerText.includes('"order":') ||
                       lowerText.includes('"options":') ||
-                      lowerText.includes('"defaultvalue":'));
+                      lowerText.includes('"defaultvalue":')) &&
+                    // Don't filter out saveFields responses (they have both ids and fields arrays)
+                    !(
+                      lowerText.includes('"ids":') &&
+                      lowerText.includes('"fields":')
+                    );
 
                   if (!shouldFilter && !isRawJsonToolResult) {
+                    console.log(
+                      "Processing response (not filtered):",
+                      data.text,
+                    );
+
                     // Check if this is a JSON response that should be made more readable
                     let processedText = data.text;
 
@@ -1259,6 +1275,14 @@ export default function WorkflowPage() {
                         timestamp: new Date(),
                       },
                     ]);
+                  } else {
+                    console.log("Response filtered out:", data.text);
+                    console.log(
+                      "shouldFilter:",
+                      shouldFilter,
+                      "isRawJsonToolResult:",
+                      isRawJsonToolResult,
+                    );
                   }
 
                   // Track if we should reload the workflow
@@ -1366,6 +1390,20 @@ export default function WorkflowPage() {
     try {
       const jsonData = JSON.parse(text);
       if (typeof jsonData === "object" && jsonData !== null) {
+        // Debug logging for saveFields responses
+        if (
+          jsonData.ids &&
+          Array.isArray(jsonData.ids) &&
+          jsonData.fields &&
+          Array.isArray(jsonData.fields)
+        ) {
+          console.log("Processing saveFields response:", jsonData);
+          console.log(
+            "Field names:",
+            jsonData.fields.map((f: any) => f.name),
+          );
+        }
+
         // Handle saveFields response format (has both ids and fields arrays)
         if (
           jsonData.ids &&
@@ -1374,14 +1412,13 @@ export default function WorkflowPage() {
           Array.isArray(jsonData.fields)
         ) {
           const fieldCount = jsonData.fields.length;
-          const fieldTypes = [
-            ...new Set((jsonData.fields as FieldWithType[]).map((f) => f.type)),
-          ];
+          const fieldNames = (jsonData.fields as FieldWithType[]).map(
+            (f) => f.name,
+          );
+          console.log("Extracted field names:", fieldNames);
           return `Created ${fieldCount} field${
             fieldCount === 1 ? "" : "s"
-          } of type${fieldTypes.length === 1 ? "" : "s"}: ${fieldTypes.join(
-            ", ",
-          )}`;
+          }: ${fieldNames.join(", ")}`;
         }
         // Create readable messages based on the tool result
         if (jsonData.name && jsonData.type && jsonData.id) {
@@ -1410,6 +1447,23 @@ export default function WorkflowPage() {
               jsonData.length === 1 ? "" : "s"
             }`;
           }
+        } else if (
+          jsonData.success &&
+          jsonData.deletedId &&
+          jsonData.deletedName &&
+          jsonData.type
+        ) {
+          // Delete operation response with name and type
+          const itemType =
+            jsonData.type === "field"
+              ? "field"
+              : jsonData.type === "view"
+              ? "view"
+              : "item";
+          return `Deleted ${itemType} '${jsonData.deletedName}'`;
+        } else if (jsonData.success && jsonData.deletedId) {
+          // Fallback for delete operations without name
+          return `Item with ID ${jsonData.deletedId} deleted successfully`;
         } else if (jsonData.error) {
           // Error response
           return `Error: ${jsonData.error}`;
@@ -2086,11 +2140,15 @@ export default function WorkflowPage() {
                       onStepReorder={handleStepReorder}
                     />
                   ) : (
-                    <div className="p-6">
-                      <div className="text-center text-gray-500">
-                        Lifecycle view is currently under development
-                      </div>
-                    </div>
+                    <WorkflowLifecycleView
+                      stages={workflowModel.stages}
+                      onStepSelect={(stageId, processId, stepId) =>
+                        handleStepSelect(stageId, processId, stepId)
+                      }
+                      activeStage={activeStage}
+                      activeProcess={activeProcess}
+                      activeStep={activeStep}
+                    />
                   )}
                 </>
               )}

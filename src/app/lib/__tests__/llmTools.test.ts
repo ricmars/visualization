@@ -988,6 +988,12 @@ describe("llmTools", () => {
 
   describe("deleteField", () => {
     it("should delete a field successfully", async () => {
+      // Mock the SELECT query to get field name
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ name: "Test Field" }],
+        rowCount: 1,
+      });
+      // Mock the DELETE query
       mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const deleteFieldTool = databaseTools.find(
@@ -1001,14 +1007,27 @@ describe("llmTools", () => {
         (deleteFieldTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT name FROM "Fields"'),
+        [1],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "Fields"'),
         [1],
       );
-      expect(result).toEqual({ success: true, deletedId: 1 });
+      expect(result).toEqual({
+        success: true,
+        deletedId: 1,
+        deletedName: "Test Field",
+        type: "field",
+      });
     });
 
     it("should throw error when field does not exist", async () => {
-      mockQuery.mockResolvedValueOnce({ rowCount: 0 });
+      // Mock the SELECT query to return no rows (field not found)
+      mockQuery.mockResolvedValueOnce({
+        rows: [],
+        rowCount: 0,
+      });
 
       const deleteFieldTool = databaseTools.find(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1020,6 +1039,62 @@ describe("llmTools", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (deleteFieldTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No field found with id 999");
+    });
+  });
+
+  describe("deleteView", () => {
+    it("should delete a view successfully", async () => {
+      // Mock the SELECT query to get view name
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ name: "Test View" }],
+        rowCount: 1,
+      });
+      // Mock the DELETE query
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+
+      const deleteViewTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteView",
+      );
+      expect(deleteViewTool).toBeDefined();
+
+      const result =
+        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteViewTool!.execute as any)({ id: 1 });
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT name FROM "Views"'),
+        [1],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM "Views"'),
+        [1],
+      );
+      expect(result).toEqual({
+        success: true,
+        deletedId: 1,
+        deletedName: "Test View",
+        type: "view",
+      });
+    });
+
+    it("should throw error when view does not exist", async () => {
+      // Mock the SELECT query to return no rows (view not found)
+      mockQuery.mockResolvedValueOnce({
+        rows: [],
+        rowCount: 0,
+      });
+
+      const deleteViewTool = databaseTools.find(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (tool: any) => tool.name === "deleteView",
+      );
+      expect(deleteViewTool).toBeDefined();
+
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (deleteViewTool!.execute as any)({ id: 999 }),
+      ).rejects.toThrow("No view found with id 999");
     });
   });
 });
