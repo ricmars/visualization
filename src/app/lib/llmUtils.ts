@@ -5,6 +5,11 @@ export type ToolResult = {
   name?: string;
   fields?: unknown[];
   ids?: unknown[];
+  deletedName?: string;
+  deletedId?: number;
+  success?: boolean;
+  type?: string;
+  updatedViewsCount?: number;
 };
 
 export interface Tool {
@@ -90,9 +95,34 @@ export function createStreamProcessor(
         } else if (toolName === "saveFields") {
           const fieldCount =
             resultObj.fields?.length || resultObj.ids?.length || 0;
-          userMessage = `Created ${fieldCount} field${
-            fieldCount === 1 ? "" : "s"
-          }`;
+          const fieldNames =
+            resultObj.fields?.map(
+              (f: any) => f.name || f.label || "Unknown field",
+            ) || [];
+          if (fieldNames.length > 0) {
+            userMessage = `Created ${fieldCount} field${
+              fieldCount === 1 ? "" : "s"
+            }: ${fieldNames.join(", ")}`;
+          } else {
+            userMessage = `Created ${fieldCount} field${
+              fieldCount === 1 ? "" : "s"
+            }`;
+          }
+        } else if (toolName === "deleteField") {
+          const deletedName = (resultObj as any).deletedName || "Unknown field";
+          const updatedViewsCount = (resultObj as any).updatedViewsCount || 0;
+          if (updatedViewsCount > 0) {
+            userMessage = `Deleted field: ${deletedName} (removed from ${updatedViewsCount} view${
+              updatedViewsCount === 1 ? "" : "s"
+            })`;
+          } else {
+            userMessage = `Deleted field: ${deletedName}`;
+          }
+        } else if (toolName === "deleteView") {
+          const deletedName = (resultObj as any).deletedName || "Unknown view";
+          userMessage = `Deleted view: ${deletedName}`;
+        } else if (toolName === "deleteCase") {
+          userMessage = `Deleted case successfully`;
         }
 
         await writer.write(

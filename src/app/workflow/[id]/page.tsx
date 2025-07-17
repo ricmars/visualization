@@ -46,6 +46,7 @@ const ACTIVE_TAB_STORAGE_KEY = "active_tab";
 const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
 const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
 const MAX_CHECKPOINTS = 10;
+const MODEL_UPDATED_EVENT = "model-updated";
 
 interface DatabaseCase {
   id: number;
@@ -201,6 +202,44 @@ export default function WorkflowPage() {
     };
   }, [model]);
 
+  // Function to generate the model data structure for preview
+  const generateModelData = useCallback(
+    (currentFields: Field[], currentStages: Stage[]) => {
+      const tmpStages = [];
+      /* Iterate over currentStages - iterate over processes and steps - processes is not needed */
+      for (const stage of currentStages) {
+        const tmpSteps = [];
+        for (const process of stage.processes) {
+          for (const step of process.steps) {
+            tmpSteps.push(step);
+          }
+        }
+        tmpStages.push({
+          ...stage,
+          steps: tmpSteps,
+        });
+      }
+      return {
+        fullUpdate: true,
+        appName: "My Application",
+        channel: "WorkPortal",
+        industry: "Banking",
+        userName: "John Smith",
+        userLocale: "en-EN",
+        caseName: selectedCase?.name || "Workflow",
+        caseTypes: [
+          {
+            name: selectedCase?.name || "Workflow",
+            fields: currentFields,
+            creationFields: [],
+            stages: tmpStages,
+          },
+        ],
+      };
+    },
+    [selectedCase?.name],
+  );
+
   // 5. All useEffect hooks
   // Load saved tab from localStorage after initial render
   useEffect(() => {
@@ -251,6 +290,61 @@ export default function WorkflowPage() {
       );
     }
   }, [checkpoints, id]);
+
+  // Effect to send model updates to iframe when the model is updated
+  useEffect(() => {
+    const handleModelUpdate = () => {
+      if (isPreviewMode && previewContainerRef.current) {
+        const iframe = previewContainerRef.current.querySelector("iframe");
+        if (iframe) {
+          const model = generateModelData(fields, workflowModel.stages);
+          iframe.contentWindow?.postMessage(model, "*");
+        }
+      }
+    };
+
+    // Add custom event listener
+    window.addEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+
+    return () => {
+      window.removeEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
+    };
+  }, [isPreviewMode, generateModelData, fields, workflowModel.stages]);
+
+  // Effect to manage iframe creation and cleanup
+  useEffect(() => {
+    let iframe: HTMLIFrameElement | null = null;
+    // Capture the ref value at the start of the effect
+    const container = previewContainerRef.current;
+
+    if (isPreviewMode && container) {
+      iframe = container.querySelector("iframe");
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.src =
+          "https://blueprint2024-8b147.web.app/blueprint-preview.html";
+        iframe.className = "w-full h-full border-0";
+        iframe.title = "Blueprint Preview";
+
+        // Once the iframe loads, send the model data
+        iframe.onload = () => {
+          if (iframe) {
+            const model = generateModelData(fields, workflowModel.stages);
+            iframe.contentWindow?.postMessage(model, "*");
+          }
+        };
+
+        container.appendChild(iframe);
+      }
+    }
+
+    // Cleanup function to remove iframe when preview mode is disabled
+    return () => {
+      if (container && iframe) {
+        container.removeChild(iframe);
+      }
+    };
+  }, [isPreviewMode, fields, workflowModel.stages, generateModelData]); // Add missing dependencies
 
   // Define fetchCase before using it in useEffect
   const fetchCase = useCallback(async () => {
@@ -303,6 +397,48 @@ export default function WorkflowPage() {
       setError(err instanceof Error ? err.message : "Failed to load workflow");
     } finally {
       setLoading(false);
+    }
+  }, [id]);
+
+  // Light refresh function for chat completion - updates data without showing loading state
+  const refreshWorkflowData = useCallback(async () => {
+    try {
+      // Refresh the case data
+      const caseResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.CASES}&id=${id}`,
+      );
+      if (caseResponse.ok) {
+        const caseData = await caseResponse.json();
+        setSelectedCase(caseData.data);
+      }
+
+      // Refresh the model
+      const composedModel = await fetchCaseData(id);
+      setModel(composedModel);
+
+      // Refresh fields
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${id}`,
+      );
+      if (fieldsResponse.ok) {
+        const fieldsResult = await fieldsResponse.json();
+        setFields(fieldsResult.data);
+      }
+
+      // Refresh views
+      const viewsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
+      );
+      if (viewsResponse.ok) {
+        const viewsData = await viewsResponse.json();
+        setViews(viewsData.data);
+      }
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+    } catch (err) {
+      console.error("Error refreshing workflow data:", err);
+      // Don't set error state for refresh failures - just log them
     }
   }, [id]);
 
@@ -460,6 +596,9 @@ export default function WorkflowPage() {
         description: selectedCase.description,
         stages: updatedModel.stages.length,
       });
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("=== Error in Steps Update ===");
       console.error("Error:", error);
@@ -549,6 +688,9 @@ export default function WorkflowPage() {
         // Refresh the model
         const composedModel = await fetchCaseData(id);
         setModel(composedModel);
+
+        // Dispatch model updated event for preview
+        window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
       } catch (error) {
         console.error("Error adding field:", error);
         alert("Failed to add field. Please try again.");
@@ -621,6 +763,9 @@ export default function WorkflowPage() {
       const composedModel = await fetchCaseData(id);
       setModel(composedModel);
       setEditingField(null);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error updating field:", error);
       alert("Failed to update field. Please try again.");
@@ -737,6 +882,9 @@ export default function WorkflowPage() {
         const fieldsData = await fieldsResponse.json();
         setFields(fieldsData.data);
       }
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error deleting field:", error);
       alert("Failed to delete field. Please try again.");
@@ -802,6 +950,9 @@ export default function WorkflowPage() {
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
       setIsAddStageModalOpen(false);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error adding stage:", error);
       throw new Error("Failed to add stage");
@@ -876,6 +1027,9 @@ export default function WorkflowPage() {
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
       setModel(updatedModel);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error adding process:", error);
       throw new Error("Failed to add process");
@@ -940,6 +1094,9 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error adding step:", error);
       throw error;
@@ -1005,6 +1162,9 @@ export default function WorkflowPage() {
             }
           : null,
       );
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error deleting step:", error);
       throw error;
@@ -1061,6 +1221,9 @@ export default function WorkflowPage() {
             }
           : null,
       );
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error deleting process:", error);
       throw error;
@@ -1110,6 +1273,9 @@ export default function WorkflowPage() {
             }
           : null,
       );
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error deleting stage:", error);
       throw error;
@@ -1316,9 +1482,9 @@ export default function WorkflowPage() {
                 }
 
                 if (data.done) {
-                  // Reload the workflow data if tools were executed
+                  // Refresh the workflow data if tools were executed
                   if (shouldReloadWorkflow) {
-                    await loadWorkflow();
+                    await refreshWorkflowData();
                   }
                   break;
                 }
@@ -1460,7 +1626,16 @@ export default function WorkflowPage() {
               : jsonData.type === "view"
               ? "view"
               : "item";
-          return `Deleted ${itemType} '${jsonData.deletedName}'`;
+
+          if (jsonData.type === "field" && jsonData.updatedViewsCount) {
+            return `Deleted ${itemType} '${
+              jsonData.deletedName
+            }' (removed from ${jsonData.updatedViewsCount} view${
+              jsonData.updatedViewsCount === 1 ? "" : "s"
+            })`;
+          } else {
+            return `Deleted ${itemType} '${jsonData.deletedName}'`;
+          }
         } else if (jsonData.success && jsonData.deletedId) {
           // Fallback for delete operations without name
           return `Item with ID ${jsonData.deletedId} deleted successfully`;
@@ -1549,6 +1724,9 @@ export default function WorkflowPage() {
 
       // Close the modal
       setIsEditWorkflowModalOpen(false);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("[ERROR] Failed to update workflow. Full details:", {
         status: error instanceof Error ? error.message : "Unknown error",
@@ -1690,6 +1868,9 @@ export default function WorkflowPage() {
       );
 
       addCheckpoint(`Updated database view: ${view.name}`, workflowModel);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error updating view fields:", error);
       alert("Failed to update view fields. Please try again.");
@@ -1787,6 +1968,9 @@ export default function WorkflowPage() {
             }
           : null,
       );
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error updating step fields:", error);
       alert("Failed to update step fields. Please try again.");
@@ -1884,6 +2068,9 @@ export default function WorkflowPage() {
         const fieldsData = await fieldsResponse.json();
         setFields(fieldsData.data);
       }
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error reordering fields:", error);
       alert("Failed to reorder fields. Please try again.");
@@ -1940,6 +2127,9 @@ export default function WorkflowPage() {
 
       // Update local state immediately for better UX
       setFields(reorderedFields);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error reordering fields:", error);
       alert("Failed to reorder fields. Please try again.");

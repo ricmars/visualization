@@ -144,6 +144,7 @@ export async function POST(request: Request) {
     if (systemContext) {
       try {
         const contextData = JSON.parse(systemContext);
+        console.log("Parsed system context:", contextData);
         if (contextData.currentCaseId) {
           currentCaseId = contextData.currentCaseId;
           isExistingWorkflow = true;
@@ -213,7 +214,7 @@ export async function POST(request: Request) {
     if (isExistingWorkflow && currentCaseId) {
       enhancedPrompt = `${prompt}
 
-Working with existing case ID: ${currentCaseId}. Check state, create fields/views, then call saveCase.`;
+Working with existing case ID: ${currentCaseId}. For simple operations like deleting fields, use the specific tools (deleteField, saveFields, saveView) and STOP - do not call saveCase unless making structural changes to the workflow.`;
     } else {
       // For new workflow creation
       enhancedPrompt = `${prompt}
@@ -235,7 +236,7 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     let workflowContextInstruction = "";
     if (currentCaseId) {
       filteredTools = databaseTools.filter((t) => t.name !== "createCase");
-      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (saveCase, saveField, saveView, etc).\nDo not create a new case.`;
+      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (deleteField, saveFields, saveView, etc).\nFor simple operations like deleting fields, use the specific tools and STOP - do not call saveCase unless making structural changes.\nDo not create a new case.`;
     }
 
     // Create OpenAI client with fresh token
@@ -250,16 +251,20 @@ ${getToolsContext(filteredTools)}${workflowContextInstruction}
 Current case ID: ${currentCaseId || "NEW"}
 
 CRITICAL WORKFLOW COMPLETION RULES:
-1. For existing workflows: Check current state with getCase, then create missing fields/views, then call saveCase
-2. For new workflows: Create case → Create fields → Create views → Call saveCase with complete model
-3. NEVER stop without calling saveCase - this is the final step that creates the workflow structure
-4. After creating fields, you MUST create MULTIPLE views before calling saveCase
-5. Each workflow step needs its own view - create separate views for different data collection steps
-6. The saveCase call must include stages, processes, and steps with UNIQUE viewId references
-7. Create COMPREHENSIVE workflows with multiple fields and views - don't create minimal workflows
-8. Think about all the data that needs to be collected and managed in the workflow
-9. DO NOT reuse the same viewId for multiple steps - each step needs its own view
-10. IMPORTANT: Use the exact viewIds and fieldIds returned from previous tool calls - do not make up IDs
+1. For NEW workflows: Create case → Create fields → Create views → Call saveCase with complete model
+2. For EXISTING workflows: Use specific tools for simple operations (deleteField, saveFields, saveView) - DO NOT call saveCase unless making structural changes
+3. saveCase should ONLY be called for:
+   - Creating new workflows from scratch
+   - Making structural changes (adding/removing stages, processes, or steps)
+   - Finalizing new workflow creation
+4. For simple operations on existing workflows (delete field, add field, update view), use the specific tools and STOP - do not call saveCase
+5. After creating fields, you MUST create MULTIPLE views before calling saveCase (for new workflows only)
+6. Each workflow step needs its own view - create separate views for different data collection steps
+7. The saveCase call must include stages, processes, and steps with UNIQUE viewId references
+8. Create COMPREHENSIVE workflows with multiple fields and views - don't create minimal workflows
+9. Think about all the data that needs to be collected and managed in the workflow
+10. DO NOT reuse the same viewId for multiple steps - each step needs its own view
+11. IMPORTANT: Use the exact viewIds and fieldIds returned from previous tool calls - do not make up IDs
 
 VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, Decimal, Dropdown, Email, Integer, Location, ReferenceValues, DataReferenceSingle, DataReferenceMulti, CaseReferenceSingle, CaseReferenceMulti, Percentage, Phone, RadioButtons, RichText, Status, Text, TextArea, Time, URL, UserReference
 - Use "Integer" for whole numbers, "Decimal" for numbers with decimals
@@ -715,10 +720,32 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 break;
               }
 
+              // Only force saveCase if this is a new workflow creation, not for simple operations
+              const isNewWorkflowCreation = !currentCaseId;
+              const hasDeleteOperations = toolCallHistory.some((tc) =>
+                tc.tool.startsWith("delete"),
+              );
+
+              console.log("=== Loop completion check ===");
+              console.log("saveCaseCalled:", saveCaseCalled);
+              console.log("isNewWorkflowCreation:", isNewWorkflowCreation);
+              console.log("currentCaseId:", currentCaseId);
+              console.log("hasDeleteOperations:", hasDeleteOperations);
+              console.log(
+                "toolCallHistory:",
+                toolCallHistory.map((tc) => tc.tool),
+              );
+
               // If saveCase wasn't called and we haven't reached max iterations,
-              // add a message to force the LLM to continue with workflow completion
-              if (!saveCaseCalled) {
-                console.log("saveCase not called - adding completion reminder");
+              // and this is a new workflow creation (not a simple operation like field deletion)
+              if (
+                !saveCaseCalled &&
+                isNewWorkflowCreation &&
+                !hasDeleteOperations
+              ) {
+                console.log(
+                  "saveCase not called - adding completion reminder for new workflow",
+                );
 
                 // Check what has been created so far
                 const hasFields = toolCallHistory.some(
@@ -816,6 +843,11 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                   };
                 }
                 messages.push(completionMessage);
+              } else if (!saveCaseCalled && !isNewWorkflowCreation) {
+                // For existing workflows, don't force saveCase unless it's a structural change
+                console.log(
+                  "Existing workflow - not forcing saveCase for simple operations",
+                );
               }
 
               // Continue loop for next tool call or final message
@@ -865,8 +897,18 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
         const saveCaseWasCalled = toolCallHistory.some(
           (tc) => tc.tool === "saveCase",
         );
+        const isNewWorkflowCreation = !currentCaseId;
 
-        if (!saveCaseWasCalled) {
+        console.log("=== Final completion check ===");
+        console.log("saveCaseWasCalled:", saveCaseWasCalled);
+        console.log("isNewWorkflowCreation:", isNewWorkflowCreation);
+        console.log("currentCaseId:", currentCaseId);
+        console.log(
+          "toolCallHistory:",
+          toolCallHistory.map((tc) => tc.tool),
+        );
+
+        if (!saveCaseWasCalled && isNewWorkflowCreation) {
           console.warn(
             "WARNING: saveCase was never called - workflow is incomplete!",
           );
@@ -876,13 +918,17 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
           await processor.sendText(
             "The workflow model with stages, processes, and steps was not created.\n",
           );
-        } else {
+        } else if (saveCaseWasCalled) {
           console.log(
             "SUCCESS: saveCase was called - workflow creation completed!",
           );
           await processor.sendText(
             "\n✅ Workflow creation completed successfully!\n",
           );
+        } else if (!saveCaseWasCalled && !isNewWorkflowCreation) {
+          // For existing workflows, simple operations don't need saveCase
+          console.log("Operation completed successfully on existing workflow");
+          await processor.sendText("\n✅ Operation completed successfully!\n");
         }
 
         await processor.sendDone();

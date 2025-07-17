@@ -1017,7 +1017,8 @@ export function createSharedTools(pool: Pool): (
     },
     {
       name: "deleteField",
-      description: "Deletes a field.",
+      description:
+        "Deletes a field and removes it from all views where it's used.",
       parameters: {
         type: "object",
         properties: {
@@ -1032,31 +1033,72 @@ export function createSharedTools(pool: Pool): (
 
         const { id } = params;
 
-        // First, get the field name before deleting
-        const getFieldQuery = `SELECT name FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
+        // First, get the field name and caseID before deleting
+        const getFieldQuery = `SELECT name, caseID FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
         const getFieldResult = await pool.query(getFieldQuery, [id]);
         if (getFieldResult.rowCount === 0) {
           console.error(`deleteField ERROR: No field found with id ${id}`);
           throw new Error(`No field found with id ${id}`);
         }
         const fieldName = getFieldResult.rows[0].name;
+        const caseID = getFieldResult.rows[0].caseID;
 
-        const query = `DELETE FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
-        console.log("deleteField query:", query);
+        // Find all views that use this field and remove the field from them
+        const getViewsQuery = `SELECT id, name, model FROM "${DB_TABLES.VIEWS}" WHERE caseID = $1`;
+        const viewsResult = await pool.query(getViewsQuery, [caseID]);
+
+        let updatedViewsCount = 0;
+        for (const view of viewsResult.rows) {
+          try {
+            const viewModel = JSON.parse(view.model);
+            if (viewModel.fields && Array.isArray(viewModel.fields)) {
+              // Remove the field from the view's fields array
+              const originalFieldCount = viewModel.fields.length;
+              viewModel.fields = viewModel.fields.filter(
+                (fieldRef: any) => fieldRef.fieldId !== id,
+              );
+
+              // Only update if the field was actually removed
+              if (viewModel.fields.length < originalFieldCount) {
+                const updateViewQuery = `UPDATE "${DB_TABLES.VIEWS}" SET model = $1 WHERE id = $2`;
+                await pool.query(updateViewQuery, [
+                  JSON.stringify(viewModel),
+                  view.id,
+                ]);
+                updatedViewsCount++;
+                console.log(
+                  `Removed field ${id} from view ${view.name} (ID: ${view.id})`,
+                );
+              }
+            }
+          } catch (error) {
+            console.error(`Error processing view ${view.name}:`, error);
+          }
+        }
+
+        // Now delete the field from the fields table
+        const deleteFieldQuery = `DELETE FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
+        console.log("deleteField query:", deleteFieldQuery);
         console.log("deleteField query values:", [id]);
 
-        const result = await pool.query(query, [id]);
+        const result = await pool.query(deleteFieldQuery, [id]);
         if (result.rowCount === 0) {
           console.error(`deleteField ERROR: No field found with id ${id}`);
           throw new Error(`No field found with id ${id}`);
         }
 
-        console.log("deleteField successful:", { id, name: fieldName });
+        console.log("deleteField successful:", {
+          id,
+          name: fieldName,
+          updatedViewsCount,
+          caseID,
+        });
         return {
           success: true,
           deletedId: id,
           deletedName: fieldName,
           type: "field",
+          updatedViewsCount,
         };
       },
     },

@@ -42,8 +42,9 @@ DO NOT use saveCase for:
 - Adding fields to existing views
 - Updating view configurations
 - Simple modifications that don't change the workflow structure
+- Deleting fields, views, or other simple operations
 
-For these operations, use the specific tools (saveView, saveFields) instead.
+For these operations, use the specific tools (saveView, saveFields, deleteField, deleteView) instead.
 
 Available tools are listed below with their descriptions.`;
 
