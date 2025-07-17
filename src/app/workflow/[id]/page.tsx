@@ -956,6 +956,7 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+      setModel(updatedModel);
       setIsAddStageModalOpen(false);
 
       // Dispatch model updated event for preview
@@ -1074,8 +1075,9 @@ export default function WorkflowPage() {
         : stage,
     );
 
-    const updatedModel = {
-      ...workflowModel,
+    const updatedModel: ComposedModel = {
+      name: selectedCase.name,
+      description: selectedCase.description,
       stages: updatedStages,
     };
 
@@ -1101,6 +1103,7 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
+      setModel(updatedModel);
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -1133,8 +1136,9 @@ export default function WorkflowPage() {
         : stage,
     );
 
-    const updatedModel = {
-      ...workflowModel,
+    const updatedModel: ComposedModel = {
+      name: selectedCase.name,
+      description: selectedCase.description,
       stages: updatedStages,
     };
 
@@ -1160,15 +1164,7 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
-      // Update the model state to reflect the changes
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedStages,
-            }
-          : null,
-      );
+      setModel(updatedModel);
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -1192,8 +1188,9 @@ export default function WorkflowPage() {
         : stage,
     );
 
-    const updatedModel = {
-      ...workflowModel,
+    const updatedModel: ComposedModel = {
+      name: selectedCase.name,
+      description: selectedCase.description,
       stages: updatedStages,
     };
 
@@ -1219,15 +1216,7 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
-      // Update the model state to reflect the changes
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedStages,
-            }
-          : null,
-      );
+      setModel(updatedModel);
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -1244,8 +1233,9 @@ export default function WorkflowPage() {
       (stage) => stage.id !== stageId,
     );
 
-    const updatedModel = {
-      ...workflowModel,
+    const updatedModel: ComposedModel = {
+      name: selectedCase.name,
+      description: selectedCase.description,
       stages: updatedStages,
     };
 
@@ -1271,15 +1261,7 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
-      // Update the model state to reflect the changes
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedStages,
-            }
-          : null,
-      );
+      setModel(updatedModel);
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
