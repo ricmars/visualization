@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { pool, initializeDatabase } from "../../lib/db";
+import { checkpointManager } from "../../lib/db";
 import {
   DB_COLUMNS,
   DB_TABLES,
@@ -114,6 +115,81 @@ function validateCase(data: CaseInput) {
   }
 }
 
+// Enhanced checkpoint creation for database operations
+async function createDatabaseCheckpoint(
+  operation: string,
+  tableName: string,
+  caseId?: number,
+  description?: string,
+): Promise<string | null> {
+  try {
+    // Only create checkpoints for modification operations on tracked tables
+    const modificationOps = ["POST", "PUT", "DELETE"];
+    const trackedTables = [DB_TABLES.CASES, DB_TABLES.FIELDS, DB_TABLES.VIEWS];
+
+    if (
+      !modificationOps.includes(operation) ||
+      !trackedTables.includes(tableName as any)
+    ) {
+      return null;
+    }
+
+    // For operations without a caseId, try to determine it from context
+    let checkpointCaseId = caseId;
+    if (!checkpointCaseId && tableName === DB_TABLES.CASES) {
+      // For case operations, we'll set the caseId after the operation
+      checkpointCaseId = 1; // Temporary, will be updated
+    }
+
+    if (!checkpointCaseId) {
+      console.log("No case ID available for checkpoint creation, skipping");
+      return null;
+    }
+
+    const checkpointDescription =
+      description || `Database ${operation} on ${tableName}`;
+    const userCommand = `Database API: ${operation} ${tableName}`;
+
+    return await checkpointManager.beginCheckpoint(
+      checkpointCaseId,
+      checkpointDescription,
+      userCommand,
+      "API",
+    );
+  } catch (error) {
+    console.warn("Failed to create database checkpoint:", error);
+    return null;
+  }
+}
+
+// Enhanced operation logging for database changes
+async function logDatabaseOperation(
+  checkpointId: string,
+  operation: "insert" | "update" | "delete",
+  tableName: string,
+  primaryKey: any,
+  previousData?: any,
+  caseId?: number,
+): Promise<void> {
+  try {
+    if (!caseId) {
+      console.warn("No case ID for operation logging, skipping");
+      return;
+    }
+
+    await checkpointManager.logOperation(
+      checkpointId,
+      caseId,
+      operation,
+      tableName,
+      primaryKey,
+      previousData,
+    );
+  } catch (error) {
+    console.warn("Failed to log database operation:", error);
+  }
+}
+
 function validateField(data: FieldInput) {
   if (!data.name) throw new Error("Missing required field: name");
   if (!data.type) throw new Error("Missing required field: type");
@@ -164,7 +240,7 @@ function validateView(data: ViewInput) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     await ensureInitialized();
     const { searchParams } = new URL(request.url);
@@ -284,10 +360,33 @@ export async function POST(request: Request) {
           ],
         );
 
+        const newCaseId = result.rows[0].id;
         console.log("Case created successfully:", {
-          id: result.rows[0].id,
+          id: newCaseId,
           name: result.rows[0].name,
         });
+
+        // Create checkpoint for case creation
+        const checkpointId = await createDatabaseCheckpoint(
+          "POST",
+          table,
+          newCaseId,
+          `Create new case: ${name}`,
+        );
+
+        // Log the insert operation
+        if (checkpointId) {
+          await logDatabaseOperation(
+            checkpointId,
+            "insert",
+            table,
+            { id: newCaseId },
+            undefined,
+            newCaseId,
+          );
+          // Commit the checkpoint immediately for UI operations
+          await checkpointManager.commitCheckpoint(checkpointId);
+        }
 
         return NextResponse.json(result.rows[0]);
       }
@@ -356,6 +455,31 @@ export async function POST(request: Request) {
             required || false,
           ],
         );
+
+        const newFieldId = result.rows[0].id;
+
+        // Create checkpoint for field creation
+        const checkpointId = await createDatabaseCheckpoint(
+          "POST",
+          table,
+          validatedCaseId,
+          `Create field: ${name}`,
+        );
+
+        // Log the insert operation
+        if (checkpointId) {
+          await logDatabaseOperation(
+            checkpointId,
+            "insert",
+            table,
+            { id: newFieldId },
+            undefined,
+            validatedCaseId,
+          );
+          // Commit the checkpoint immediately for UI operations
+          await checkpointManager.commitCheckpoint(checkpointId);
+        }
+
         return NextResponse.json(result.rows[0]);
       }
 
@@ -373,6 +497,31 @@ export async function POST(request: Request) {
           `INSERT INTO "${DB_TABLES.VIEWS}" (name, model, caseid) VALUES ($1, $2, $3) RETURNING *`,
           [name, stringifyModel(model), validatedCaseId],
         );
+
+        const newViewId = result.rows[0].id;
+
+        // Create checkpoint for view creation
+        const checkpointId = await createDatabaseCheckpoint(
+          "POST",
+          table,
+          validatedCaseId,
+          `Create view: ${name}`,
+        );
+
+        // Log the insert operation
+        if (checkpointId) {
+          await logDatabaseOperation(
+            checkpointId,
+            "insert",
+            table,
+            { id: newViewId },
+            undefined,
+            validatedCaseId,
+          );
+          // Commit the checkpoint immediately for UI operations
+          await checkpointManager.commitCheckpoint(checkpointId);
+        }
+
         return NextResponse.json(result.rows[0]);
       }
 
@@ -433,6 +582,8 @@ export async function PUT(request: Request) {
       case DB_TABLES.CASES: {
         const caseData = data.data || data;
         const { name, description, model } = caseData;
+        const validatedId = ensureIntegerId(id);
+
         console.log("Processing case update:", {
           name,
           description,
@@ -474,26 +625,72 @@ export async function PUT(request: Request) {
           );
         }
 
-        const validatedId = ensureIntegerId(id);
-        const result = await pool.query(
-          `UPDATE "${table}" SET name = $1, description = $2, model = $3 WHERE id = $4 RETURNING *`,
-          [name, description, model, validatedId],
+        // Create checkpoint for workflow model update
+        const checkpointId = await createDatabaseCheckpoint(
+          "PUT",
+          table,
+          validatedId,
+          `Update workflow model for case ${validatedId}`,
         );
 
-        console.log("Case update result:", {
-          rowCount: result.rowCount,
-          rows: result.rows,
-        });
+        try {
+          // Capture previous data before update
+          let previousData = null;
+          if (checkpointId) {
+            const previousResult = await pool.query(
+              `SELECT * FROM "${table}" WHERE id = $1`,
+              [validatedId],
+            );
+            previousData = previousResult.rows[0] || null;
+          }
 
-        if (result.rowCount === 0) {
-          console.error("No case found with id:", validatedId);
-          return NextResponse.json(
-            { error: "Case not found" },
-            { status: 404 },
+          const result = await pool.query(
+            `UPDATE "${table}" SET name = $1, description = $2, model = $3 WHERE id = $4 RETURNING *`,
+            [name, description, model, validatedId],
           );
-        }
 
-        return NextResponse.json({ data: result.rows[0] });
+          console.log("Case update result:", {
+            rowCount: result.rowCount,
+            rows: result.rows,
+          });
+
+          if (result.rowCount === 0) {
+            if (checkpointId) {
+              await checkpointManager.rollbackCheckpoint(checkpointId);
+            }
+            console.error("No case found with id:", validatedId);
+            return NextResponse.json(
+              { error: "Case not found" },
+              { status: 404 },
+            );
+          }
+
+          // Log the operation for checkpoint tracking
+          if (checkpointId && previousData) {
+            await logDatabaseOperation(
+              checkpointId,
+              "update",
+              table,
+              { id: validatedId },
+              previousData,
+              validatedId,
+            );
+            // Commit the checkpoint immediately for UI operations
+            await checkpointManager.commitCheckpoint(checkpointId);
+          }
+
+          return NextResponse.json({ data: result.rows[0] });
+        } catch (updateError) {
+          // Rollback checkpoint on error
+          if (checkpointId) {
+            try {
+              await checkpointManager.rollbackCheckpoint(checkpointId);
+            } catch (rollbackError) {
+              console.error("Failed to rollback checkpoint:", rollbackError);
+            }
+          }
+          throw updateError;
+        }
       }
 
       case DB_TABLES.FIELDS: {
@@ -594,8 +791,36 @@ export async function DELETE(request: Request) {
     }
 
     const validatedId = ensureIntegerId(id);
-    let query;
 
+    // Determine case ID for checkpoint (for Fields and Views, we need to find the parent case)
+    let caseId = validatedId;
+    if (table === DB_TABLES.FIELDS || table === DB_TABLES.VIEWS) {
+      const caseResult = await pool.query(
+        `SELECT caseid FROM "${table}" WHERE id = $1`,
+        [validatedId],
+      );
+      caseId = caseResult.rows[0]?.caseid || validatedId;
+    }
+
+    // Create checkpoint for deletion
+    const checkpointId = await createDatabaseCheckpoint(
+      "DELETE",
+      table,
+      caseId,
+      `Delete ${table.toLowerCase().slice(0, -1)} ${validatedId}`,
+    );
+
+    // Capture previous data before deletion
+    let previousData = null;
+    if (checkpointId) {
+      const previousResult = await pool.query(
+        `SELECT * FROM "${table}" WHERE id = $1`,
+        [validatedId],
+      );
+      previousData = previousResult.rows[0] || null;
+    }
+
+    let query;
     if (table === DB_TABLES.CASES) {
       query = `
         DELETE FROM "${DB_TABLES.CASES}"
@@ -621,7 +846,24 @@ export async function DELETE(request: Request) {
     console.log("Query result:", result.rows);
 
     if (result.rows.length === 0) {
+      if (checkpointId) {
+        await checkpointManager.rollbackCheckpoint(checkpointId);
+      }
       return NextResponse.json({ error: "Record not found" }, { status: 404 });
+    }
+
+    // Log the delete operation
+    if (checkpointId && previousData) {
+      await logDatabaseOperation(
+        checkpointId,
+        "delete",
+        table,
+        { id: validatedId },
+        previousData,
+        caseId,
+      );
+      // Commit the checkpoint immediately for UI operations
+      await checkpointManager.commitCheckpoint(checkpointId);
     }
 
     return NextResponse.json({ data: result.rows[0] });

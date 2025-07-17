@@ -38,17 +38,19 @@ The application includes a universal database-backed checkpoint system with comp
 
 #### How It Works
 
-1. **Both LLM and MCP interfaces** automatically create checkpoint sessions for database modifications
-2. All database changes are captured in `undo_log` table with inverse operations
-3. Changes can be committed (permanent) or rolled back (reverted)
-4. Chat interface shows active checkpoints with manual controls (regardless of source)
-5. Checkpoints work at the **tool level** - any interface using the tools gets checkpoint protection
+1. **Universal Database-Layer Tracking**: All database modifications automatically create checkpoints at the `/api/database` layer
+2. **LLM Sessions**: Group all AI actions from a single user prompt into one checkpoint for atomic rollback
+3. **UI Operations**: Each workflow modification (add stage, delete field, etc.) creates an individual checkpoint
+4. **MCP Interface**: Each tool execution creates an individual checkpoint automatically
+5. **No Bypass Possible**: Every database change is tracked regardless of source (UI, AI, MCP, API)
+6. **Referential Integrity**: Checkpoint restores maintain consistency across workflows, fields, and views
 
 #### Supported Interfaces
 
-- **LLM Chat Interface**: Automatic checkpoints for all tool executions
-- **MCP Interface**: Automatic checkpoints for database modification tools
-- **API Endpoints**: Manual checkpoint management
+- **UI Operations**: Direct `/api/database` calls with automatic individual checkpoints
+- **LLM Chat Interface**: Session-based checkpoints grouping related AI actions
+- **MCP Interface**: Automatic individual checkpoints for each tool execution
+- **API Endpoints**: Manual checkpoint management and restoration
 
 #### Changes History
 
@@ -56,7 +58,7 @@ The system maintains a complete history of all checkpoints with:
 
 - **Original user commands** that triggered each checkpoint
 - **Date/time** when each action was performed
-- **Source identification** (LLM vs MCP vs API)
+- **Source identification** (UI vs LLM vs MCP vs API)
 - **Tools executed** during each checkpoint session
 - **Number of changes** made in each checkpoint
 - **Point-in-time restoration** to any historical checkpoint
@@ -73,7 +75,7 @@ Access via:
   - `description`: Human-readable description
   - `user_command`: Original command that triggered the checkpoint
   - `status`: 'active', 'historical', 'committed', 'rolled_back'
-  - `source`: 'LLM', 'MCP', 'API'
+  - `source`: 'UI', 'LLM', 'MCP', 'API'
   - `tools_executed`: JSON array of tools used
   - `changes_count`: Number of database changes
   - `created_at`, `finished_at`: Timestamps
@@ -112,6 +114,13 @@ Access via:
   ]
 }
 ```
+
+#### Data Consistency Benefits
+
+- **Prevents Orphaned References**: Checkpoint restores automatically maintain referential integrity
+- **Universal Tracking**: No operation can bypass checkpoint system - all DB changes are captured
+- **Atomic Rollbacks**: Related changes (workflows, fields, views) are restored together
+- **Root Cause Prevention**: Eliminates inconsistency issues where references point to deleted entities
 
 #### Troubleshooting Checkpoints
 

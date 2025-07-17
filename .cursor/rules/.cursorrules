@@ -158,19 +158,20 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 
 ### Checkpoint System Patterns
 
-#### Universal Database-Backed Change Tracking
+#### Universal Database-Layer Change Tracking
 
-- All database tool executions (LLM and MCP) automatically use checkpoint sessions
-- Use `createCheckpointSharedTools()` instead of `createSharedTools()` for database tools
-- Checkpoint sessions begin automatically in both `/api/openai/route.ts` and `/api/mcp/route.ts`
-- Changes are captured in `undo_log` table with inverse operations for all interfaces
+- **All database modifications are automatically tracked** at the database API layer (`/api/database`)
+- **UI Operations**: Direct calls to `/api/database` automatically create individual checkpoints
+- **LLM Operations**: Session-based checkpoints group all AI actions from a single user prompt
+- **MCP Operations**: Individual checkpoints created automatically for each tool execution
+- Changes are captured in `undo_log` table with inverse operations for **all interfaces**
 
 #### Working with Checkpoints
 
-- **Never disable checkpoint wrapping** for database modification tools
-- Checkpoint sessions are managed by `CheckpointSessionManager`
-- Use `checkpointSessionManager.beginSession()` for custom operations
-- Always commit or rollback sessions to prevent orphaned checkpoints
+- **Database Layer**: Automatic checkpoint creation for all POST/PUT/DELETE operations
+- **LLM Sessions**: Use `checkpointSessionManager.beginSession()` to group related AI actions
+- **UI/MCP Operations**: Individual automatic checkpoints per operation
+- **No Bypass Possible**: All database modifications are universally tracked regardless of source
 
 #### Checkpoint Database Schema
 
@@ -179,12 +180,29 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - Status values: 'active', 'committed', 'rolled_back'
 - Operations: 'insert', 'update', 'delete'
 
+#### Architecture Design Principles
+
+- **Single Point of Control**: All checkpoint logic centralized at database layer
+- **Universal Coverage**: UI, LLM, and MCP operations all tracked automatically
+- **Referential Integrity**: Checkpoint restores maintain consistency across related data
+- **Source Identification**: Each checkpoint tagged with source (UI, LLM, MCP, API)
+- **Logical Grouping**: LLM sessions group related AI actions; UI/MCP create individual checkpoints
+
 #### Error Handling with Checkpoints
 
-- Automatic rollback on LLM tool execution failures
-- Manual rollback available via chat interface or API
-- Rollback operations applied in reverse chronological order
-- Failed rollback operations are logged but don't stop the process
+- **LLM Sessions**: Automatic rollback on AI tool execution failures
+- **UI/MCP Operations**: Individual checkpoints committed immediately on success
+- **Manual Controls**: Rollback/restore available via chat interface or API
+- **Rollback Operations**: Applied in reverse chronological order with full transaction safety
+- **Failed Operations**: Logged but don't stop the rollback process
+
+#### Development Guidelines
+
+- **UI Development**: Use direct `/api/database` calls - checkpoints are automatic
+- **LLM Integration**: Use `checkpointSessionManager` to group related AI actions
+- **MCP Development**: Individual checkpoints created automatically per tool execution
+- **Database Modifications**: All POST/PUT/DELETE operations on Cases/Fields/Views are tracked
+- **Testing**: Use checkpoint history API to verify tracking behavior
 
 #### Performance Considerations
 

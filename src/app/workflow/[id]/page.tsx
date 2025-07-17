@@ -520,11 +520,6 @@ export default function WorkflowPage() {
     try {
       console.log("=== Starting Steps Update ===");
       console.log("Case ID:", selectedCase.id);
-      console.log("Current Model:", {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        stages: model?.stages?.length || 0,
-      });
       console.log("Updated Stages:", {
         count: updatedStages.length,
         stages: updatedStages.map((s) => ({
@@ -540,20 +535,13 @@ export default function WorkflowPage() {
         name: selectedCase.name,
       };
 
+      // Direct database call - database layer will handle checkpoints
       const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
       const requestBody = {
         name: selectedCase.name,
         description: selectedCase.description,
         model: JSON.stringify(updatedModel),
       };
-
-      console.log("=== Making Database Update Request ===");
-      console.log("Request URL:", requestUrl);
-      console.log("Request Method: PUT");
-      console.log("Request Body:", {
-        ...requestBody,
-        model: "Stringified model data (truncated for logging)",
-      });
 
       const response = await fetch(requestUrl, {
         method: "PUT",
@@ -565,23 +553,12 @@ export default function WorkflowPage() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("=== Database Update Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        console.error("Request Details:", {
-          url: requestUrl,
-          method: "PUT",
-          body: requestBody,
-        });
         throw new Error(
           `Failed to update case: ${response.status} ${errorText}`,
         );
       }
 
-      const responseData = await response.json();
-      console.log("=== Database Update Successful ===");
-      console.log("Response Data:", responseData);
+      const _responseData = await response.json();
 
       // Update the case and model state
       setSelectedCase({
@@ -597,22 +574,11 @@ export default function WorkflowPage() {
           : null,
       );
 
-      console.log("=== Local State Updated ===");
-      console.log("New Model:", {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        stages: updatedModel.stages.length,
-      });
-
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("=== Error in Steps Update ===");
       console.error("Error:", error);
-      console.error(
-        "Stack:",
-        error instanceof Error ? error.stack : "No stack trace",
-      );
       throw error;
     }
   };
@@ -914,23 +880,14 @@ export default function WorkflowPage() {
       stages: updatedStages,
     };
 
-    addCheckpoint(`Added stage: ${stageData.name}`, updatedModel);
-
     try {
+      // Direct database call - database layer will handle checkpoints
       const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
       const requestBody = {
         name: selectedCase.name,
         description: selectedCase.description,
         model: JSON.stringify(updatedModel),
       };
-
-      console.log("=== Making Database Update Request ===");
-      console.log("Request URL:", requestUrl);
-      console.log("Request Method: PUT");
-      console.log("Request Body:", {
-        ...requestBody,
-        model: "Stringified model data (truncated for logging)",
-      });
 
       const response = await fetch(requestUrl, {
         method: "PUT",
@@ -942,21 +899,22 @@ export default function WorkflowPage() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("=== Database Update Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        console.error("Request Details:", {
-          url: requestUrl,
-          method: "PUT",
-          body: requestBody,
-        });
         throw new Error(`Failed to add stage: ${response.status} ${errorText}`);
       }
 
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
+      const _responseData = await response.json();
+      setSelectedCase({
+        ...selectedCase,
+        model: JSON.stringify(updatedModel),
+      });
+      setModel((prev) =>
+        prev
+          ? {
+              ...prev,
+              stages: updatedModel.stages,
+            }
+          : null,
+      );
       setIsAddStageModalOpen(false);
 
       // Dispatch model updated event for preview
