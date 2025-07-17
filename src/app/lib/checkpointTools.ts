@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { checkpointManager } from "./db";
 import { DB_TABLES } from "../types/database";
-import { createSharedTools } from "./sharedTools";
+import { createSharedTools, SharedTool } from "./sharedTools";
 
 // Thread-local storage for current checkpoint
 let currentCheckpointId: string | null = null;
@@ -19,8 +19,8 @@ export function getCurrentCheckpoint(): string | null {
 export async function captureOperation(
   operation: "insert" | "update" | "delete",
   tableName: string,
-  primaryKey: any,
-  previousData?: any,
+  primaryKey: unknown,
+  previousData?: unknown,
 ): Promise<void> {
   if (!currentCheckpointId) {
     console.log("No active checkpoint, skipping operation capture");
@@ -378,7 +378,7 @@ export function createCheckpointSharedTools(pool: Pool) {
 }
 
 // Convert shared tools to LLM tools format (same as in llmTools.ts)
-export function convertToLLMTools(sharedTools: any[]) {
+export function convertToLLMTools(sharedTools: SharedTool<any, any>[]) {
   return sharedTools.map((tool) => ({
     name: tool.name,
     description: tool.description,
@@ -388,7 +388,10 @@ export function convertToLLMTools(sharedTools: any[]) {
 }
 
 // Create a checkpoint wrapper for a single tool
-export function createCheckpointWrapper(tool: any, pool: Pool) {
+export function createCheckpointWrapper(
+  tool: SharedTool<any, any>,
+  pool: Pool,
+) {
   // Only wrap database modification tools
   const modificationTools = [
     "saveFields",

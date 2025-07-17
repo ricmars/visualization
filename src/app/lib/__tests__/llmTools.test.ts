@@ -68,17 +68,14 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const createCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "createCase",
       );
       expect(createCaseTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (createCaseTool!.execute as any)({
-          name: "Test Case",
-          description: "Test Description",
-        });
+      const result = await (createCaseTool!.execute as any)({
+        name: "Test Case",
+        description: "Test Description",
+      });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Cases"'),
@@ -94,13 +91,11 @@ describe("llmTools", () => {
 
     it("should throw error for missing name", async () => {
       const createCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "createCase",
       );
       expect(createCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (createCaseTool!.execute as any)({
           description: "Test Description",
         }),
@@ -109,13 +104,11 @@ describe("llmTools", () => {
 
     it("should throw error for missing description", async () => {
       const createCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "createCase",
       );
       expect(createCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (createCaseTool!.execute as any)({
           name: "Test Case",
         }),
@@ -141,19 +134,16 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveCaseTool!.execute as any)({
-          id: 1,
-          name: "Updated Case",
-          description: "Updated Description",
-          model: { stages: [] },
-        });
+      const result = await (saveCaseTool!.execute as any)({
+        id: 1,
+        name: "Updated Case",
+        description: "Updated Description",
+        model: { stages: [] },
+      });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE "Cases"'),
@@ -171,13 +161,11 @@ describe("llmTools", () => {
 
     it("should throw error when id is missing", async () => {
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveCaseTool!.execute as any)({
           name: "Test Case",
           description: "Test Description",
@@ -193,13 +181,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveCaseTool!.execute as any)({
           id: 1,
           name: "Test Case",
@@ -237,13 +223,11 @@ describe("llmTools", () => {
 
     it("should throw error when model is missing stages", async () => {
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveCaseTool!.execute as any)({
           id: 1,
           name: "Test Case",
@@ -255,13 +239,11 @@ describe("llmTools", () => {
 
     it("should throw error when model is null", async () => {
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveCaseTool!.execute as any)({
           id: 1,
           name: "Test Case",
@@ -287,7 +269,6 @@ describe("llmTools", () => {
       });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
@@ -295,8 +276,7 @@ describe("llmTools", () => {
       // Spy on console.warn
       const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
 
-      await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (saveCaseTool!.execute as any)({
+      await (saveCaseTool!.execute as any)({
         id: 1,
         name: "Test Case",
         description: "Test Description",
@@ -350,13 +330,11 @@ describe("llmTools", () => {
       });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (saveCaseTool!.execute as any)({
+      await (saveCaseTool!.execute as any)({
         id: 1,
         name: "Test Case",
         description: "Test Description",
@@ -402,13 +380,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ id: 1 }] });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveCaseTool!.execute as any)({
           id: 1,
           name: "Test Case",
@@ -469,7 +445,6 @@ describe("llmTools", () => {
       });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
@@ -485,14 +460,12 @@ describe("llmTools", () => {
         ],
       };
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveCaseTool!.execute as any)({
-          id: 1,
-          name: "Test Case",
-          description: "Test Description",
-          model: inputModel,
-        });
+      const result = await (saveCaseTool!.execute as any)({
+        id: 1,
+        name: "Test Case",
+        description: "Test Description",
+        model: inputModel,
+      });
 
       expect(result).toEqual({
         id: 1,
@@ -518,19 +491,16 @@ describe("llmTools", () => {
       });
 
       const saveCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveCase",
       );
       expect(saveCaseTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveCaseTool!.execute as any)({
-          id: 1,
-          name: "Test Case",
-          description: "Test Description",
-          model: { stages: [] },
-        });
+      const result = await (saveCaseTool!.execute as any)({
+        id: 1,
+        name: "Test Case",
+        description: "Test Description",
+        model: { stages: [] },
+      });
 
       expect(result).toEqual({
         id: 1,
@@ -585,34 +555,31 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult2); // Second field insert
 
       const saveFieldsTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveFields",
       );
       expect(saveFieldsTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldsTool!.execute as any)({
-          fields: [
-            {
-              name: "field1",
-              type: "Text",
-              caseID: 1,
-              label: "Field 1",
-              description: "Test Description 1",
-            },
-            {
-              name: "field2",
-              type: "Email",
-              caseID: 1,
-              label: "Field 2",
-              description: "Test Description 2",
-              primary: true,
-              required: true,
-              order: 1,
-            },
-          ],
-        });
+      const result = await (saveFieldsTool!.execute as any)({
+        fields: [
+          {
+            name: "field1",
+            type: "Text",
+            caseID: 1,
+            label: "Field 1",
+            description: "Test Description 1",
+          },
+          {
+            name: "field2",
+            type: "Email",
+            caseID: 1,
+            label: "Field 2",
+            description: "Test Description 2",
+            primary: true,
+            required: true,
+            order: 1,
+          },
+        ],
+      });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Fields"'),
@@ -706,32 +673,29 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveFieldsTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveFields",
       );
       expect(saveFieldsTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveFieldsTool!.execute as any)({
-          fields: [
-            {
-              name: "existingField",
-              type: "Text",
-              caseID: 1,
-              label: "Existing Field",
-              description: "Existing Description",
-            },
-            {
-              name: "newField",
-              type: "Email",
-              caseID: 1,
-              label: "New Field",
-              description: "New Description",
-              order: 1,
-            },
-          ],
-        });
+      const result = await (saveFieldsTool!.execute as any)({
+        fields: [
+          {
+            name: "existingField",
+            type: "Text",
+            caseID: 1,
+            label: "Existing Field",
+            description: "Existing Description",
+          },
+          {
+            name: "newField",
+            type: "Email",
+            caseID: 1,
+            label: "New Field",
+            description: "New Description",
+            order: 1,
+          },
+        ],
+      });
 
       expect(result).toEqual({
         ids: [1, 2],
@@ -758,13 +722,11 @@ describe("llmTools", () => {
 
     it("should throw error for empty fields array", async () => {
       const saveFieldsTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveFields",
       );
       expect(saveFieldsTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveFieldsTool!.execute as any)({
           fields: [],
         }),
@@ -798,13 +760,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveFieldsTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveFields",
       );
       expect(saveFieldsTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveFieldsTool!.execute as any)({
           fields: [
             {
@@ -820,13 +780,11 @@ describe("llmTools", () => {
 
     it("should throw error for missing required parameters in array", async () => {
       const saveFieldsTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveFields",
       );
       expect(saveFieldsTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveFieldsTool!.execute as any)({
           fields: [
             {
@@ -853,18 +811,15 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveViewTool!.execute as any)({
-          name: "Test View",
-          caseID: 1,
-          model: { fields: [] },
-        });
+      const result = await (saveViewTool!.execute as any)({
+        name: "Test View",
+        caseID: 1,
+        model: { fields: [] },
+      });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO "Views"'),
@@ -893,19 +848,16 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce(mockResult);
 
       const saveViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (saveViewTool!.execute as any)({
-          id: 1,
-          name: "Updated View",
-          caseID: 1,
-          model: { fields: [] },
-        });
+      const result = await (saveViewTool!.execute as any)({
+        id: 1,
+        name: "Updated View",
+        caseID: 1,
+        model: { fields: [] },
+      });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE "Views"'),
@@ -921,13 +873,11 @@ describe("llmTools", () => {
 
     it("should throw error for missing required parameters", async () => {
       const saveViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "saveView",
       );
       expect(saveViewTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (saveViewTool!.execute as any)({
           // Missing required parameters
         }),
@@ -943,14 +893,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce({ rowCount: 1 }); // delete case
 
       const deleteCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteCase",
       );
       expect(deleteCaseTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (deleteCaseTool!.execute as any)({ id: 1 });
+      const result = await (deleteCaseTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "Fields"'),
@@ -974,13 +921,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce({ rowCount: 0 }); // delete case - no rows affected
 
       const deleteCaseTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteCase",
       );
       expect(deleteCaseTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (deleteCaseTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No case found with id 999");
     });
@@ -988,26 +933,32 @@ describe("llmTools", () => {
 
   describe("deleteField", () => {
     it("should delete a field successfully", async () => {
-      // Mock the SELECT query to get field name
+      // Mock the SELECT query to get field name and caseID
       mockQuery.mockResolvedValueOnce({
-        rows: [{ name: "Test Field" }],
+        rows: [{ name: "Test Field", caseID: 1 }],
         rowCount: 1,
+      });
+      // Mock the SELECT query to get views that might reference this field
+      mockQuery.mockResolvedValueOnce({
+        rows: [], // No views reference this field
+        rowCount: 0,
       });
       // Mock the DELETE query
       mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const deleteFieldTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteField",
       );
       expect(deleteFieldTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (deleteFieldTool!.execute as any)({ id: 1 });
+      const result = await (deleteFieldTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT name FROM "Fields"'),
+        expect.stringContaining('SELECT name, caseID FROM "Fields"'),
+        [1],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT id, name, model FROM "Views"'),
         [1],
       );
       expect(mockQuery).toHaveBeenCalledWith(
@@ -1019,6 +970,7 @@ describe("llmTools", () => {
         deletedId: 1,
         deletedName: "Test Field",
         type: "field",
+        updatedViewsCount: 0,
       });
     });
 
@@ -1030,13 +982,11 @@ describe("llmTools", () => {
       });
 
       const deleteFieldTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteField",
       );
       expect(deleteFieldTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (deleteFieldTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No field found with id 999");
     });
@@ -1053,14 +1003,11 @@ describe("llmTools", () => {
       mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const deleteViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteView",
       );
       expect(deleteViewTool).toBeDefined();
 
-      const result =
-        await // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (deleteViewTool!.execute as any)({ id: 1 });
+      const result = await (deleteViewTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('SELECT name FROM "Views"'),
@@ -1086,13 +1033,11 @@ describe("llmTools", () => {
       });
 
       const deleteViewTool = databaseTools.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (tool: any) => tool.name === "deleteView",
       );
       expect(deleteViewTool).toBeDefined();
 
       await expect(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (deleteViewTool!.execute as any)({ id: 999 }),
       ).rejects.toThrow("No view found with id 999");
     });

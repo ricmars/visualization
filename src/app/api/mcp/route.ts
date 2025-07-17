@@ -4,9 +4,10 @@ import {
   checkpointSessionManager,
   createCheckpointSharedTools,
 } from "../../lib/checkpointTools";
+import { SharedTool } from "../../lib/sharedTools";
 
 // Initialize shared tools
-let sharedTools: ReturnType<typeof createCheckpointSharedTools> = [];
+let sharedTools: SharedTool<any, any>[] = [];
 
 // Initialize tools when server starts
 async function initializeTools() {
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
         jsonrpc: "2.0",
         id: body.id,
         result: {
-          tools: sharedTools.map((tool: any) => ({
+          tools: sharedTools.map((tool: SharedTool<any, any>) => ({
             name: tool.name,
             description: tool.description,
             inputSchema: tool.parameters,
@@ -68,7 +69,9 @@ export async function POST(request: NextRequest) {
       console.log(`MCP HTTP Tool Call: ${name}`, args);
 
       // Find the tool
-      const tool = sharedTools.find((t: any) => t.name === name);
+      const tool = sharedTools.find(
+        (t: SharedTool<any, any>) => t.name === name,
+      );
       if (!tool) {
         return NextResponse.json(
           {
@@ -305,7 +308,7 @@ export async function GET() {
           name: "workflow-tools-server",
           version: "1.0.0",
         },
-        tools: sharedTools.map((tool: any) => ({
+        tools: sharedTools.map((tool: SharedTool<any, any>) => ({
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,

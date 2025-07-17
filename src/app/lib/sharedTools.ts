@@ -1055,7 +1055,7 @@ export function createSharedTools(pool: Pool): (
               // Remove the field from the view's fields array
               const originalFieldCount = viewModel.fields.length;
               viewModel.fields = viewModel.fields.filter(
-                (fieldRef: any) => fieldRef.fieldId !== id,
+                (fieldRef: { fieldId: number }) => fieldRef.fieldId !== id,
               );
 
               // Only update if the field was actually removed

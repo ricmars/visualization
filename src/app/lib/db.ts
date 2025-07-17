@@ -230,8 +230,8 @@ export interface CheckpointManager {
     checkpointId: string,
     operation: "insert" | "update" | "delete",
     tableName: string,
-    primaryKey: any,
-    previousData?: any,
+    primaryKey: unknown,
+    previousData?: unknown,
   ): Promise<void>;
   recordToolExecution(checkpointId: string, toolName: string): Promise<void>;
   getActiveCheckpoints(): Promise<
@@ -453,8 +453,8 @@ export const checkpointManager: CheckpointManager = {
     checkpointId: string,
     operation: "insert" | "update" | "delete",
     tableName: string,
-    primaryKey: any,
-    previousData?: any,
+    primaryKey: unknown,
+    previousData?: unknown,
   ): Promise<void> {
     await pool.query(
       `

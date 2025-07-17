@@ -14,8 +14,15 @@ import {
   Step,
   WorkflowModel,
   StepType,
-  Checkpoint,
 } from "../../types";
+
+// Local checkpoint interface for workflow change tracking
+interface WorkflowCheckpoint {
+  id: number;
+  timestamp: string;
+  description: string;
+  model: WorkflowModel;
+}
 import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import ViewsPanel from "../../components/ViewsPanel";
@@ -177,7 +184,7 @@ export default function WorkflowPage() {
   );
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [checkpoints, setCheckpoints] = useState<WorkflowCheckpoint[]>([]);
   const [isAddStageModalOpen, setIsAddStageModalOpen] = useState(false);
   const [isAddProcessModalOpen, setIsAddProcessModalOpen] = useState(false);
   const [isEditWorkflowModalOpen, setIsEditWorkflowModalOpen] = useState(false);
@@ -1517,7 +1524,7 @@ export default function WorkflowPage() {
     setMessages([]);
   };
 
-  const handleClearCheckpoints = () => {
+  const _handleClearCheckpoints = () => {
     if (
       confirm(
         "Are you sure you want to clear all changes history? This cannot be undone.",
@@ -1529,7 +1536,7 @@ export default function WorkflowPage() {
   };
 
   const addCheckpoint = (description: string, model: WorkflowModel) => {
-    const newCheckpoint: Checkpoint = {
+    const newCheckpoint: WorkflowCheckpoint = {
       id: parseInt(uuidv4().replace(/-/g, ""), 16),
       timestamp: new Date().toISOString(),
       description,
@@ -1566,7 +1573,7 @@ export default function WorkflowPage() {
           console.log("Processing saveFields response:", jsonData);
           console.log(
             "Field names:",
-            jsonData.fields.map((f: any) => f.name),
+            jsonData.fields.map((f: { name: string }) => f.name),
           );
         }
 
@@ -1650,7 +1657,7 @@ export default function WorkflowPage() {
     return text;
   };
 
-  const handleRestoreCheckpoint = (checkpoint: Checkpoint) => {
+  const _handleRestoreCheckpoint = (checkpoint: WorkflowCheckpoint) => {
     if (
       confirm(
         "Are you sure you want to restore this checkpoint? All changes after this point will be lost.",

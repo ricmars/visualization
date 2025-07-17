@@ -96,8 +96,8 @@ export function createStreamProcessor(
           const fieldCount =
             resultObj.fields?.length || resultObj.ids?.length || 0;
           const fieldNames =
-            resultObj.fields?.map(
-              (f: any) => f.name || f.label || "Unknown field",
+            (resultObj.fields as { name?: string; label?: string }[])?.map(
+              (f) => f.name || f.label || "Unknown field",
             ) || [];
           if (fieldNames.length > 0) {
             userMessage = `Created ${fieldCount} field${

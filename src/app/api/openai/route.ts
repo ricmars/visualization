@@ -15,6 +15,7 @@ import {
   checkpointSessionManager,
   createCheckpointSharedTools,
 } from "../../lib/checkpointTools";
+import { SharedTool } from "../../lib/sharedTools";
 
 // Add debug logging
 console.log("OpenAI Route Environment Variables:", {
@@ -229,7 +230,7 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     // Get checkpoint-aware database tools (unified approach)
     console.log("Getting checkpoint-aware database tools...");
     const sharedTools = createCheckpointSharedTools(pool); // Use unified checkpoint approach
-    let databaseTools = sharedTools.map((tool: any) => ({
+    let databaseTools = sharedTools.map((tool: SharedTool<any, any>) => ({
       name: tool.name,
       description: tool.description,
       parameters: tool.parameters,

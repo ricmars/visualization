@@ -10,6 +10,28 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+interface CheckpointSession {
+  id: string;
+  description: string;
+  startedAt: string;
+}
+
+interface CheckpointStatus {
+  activeSession?: CheckpointSession;
+  activeCheckpoints: Array<{
+    id: string;
+    description: string;
+    created_at: Date;
+    source?: string;
+    toolName?: string;
+  }>;
+  summary: {
+    total: number;
+    mcp: number;
+    llm: number;
+  };
+}
+
 interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
   messages: ChatMessage[];
@@ -51,8 +73,9 @@ export default function ChatInterface({
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [checkpointStatus, setCheckpointStatus] = useState<any>(null);
-  const [isCheckpointLoading, setIsCheckpointLoading] = useState(false);
+  const [checkpointStatus, setCheckpointStatus] =
+    useState<CheckpointStatus | null>(null);
+  const [_isCheckpointLoading, setIsCheckpointLoading] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
