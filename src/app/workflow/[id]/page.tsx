@@ -2399,7 +2399,7 @@ export default function WorkflowPage() {
 
       {/* Chat Panel */}
       <motion.div
-        className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden"
+        className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden text-sm"
         animate={{
           width: isChatPanelExpanded ? `${chatPanelWidth}px` : "0px",
           opacity: isChatPanelExpanded ? 1 : 0,
@@ -2408,6 +2408,7 @@ export default function WorkflowPage() {
         style={{
           minWidth: isChatPanelExpanded ? "300px" : "0px",
           maxWidth: "800px",
+          fontSize: "14px",
         }}
       >
         <div className="flex-1 overflow-hidden flex flex-col">
@@ -2438,15 +2439,32 @@ export default function WorkflowPage() {
           </div>
 
           {/* Chat Panel Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden flex flex-col">
             {activePanelTab === "chat" ? (
-              <ChatInterface
-                messages={messages}
-                onSendMessage={handleSendMessage}
-                onClear={handleClearChat}
-                isProcessing={isProcessing}
-                isLoading={false}
-              />
+              <>
+                {/* Chat Header */}
+                <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    Chat
+                  </h3>
+                  <button
+                    onClick={handleClearChat}
+                    className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-red-200 dark:hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 active:bg-red-50 dark:active:bg-red-900/20 transition-all duration-200 ease-in-out bg-white dark:bg-gray-900"
+                    title="Clear chat history"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                {/* Chat Interface */}
+                <div className="flex-1 overflow-hidden">
+                  <ChatInterface
+                    messages={messages}
+                    onSendMessage={handleSendMessage}
+                    isProcessing={isProcessing}
+                    isLoading={false}
+                  />
+                </div>
+              </>
             ) : (
               <ChangesPanel />
             )}

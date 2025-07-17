@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaEllipsisH, FaUndo, FaCheck, FaClock } from "react-icons/fa";
+import { FaUndo, FaCheck, FaClock, FaArrowUp } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 
@@ -36,7 +36,6 @@ interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
   messages: ChatMessage[];
   isLoading: boolean;
-  onClear: () => void;
   isProcessing: boolean;
 }
 
@@ -67,7 +66,6 @@ export default function ChatInterface({
   onSendMessage,
   messages,
   isLoading,
-  onClear,
   isProcessing,
 }: ChatInterfaceProps) {
   const [message, setMessage] = useState("");
@@ -84,6 +82,17 @@ export default function ChatInterface({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        150,
+      )}px`;
+    }
+  }, [message]);
 
   // Load checkpoint status on component mount
   useEffect(() => {
@@ -156,6 +165,10 @@ export default function ChatInterface({
     if (message.trim()) {
       onSendMessage(message.trim());
       setMessage("");
+      // Reset textarea height after sending
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     }
   };
 
@@ -243,7 +256,7 @@ export default function ChatInterface({
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3 text-sm">
         {filteredMessages.map((msg) => (
           <div
             key={msg.id}
@@ -252,7 +265,7 @@ export default function ChatInterface({
             }`}
           >
             <div
-              className={`max-w-[80%] p-3 rounded-lg ${
+              className={`max-w-[85%] p-2.5 rounded-lg text-sm ${
                 msg.sender === "user"
                   ? "bg-blue-500 text-white"
                   : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
@@ -264,7 +277,7 @@ export default function ChatInterface({
                 </ReactMarkdown>
               </div>
               <div
-                className={`text-xs mt-2 ${
+                className={`text-xs mt-1.5 ${
                   msg.sender === "user"
                     ? "text-blue-100"
                     : "text-gray-500 dark:text-gray-400"
@@ -279,32 +292,31 @@ export default function ChatInterface({
       </div>
 
       {/* Message input */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-        <div className="flex space-x-2">
-          <div className="flex-1">
+      <div className="border-t border-gray-200 dark:border-gray-700 p-3">
+        <div className="flex items-end space-x-2">
+          <div className="flex-1 min-w-0">
             <textarea
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
+              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
               rows={1}
-              className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              className="w-full min-h-[40px] max-h-[120px] p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none overflow-y-auto bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 text-sm leading-relaxed transition-all duration-200 ease-in-out"
               disabled={isLoading || isProcessing}
             />
           </div>
           <button
             onClick={handleSendMessage}
             disabled={isLoading || !message.trim() || isProcessing}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
+            title="Send message"
           >
-            {isLoading || isProcessing ? "..." : "Send"}
-          </button>
-          <button
-            onClick={onClear}
-            className="px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 hover:ring-red-200 dark:hover:ring-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 active:bg-red-50 dark:active:bg-red-900/20 transition-colors"
-          >
-            <FaEllipsisH />
+            {isLoading || isProcessing ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <FaArrowUp className="w-4 h-4" />
+            )}
           </button>
         </div>
       </div>
