@@ -99,6 +99,7 @@ export default function ChatInterface({
   // Load checkpoint status on component mount
   useEffect(() => {
     fetchCheckpointStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCheckpointStatus = async () => {
