@@ -3,8 +3,9 @@ import { checkpointManager } from "./db";
 import { DB_TABLES } from "../types/database";
 import { createSharedTools, SharedTool } from "./sharedTools";
 
-// Thread-local storage for current checkpoint
+// Thread-local storage for current checkpoint and case context
 let currentCheckpointId: string | null = null;
+let currentCaseId: number | null = null;
 
 export function setCurrentCheckpoint(checkpointId: string | null) {
   currentCheckpointId = checkpointId;
@@ -13,6 +14,15 @@ export function setCurrentCheckpoint(checkpointId: string | null) {
 
 export function getCurrentCheckpoint(): string | null {
   return currentCheckpointId;
+}
+
+export function setCurrentCaseId(caseId: number | null) {
+  currentCaseId = caseId;
+  console.log("Set current case ID:", caseId);
+}
+
+export function getCurrentCaseId(): number | null {
+  return currentCaseId;
 }
 
 // Wrapper for database operations to capture changes
@@ -27,13 +37,20 @@ export async function captureOperation(
     return;
   }
 
+  if (!currentCaseId) {
+    console.warn("No case ID in context for operation capture, skipping");
+    return;
+  }
+
   console.log(`Capturing ${operation} on ${tableName}:`, {
     primaryKey,
     previousData,
+    caseid: currentCaseId,
   });
 
   await checkpointManager.logOperation(
     currentCheckpointId,
+    currentCaseId,
     operation,
     tableName,
     primaryKey,
@@ -283,6 +300,7 @@ export class CheckpointSessionManager {
   private activeSession: CheckpointSession | null = null;
 
   async beginSession(
+    caseid: number,
     description?: string,
     userCommand?: string,
     source = "LLM",
@@ -293,11 +311,13 @@ export class CheckpointSessionManager {
     }
 
     const checkpointId = await checkpointManager.beginCheckpoint(
+      caseid,
       description,
       userCommand,
       source,
     );
     setCurrentCheckpoint(checkpointId);
+    setCurrentCaseId(caseid);
 
     this.activeSession = {
       id: checkpointId,
@@ -317,6 +337,7 @@ export class CheckpointSessionManager {
 
     await checkpointManager.commitCheckpoint(this.activeSession.id);
     setCurrentCheckpoint(null);
+    setCurrentCaseId(null);
 
     console.log("Committed checkpoint session:", this.activeSession.id);
     this.activeSession = null;
@@ -330,6 +351,7 @@ export class CheckpointSessionManager {
 
     await checkpointManager.rollbackCheckpoint(this.activeSession.id);
     setCurrentCheckpoint(null);
+    setCurrentCaseId(null);
 
     console.log("Rolled back checkpoint session:", this.activeSession.id);
     this.activeSession = null;
@@ -339,8 +361,8 @@ export class CheckpointSessionManager {
     return this.activeSession;
   }
 
-  async getActiveCheckpoints() {
-    return await checkpointManager.getActiveCheckpoints();
+  async getActiveCheckpoints(caseid?: number) {
+    return await checkpointManager.getActiveCheckpoints(caseid);
   }
 
   async restoreToCheckpoint(checkpointId: string): Promise<void> {
@@ -354,8 +376,8 @@ export class CheckpointSessionManager {
     console.log("Restored to checkpoint:", checkpointId);
   }
 
-  async getCheckpointHistory() {
-    return await checkpointManager.getCheckpointHistory();
+  async getCheckpointHistory(caseid?: number) {
+    return await checkpointManager.getCheckpointHistory(caseid);
   }
 
   async deleteCheckpoint(checkpointId: string): Promise<void> {

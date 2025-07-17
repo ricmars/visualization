@@ -387,13 +387,21 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
           enhancedPrompt.substring(0, 200) + "...",
         );
 
-        // Begin checkpoint session for this LLM interaction
-        const checkpointSession = await checkpointSessionManager.beginSession(
-          `LLM Tool Execution: ${enhancedPrompt.substring(0, 50)}...`,
-          prompt, // Store the original user command
-          "LLM",
-        );
-        console.log("Started checkpoint session:", checkpointSession.id);
+        // Begin checkpoint session for this LLM interaction (only if we have a case ID)
+        let checkpointSession = null;
+        if (currentCaseId) {
+          checkpointSession = await checkpointSessionManager.beginSession(
+            currentCaseId,
+            `LLM Tool Execution: ${enhancedPrompt.substring(0, 50)}...`,
+            prompt, // Store the original user command
+            "LLM",
+          );
+          console.log("Started checkpoint session:", checkpointSession.id);
+        } else {
+          console.log(
+            "No case ID available, skipping checkpoint session for new workflow creation",
+          );
+        }
 
         while (!done && loopCount < 15) {
           // Force completion if we're at max iterations

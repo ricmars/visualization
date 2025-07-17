@@ -107,11 +107,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const caseid = searchParams.get("caseid");
+    const caseIdNum = caseid ? parseInt(caseid) : undefined;
+
     const activeSession = checkpointSessionManager.getActiveSession();
     const activeCheckpoints =
-      await checkpointSessionManager.getActiveCheckpoints();
+      await checkpointSessionManager.getActiveCheckpoints(caseIdNum);
 
     // Get additional details about checkpoints including source (LLM vs MCP)
     const checkpointDetails = activeCheckpoints.map((checkpoint) => ({

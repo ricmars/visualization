@@ -23,10 +23,11 @@ interface CheckpointHistoryItem {
 }
 
 interface ChangesPanelProps {
+  caseid?: number;
   onRefresh?: () => void; // Callback when restoration happens
 }
 
-export default function ChangesPanel({ onRefresh }: ChangesPanelProps) {
+export default function ChangesPanel({ caseid, onRefresh }: ChangesPanelProps) {
   const [history, setHistory] = useState<CheckpointHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState<string | null>(null);
@@ -40,7 +41,10 @@ export default function ChangesPanel({ onRefresh }: ChangesPanelProps) {
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/checkpoint/history");
+      const url = caseid
+        ? `/api/checkpoint/history?caseid=${caseid}`
+        : "/api/checkpoint/history";
+      const response = await fetch(url);
       const data = await response.json();
       if (data.history) {
         setHistory(data.history);

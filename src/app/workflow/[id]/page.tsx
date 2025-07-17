@@ -2444,11 +2444,12 @@ export default function WorkflowPage() {
                     onSendMessage={handleSendMessage}
                     isProcessing={isProcessing}
                     isLoading={false}
+                    caseid={parseInt(id)}
                   />
                 </div>
               </>
             ) : (
-              <ChangesPanel />
+              <ChangesPanel caseid={parseInt(id)} />
             )}
           </div>
         </div>
