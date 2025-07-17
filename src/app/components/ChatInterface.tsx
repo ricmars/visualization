@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaEllipsisH } from "react-icons/fa";
+import { FaEllipsisH, FaUndo, FaCheck, FaClock } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 
@@ -48,9 +48,11 @@ export default function ChatInterface({
   onClear,
   isProcessing,
 }: ChatInterfaceProps) {
-  const [input, setInput] = useState("");
+  const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [checkpointStatus, setCheckpointStatus] = useState<any>(null);
+  const [isCheckpointLoading, setIsCheckpointLoading] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -60,11 +62,84 @@ export default function ChatInterface({
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (input.trim()) {
-      onSendMessage(input.trim());
-      setInput("");
+  // Load checkpoint status on component mount
+  useEffect(() => {
+    fetchCheckpointStatus();
+  }, []);
+
+  const fetchCheckpointStatus = async () => {
+    try {
+      const response = await fetch("/api/checkpoint");
+      const data = await response.json();
+      if (data.activeSession) {
+        setCheckpointStatus(data);
+      }
+      // Log checkpoint summary for debugging
+      if (data.summary && data.summary.total > 0) {
+        console.log(
+          `Active checkpoints: ${data.summary.total} (${data.summary.llm} LLM, ${data.summary.mcp} MCP)`,
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch checkpoint status:", error);
+    }
+  };
+
+  const rollbackCheckpoint = async () => {
+    if (!checkpointStatus?.activeSession) return;
+
+    setIsCheckpointLoading(true);
+    try {
+      const response = await fetch("/api/checkpoint?action=rollback", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        setCheckpointStatus(null);
+        // Optionally refresh the page or reload data
+        window.location.reload();
+      } else {
+        console.error("Failed to rollback checkpoint");
+      }
+    } catch (error) {
+      console.error("Error rolling back checkpoint:", error);
+    } finally {
+      setIsCheckpointLoading(false);
+    }
+  };
+
+  const commitCheckpoint = async () => {
+    if (!checkpointStatus?.activeSession) return;
+
+    setIsCheckpointLoading(true);
+    try {
+      const response = await fetch("/api/checkpoint?action=commit", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        setCheckpointStatus(null);
+      } else {
+        console.error("Failed to commit checkpoint");
+      }
+    } catch (error) {
+      console.error("Error committing checkpoint:", error);
+    } finally {
+      setIsCheckpointLoading(false);
+    }
+  };
+
+  const handleSendMessage = () => {
+    if (message.trim()) {
+      onSendMessage(message.trim());
+      setMessage("");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -100,97 +175,116 @@ export default function ChatInterface({
     },
   };
 
-  const renderMessage = (message: ChatMessage) => {
-    // Filter out content that shouldn't be displayed
-    if (shouldFilterContent(message.content)) {
-      return null;
-    }
-
-    const formattedContent = formatContent(message.content);
-
-    return (
-      <div className="max-w-xs lg:max-w-md">
-        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-          {message.sender === "user" ? "You" : "Assistant"}
-        </div>
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          <ReactMarkdown components={markdownComponents}>
-            {formattedContent}
-          </ReactMarkdown>
-        </div>
-      </div>
-    );
-  };
+  const filteredMessages = messages.filter(
+    (msg) => !shouldFilterContent(msg.content),
+  );
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Chat Header */}
-      <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="text-lg font-semibold">Chat</h2>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={onClear}
-            className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            Clear
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto" ref={chatContainerRef}>
-        {messages.map((message) => {
-          const renderedMessage = renderMessage(message);
-          if (!renderedMessage) return null;
-
-          return (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.sender === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`rounded-lg p-2 ${
-                  message.sender === "user"
-                    ? "bg-blue-50 dark:bg-blue-900/20"
-                    : "bg-gray-50 dark:bg-gray-800/50"
-                }`}
-              >
-                {renderedMessage}
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
+      {/* Checkpoint Status Bar */}
+      {checkpointStatus?.activeSession && (
+        <div className="bg-blue-50 dark:bg-blue-900 border-b border-blue-200 dark:border-blue-700 px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
+                <FaClock className="text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  Active Session: {checkpointStatus.activeSession.description}
+                </span>
+                <span className="text-xs text-blue-700 dark:text-blue-300">
+                  Started{" "}
+                  {new Date(
+                    checkpointStatus.activeSession.startedAt,
+                  ).toLocaleTimeString()}
+                </span>
               </div>
             </div>
-          );
-        })}
-        {(isLoading || isProcessing) && (
-          <div className="flex justify-start">
-            <div className="rounded-lg p-2 bg-gray-50 dark:bg-gray-800/50">
-              <FaEllipsisH className="w-5 h-5 text-gray-500 dark:text-gray-400 animate-pulse" />
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={rollbackCheckpoint}
+                className="flex items-center space-x-1 px-3 py-1 text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded-md"
+              >
+                <FaUndo className="w-3 h-3" />
+                <span>Rollback</span>
+              </button>
+              <button
+                onClick={commitCheckpoint}
+                className="flex items-center space-x-1 px-3 py-1 text-sm bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:hover:bg-green-800 text-green-700 dark:text-green-300 rounded-md"
+              >
+                <FaCheck className="w-3 h-3" />
+                <span>Commit</span>
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {filteredMessages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${
+              msg.sender === "user" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`max-w-[80%] p-3 rounded-lg ${
+                msg.sender === "user"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              }`}
+            >
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <ReactMarkdown components={markdownComponents}>
+                  {formatContent(msg.content)}
+                </ReactMarkdown>
+              </div>
+              <div
+                className={`text-xs mt-2 ${
+                  msg.sender === "user"
+                    ? "text-blue-100"
+                    : "text-gray-500 dark:text-gray-400"
+                }`}
+              >
+                {msg.timestamp.toLocaleTimeString()}
+              </div>
+            </div>
+          </div>
+        ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Chat Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t">
+      {/* Message input */}
+      <div className="border-t border-gray-200 dark:border-gray-700 p-4">
         <div className="flex space-x-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
-            disabled={isLoading || isProcessing}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          />
+          <div className="flex-1">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              rows={1}
+              className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              disabled={isLoading || isProcessing}
+            />
+          </div>
           <button
-            type="submit"
-            disabled={!input.trim() || isLoading || isProcessing}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSendMessage}
+            disabled={isLoading || !message.trim() || isProcessing}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Send
+            {isLoading || isProcessing ? "..." : "Send"}
+          </button>
+          <button
+            onClick={onClear}
+            className="px-3 py-2 text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg ring-1 ring-gray-200 dark:ring-gray-700 hover:ring-red-200 dark:hover:ring-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 active:bg-red-50 dark:active:bg-red-900/20 transition-colors"
+          >
+            <FaEllipsisH />
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

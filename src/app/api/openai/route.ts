@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { databaseSystemPrompt } from "../../lib/databasePrompt";
 import { pool } from "../../lib/db";
-import { getDatabaseTools } from "../../lib/llmTools";
+
 import {
   createStreamProcessor,
   createStreamResponse,
@@ -11,6 +11,10 @@ import {
 } from "../../lib/llmUtils";
 import { openaiToolSchemas } from "../../lib/openaiToolSchemas";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import {
+  checkpointSessionManager,
+  createCheckpointSharedTools,
+} from "../../lib/checkpointTools";
 
 // Add debug logging
 console.log("OpenAI Route Environment Variables:", {
@@ -222,9 +226,15 @@ Working with existing case ID: ${currentCaseId}. For simple operations like dele
 Create case, fields, views, then call saveCase with complete workflow model.`;
     }
 
-    // Get database tools
-    console.log("Getting database tools...");
-    let databaseTools = getDatabaseTools(pool) as Tool[];
+    // Get checkpoint-aware database tools (unified approach)
+    console.log("Getting checkpoint-aware database tools...");
+    const sharedTools = createCheckpointSharedTools(pool); // Use unified checkpoint approach
+    let databaseTools = sharedTools.map((tool: any) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+      execute: tool.execute,
+    })) as Tool[];
     console.log("Database tools count:", databaseTools.length);
     console.log(
       "Available tools:",
@@ -375,6 +385,14 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
           "Initial prompt:",
           enhancedPrompt.substring(0, 200) + "...",
         );
+
+        // Begin checkpoint session for this LLM interaction
+        const checkpointSession = await checkpointSessionManager.beginSession(
+          `LLM Tool Execution: ${enhancedPrompt.substring(0, 50)}...`,
+          prompt, // Store the original user command
+          "LLM",
+        );
+        console.log("Started checkpoint session:", checkpointSession.id);
 
         while (!done && loopCount < 15) {
           // Force completion if we're at max iterations
@@ -931,9 +949,30 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
           await processor.sendText("\n✅ Operation completed successfully!\n");
         }
 
+        // Commit checkpoint session on successful completion
+        try {
+          await checkpointSessionManager.commitSession();
+          console.log("Checkpoint session committed successfully");
+        } catch (checkpointError) {
+          console.error(
+            "Failed to commit checkpoint session:",
+            checkpointError,
+          );
+        }
+
         await processor.sendDone();
         await writer.close();
       } catch (error) {
+        // Rollback checkpoint session on error
+        try {
+          await checkpointSessionManager.rollbackSession();
+          console.log("Checkpoint session rolled back due to error");
+        } catch (checkpointError) {
+          console.error(
+            "Failed to rollback checkpoint session:",
+            checkpointError,
+          );
+        }
         const totalDuration = Date.now() - startTime;
         console.error(
           `=== OpenAI POST request failed after ${totalDuration}ms ===`,

@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pool } from "../../lib/db";
-import { createSharedTools } from "../../lib/sharedTools";
+import {
+  checkpointSessionManager,
+  createCheckpointSharedTools,
+} from "../../lib/checkpointTools";
 
 // Initialize shared tools
-let sharedTools: ReturnType<typeof createSharedTools> = [];
+let sharedTools: ReturnType<typeof createCheckpointSharedTools> = [];
 
 // Initialize tools when server starts
 async function initializeTools() {
   try {
     if (sharedTools.length === 0) {
-      console.log("Initializing shared tools...");
-      sharedTools = createSharedTools(pool);
-      console.log(`Initialized ${sharedTools.length} tools`);
+      console.log("Initializing checkpoint-aware shared tools for MCP...");
+      sharedTools = createCheckpointSharedTools(pool); // Enable checkpoints for MCP
+      console.log(
+        `Initialized ${sharedTools.length} tools with checkpoint support`,
+      );
     }
   } catch (error) {
     console.error("Error initializing tools:", error);
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
         jsonrpc: "2.0",
         id: body.id,
         result: {
-          tools: sharedTools.map((tool) => ({
+          tools: sharedTools.map((tool: any) => ({
             name: tool.name,
             description: tool.description,
             inputSchema: tool.parameters,
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
       console.log(`MCP HTTP Tool Call: ${name}`, args);
 
       // Find the tool
-      const tool = sharedTools.find((t) => t.name === name);
+      const tool = sharedTools.find((t: any) => t.name === name);
       if (!tool) {
         return NextResponse.json(
           {
@@ -84,11 +89,46 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Check if this is a database modification tool that needs checkpoint management
+      const modificationTools = [
+        "saveFields",
+        "saveCase",
+        "saveView",
+        "deleteField",
+        "deleteView",
+        "createCase",
+      ];
+      const needsCheckpoint = modificationTools.includes(name);
+
+      let checkpointSession = null;
+      if (needsCheckpoint) {
+        // Begin checkpoint session for database modification tools
+        const mcpCommand = `MCP ${name}(${JSON.stringify(args).substring(
+          0,
+          100,
+        )}...)`;
+        checkpointSession = await checkpointSessionManager.beginSession(
+          `MCP Tool: ${name}`,
+          mcpCommand,
+          "MCP",
+        );
+        console.log(
+          `Started checkpoint session for MCP tool ${name}:`,
+          checkpointSession.id,
+        );
+      }
+
       try {
         // Execute the tool
         const result = await tool.execute(args);
 
         console.log(`MCP HTTP Tool Result: ${name}`, result);
+
+        // Commit checkpoint session on successful execution
+        if (needsCheckpoint && checkpointSession) {
+          await checkpointSessionManager.commitSession();
+          console.log(`Committed checkpoint session for MCP tool ${name}`);
+        }
 
         return NextResponse.json(
           {
@@ -112,6 +152,20 @@ export async function POST(request: NextRequest) {
           },
         );
       } catch (error) {
+        // Rollback checkpoint session on error
+        if (needsCheckpoint && checkpointSession) {
+          try {
+            await checkpointSessionManager.rollbackSession();
+            console.log(
+              `Rolled back checkpoint session for MCP tool ${name} due to error`,
+            );
+          } catch (rollbackError) {
+            console.error(
+              `Failed to rollback checkpoint session for MCP tool ${name}:`,
+              rollbackError,
+            );
+          }
+        }
         console.error(`MCP HTTP Tool Error: ${name}`, error);
         return NextResponse.json(
           {
@@ -251,7 +305,7 @@ export async function GET() {
           name: "workflow-tools-server",
           version: "1.0.0",
         },
-        tools: sharedTools.map((tool) => ({
+        tools: sharedTools.map((tool: any) => ({
           name: tool.name,
           description: tool.description,
           parameters: tool.parameters,

@@ -117,6 +117,46 @@ export async function initializeDatabase() {
       console.log("Index views_caseid_idx may already exist, continuing...");
     }
 
+    // Create undo_log table for checkpoint functionality
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "undo_log" (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        checkpoint_id UUID NOT NULL,
+        operation TEXT NOT NULL CHECK (operation IN ('insert', 'update', 'delete')),
+        table_name TEXT NOT NULL,
+        primary_key JSONB NOT NULL,
+        previous_data JSONB,
+        created_at TIMESTAMP DEFAULT NOW(),
+        applied_at TIMESTAMP
+      );
+    `);
+
+    // Create index for checkpoint operations
+    try {
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS undo_log_checkpoint_idx ON "undo_log" (checkpoint_id, created_at DESC);
+      `);
+    } catch (_error) {
+      console.log(
+        "Index undo_log_checkpoint_idx may already exist, continuing...",
+      );
+    }
+
+    // Create checkpoints table for metadata
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "checkpoints" (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        description TEXT,
+        user_command TEXT,
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'committed', 'rolled_back', 'historical')),
+        created_at TIMESTAMP DEFAULT NOW(),
+        finished_at TIMESTAMP,
+        source TEXT DEFAULT 'LLM' CHECK (source IN ('LLM', 'MCP', 'API')),
+        tools_executed JSONB DEFAULT '[]',
+        changes_count INTEGER DEFAULT 0
+      );
+    `);
+
     console.log("Database tables initialized successfully");
   } catch (error) {
     console.error("Error initializing database tables:", error);
@@ -139,6 +179,8 @@ export async function resetDatabase() {
     // Drop tables in correct order (due to foreign key constraints)
     console.log("Dropping tables...");
     await pool.query(`
+      DROP TABLE IF EXISTS "undo_log" CASCADE;
+      DROP TABLE IF EXISTS "checkpoints" CASCADE;
       DROP TABLE IF EXISTS "Views" CASCADE;
       DROP TABLE IF EXISTS "Fields" CASCADE;
       DROP TABLE IF EXISTS "Cases" CASCADE;
@@ -173,3 +215,433 @@ export async function resetDatabase() {
     throw error;
   }
 }
+
+// Checkpoint Management Functions
+export interface CheckpointManager {
+  beginCheckpoint(
+    description?: string,
+    userCommand?: string,
+    source?: string,
+  ): Promise<string>;
+  commitCheckpoint(checkpointId: string): Promise<void>;
+  rollbackCheckpoint(checkpointId: string): Promise<void>;
+  restoreToCheckpoint(checkpointId: string): Promise<void>;
+  logOperation(
+    checkpointId: string,
+    operation: "insert" | "update" | "delete",
+    tableName: string,
+    primaryKey: any,
+    previousData?: any,
+  ): Promise<void>;
+  recordToolExecution(checkpointId: string, toolName: string): Promise<void>;
+  getActiveCheckpoints(): Promise<
+    Array<{ id: string; description: string; created_at: Date }>
+  >;
+  getCheckpointHistory(): Promise<
+    Array<{
+      id: string;
+      description: string;
+      user_command: string;
+      status: string;
+      source: string;
+      created_at: Date;
+      finished_at: Date;
+      tools_executed: string[];
+      changes_count: number;
+    }>
+  >;
+  applyUndoOperation(client: any, op: any): Promise<void>;
+  deleteCheckpoint(checkpointId: string): Promise<void>;
+  deleteAllCheckpoints(): Promise<void>;
+}
+
+export const checkpointManager: CheckpointManager = {
+  async beginCheckpoint(
+    description = "LLM Tool Execution",
+    userCommand?: string,
+    source = "LLM",
+  ): Promise<string> {
+    console.log("Creating new checkpoint:", description);
+
+    const result = await pool.query(
+      `
+      INSERT INTO "checkpoints" (description, user_command, status, source)
+      VALUES ($1, $2, 'active', $3)
+      RETURNING id
+    `,
+      [description, userCommand, source],
+    );
+
+    const checkpointId = result.rows[0].id;
+    console.log("Checkpoint created:", checkpointId);
+
+    return checkpointId;
+  },
+
+  async commitCheckpoint(checkpointId: string): Promise<void> {
+    console.log("Committing checkpoint:", checkpointId);
+
+    // Count changes before marking as historical
+    const changesResult = await pool.query(
+      `
+      SELECT COUNT(*) as count FROM "undo_log" WHERE checkpoint_id = $1
+    `,
+      [checkpointId],
+    );
+
+    const changesCount = parseInt(changesResult.rows[0].count);
+
+    // Mark as historical instead of deleting (preserve for history)
+    await pool.query(
+      `
+      UPDATE "checkpoints"
+      SET status = 'historical', finished_at = NOW(), changes_count = $2
+      WHERE id = $1
+    `,
+      [checkpointId, changesCount],
+    );
+
+    // Keep undo logs for potential restoration (don't delete)
+    console.log(`Checkpoint marked as historical with ${changesCount} changes`);
+  },
+
+  async rollbackCheckpoint(checkpointId: string): Promise<void> {
+    console.log("Rolling back checkpoint:", checkpointId);
+
+    // Get undo operations in reverse order
+    const undoOps = await pool.query(
+      `
+      SELECT operation, table_name, primary_key, previous_data
+      FROM "undo_log"
+      WHERE checkpoint_id = $1
+      ORDER BY created_at DESC
+    `,
+      [checkpointId],
+    );
+
+    console.log(`Found ${undoOps.rows.length} operations to undo`);
+
+    // Begin transaction for rollback
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const op of undoOps.rows) {
+        await this.applyUndoOperation(client, op);
+      }
+
+      // Mark checkpoint as rolled back
+      await client.query(
+        `
+        UPDATE "checkpoints"
+        SET status = 'rolled_back', finished_at = NOW()
+        WHERE id = $1
+      `,
+        [checkpointId],
+      );
+
+      // Clean up undo logs
+      await client.query(
+        `
+        DELETE FROM "undo_log"
+        WHERE checkpoint_id = $1
+      `,
+        [checkpointId],
+      );
+
+      await client.query("COMMIT");
+      console.log("Checkpoint rollback completed successfully");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Rollback failed:", error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async applyUndoOperation(client: any, op: any): Promise<void> {
+    const { operation, table_name, primary_key, previous_data } = op;
+
+    console.log(`Undoing ${operation} on ${table_name}:`, primary_key);
+
+    switch (operation) {
+      case "insert":
+        // Undo insert by deleting the record
+        const deleteKeys = Object.keys(primary_key);
+        const deleteValues = Object.values(primary_key);
+        const deleteWhere = deleteKeys
+          .map((key, i) => `"${key}" = $${i + 1}`)
+          .join(" AND ");
+
+        await client.query(
+          `DELETE FROM "${table_name}" WHERE ${deleteWhere}`,
+          deleteValues,
+        );
+        break;
+
+      case "delete":
+        // Undo delete by reinserting the record
+        if (!previous_data) {
+          throw new Error("Cannot undo delete: no previous data stored");
+        }
+
+        // Check if this table has auto-generated ID columns that should be excluded
+        const insertData = { ...previous_data };
+
+        // For common auto-generated ID patterns, exclude them from insert
+        // This allows the database to regenerate them
+        if (
+          insertData.id &&
+          table_name !== "checkpoints" &&
+          table_name !== "undo_log"
+        ) {
+          delete insertData.id;
+        }
+
+        const insertKeys = Object.keys(insertData);
+        const insertValues = Object.values(insertData);
+        const insertColumns = insertKeys.map((key) => `"${key}"`).join(", ");
+        const insertPlaceholders = insertValues
+          .map((_, i) => `$${i + 1}`)
+          .join(", ");
+
+        await client.query(
+          `INSERT INTO "${table_name}" (${insertColumns}) VALUES (${insertPlaceholders})`,
+          insertValues,
+        );
+        break;
+
+      case "update":
+        // Undo update by restoring previous values
+        if (!previous_data) {
+          throw new Error("Cannot undo update: no previous data stored");
+        }
+
+        const primaryKeys = Object.keys(primary_key);
+        const primaryValues = Object.values(primary_key);
+
+        // Filter out primary key fields from the update data to avoid updating immutable columns
+        const updateData = { ...previous_data };
+        primaryKeys.forEach((key) => delete updateData[key]);
+
+        const updateKeys = Object.keys(updateData);
+        const updateValues = Object.values(updateData);
+
+        // Only proceed if there are non-primary-key fields to update
+        if (updateKeys.length > 0) {
+          const setClause = updateKeys
+            .map((key, i) => `"${key}" = $${i + 1}`)
+            .join(", ");
+          const whereClause = primaryKeys
+            .map((key, i) => `"${key}" = $${updateKeys.length + i + 1}`)
+            .join(" AND ");
+
+          await client.query(
+            `UPDATE "${table_name}" SET ${setClause} WHERE ${whereClause}`,
+            [...updateValues, ...primaryValues],
+          );
+        }
+        break;
+
+      default:
+        throw new Error(`Unknown operation: ${operation}`);
+    }
+  },
+
+  async logOperation(
+    checkpointId: string,
+    operation: "insert" | "update" | "delete",
+    tableName: string,
+    primaryKey: any,
+    previousData?: any,
+  ): Promise<void> {
+    await pool.query(
+      `
+      INSERT INTO "undo_log" (checkpoint_id, operation, table_name, primary_key, previous_data)
+      VALUES ($1, $2, $3, $4, $5)
+    `,
+      [
+        checkpointId,
+        operation,
+        tableName,
+        JSON.stringify(primaryKey),
+        previousData ? JSON.stringify(previousData) : null,
+      ],
+    );
+  },
+
+  async getActiveCheckpoints(): Promise<
+    Array<{ id: string; description: string; created_at: Date }>
+  > {
+    const result = await pool.query(`
+      SELECT id, description, created_at
+      FROM "checkpoints"
+      WHERE status = 'active'
+      ORDER BY created_at DESC
+    `);
+
+    return result.rows;
+  },
+
+  async restoreToCheckpoint(checkpointId: string): Promise<void> {
+    console.log("Restoring to checkpoint:", checkpointId);
+
+    // Get all checkpoints from this one onwards (including the target checkpoint)
+    const checkpointsToUndo = await pool.query(
+      `
+      SELECT id FROM "checkpoints"
+      WHERE created_at >= (SELECT created_at FROM "checkpoints" WHERE id = $1)
+      AND status IN ('historical', 'committed')
+      ORDER BY created_at DESC
+    `,
+      [checkpointId],
+    );
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Undo each checkpoint in reverse chronological order
+      for (const checkpoint of checkpointsToUndo.rows) {
+        const undoOps = await client.query(
+          `
+          SELECT operation, table_name, primary_key, previous_data
+          FROM "undo_log"
+          WHERE checkpoint_id = $1
+          ORDER BY created_at DESC
+        `,
+          [checkpoint.id],
+        );
+
+        for (const op of undoOps.rows) {
+          await this.applyUndoOperation(client, op);
+        }
+
+        // Mark checkpoint as rolled back
+        await client.query(
+          `UPDATE "checkpoints" SET status = 'rolled_back', finished_at = NOW() WHERE id = $1`,
+          [checkpoint.id],
+        );
+
+        // Delete undo log entries for this checkpoint
+        await client.query(`DELETE FROM "undo_log" WHERE checkpoint_id = $1`, [
+          checkpoint.id,
+        ]);
+      }
+
+      await client.query("COMMIT");
+      console.log(
+        `Restored to state before checkpoint ${checkpointId} by undoing ${checkpointsToUndo.rows.length} checkpoints`,
+      );
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Restoration failed:", error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async recordToolExecution(
+    checkpointId: string,
+    toolName: string,
+  ): Promise<void> {
+    await pool.query(
+      `
+      UPDATE "checkpoints"
+      SET tools_executed = tools_executed || $2::jsonb
+      WHERE id = $1
+    `,
+      [checkpointId, JSON.stringify([toolName])],
+    );
+  },
+
+  async getCheckpointHistory(): Promise<
+    Array<{
+      id: string;
+      description: string;
+      user_command: string;
+      status: string;
+      source: string;
+      created_at: Date;
+      finished_at: Date;
+      tools_executed: string[];
+      changes_count: number;
+    }>
+  > {
+    const result = await pool.query(`
+      SELECT
+        id,
+        description,
+        user_command,
+        status,
+        source,
+        created_at,
+        finished_at,
+        tools_executed,
+        changes_count
+      FROM "checkpoints"
+      WHERE status IN ('historical', 'committed', 'rolled_back')
+      ORDER BY created_at DESC
+      LIMIT 50
+    `);
+
+    return result.rows.map((row) => ({
+      ...row,
+      tools_executed: row.tools_executed || [],
+    }));
+  },
+
+  async deleteCheckpoint(checkpointId: string): Promise<void> {
+    console.log("Deleting checkpoint:", checkpointId);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Delete undo log entries for this checkpoint
+      await client.query(`DELETE FROM "undo_log" WHERE checkpoint_id = $1`, [
+        checkpointId,
+      ]);
+
+      // Delete the checkpoint
+      await client.query(`DELETE FROM "checkpoints" WHERE id = $1`, [
+        checkpointId,
+      ]);
+
+      await client.query("COMMIT");
+      console.log(`Deleted checkpoint ${checkpointId}`);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Checkpoint deletion failed:", error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async deleteAllCheckpoints(): Promise<void> {
+    console.log("Deleting all checkpoints");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Delete all undo log entries
+      await client.query(`DELETE FROM "undo_log"`);
+
+      // Delete all checkpoints
+      const result = await client.query(`DELETE FROM "checkpoints"`);
+
+      await client.query("COMMIT");
+      console.log(`Deleted all checkpoints (${result.rowCount} total)`);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Checkpoint deletion failed:", error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+};

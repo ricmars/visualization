@@ -197,8 +197,15 @@ export interface Application {
 }
 
 export interface Checkpoint {
-  id: number;
-  timestamp: string;
+  id: string; // UUID for database-backed checkpoints
   description: string;
-  model: WorkflowModel;
+  status: "active" | "committed" | "rolled_back";
+  created_at: Date;
+  finished_at?: Date;
+}
+
+export interface CheckpointSession {
+  id: string;
+  description: string;
+  startedAt: Date;
 }

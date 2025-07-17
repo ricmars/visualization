@@ -170,9 +170,9 @@ export default function WorkflowPage() {
     "flat",
   );
   const [activeTab, setActiveTab] = useState<
-    "workflow" | "fields" | "views" | "chat" | "changes"
+    "workflow" | "fields" | "views" | "chat" | "history"
   >("workflow");
-  const [activePanelTab, setActivePanelTab] = useState<"chat" | "changes">(
+  const [activePanelTab, setActivePanelTab] = useState<"chat" | "history">(
     "chat",
   );
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
@@ -248,14 +248,14 @@ export default function WorkflowPage() {
       | "fields"
       | "views"
       | "chat"
-      | "changes";
+      | "history";
     if (savedTab) {
       setActiveTab(savedTab);
     }
 
     const savedPanelTab = localStorage.getItem(ACTIVE_PANEL_TAB_STORAGE_KEY) as
       | "chat"
-      | "changes";
+      | "history";
     if (savedPanelTab) {
       setActivePanelTab(savedPanelTab);
     }
@@ -2418,14 +2418,14 @@ export default function WorkflowPage() {
                 Chat
               </button>
               <button
-                onClick={() => setActivePanelTab("changes")}
+                onClick={() => setActivePanelTab("history")}
                 className={`flex-1 px-4 py-2 text-sm font-medium ${
-                  activePanelTab === "changes"
+                  activePanelTab === "history"
                     ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
                     : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 }`}
               >
-                Changes
+                History
               </button>
             </div>
           </div>
@@ -2441,11 +2441,7 @@ export default function WorkflowPage() {
                 isLoading={false}
               />
             ) : (
-              <ChangesPanel
-                checkpoints={checkpoints}
-                onRestoreCheckpoint={handleRestoreCheckpoint}
-                onClearCheckpoints={handleClearCheckpoints}
-              />
+              <ChangesPanel />
             )}
           </div>
         </div>
