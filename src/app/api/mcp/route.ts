@@ -110,7 +110,12 @@ export async function POST(request: NextRequest) {
           0,
           100,
         )}...)`;
+
+        // Get caseid from args if available, otherwise use a default
+        const caseid = args.caseid || args.caseId || 1; // Default to 1 if no caseid provided
+
         checkpointSession = await checkpointSessionManager.beginSession(
+          caseid,
           `MCP Tool: ${name}`,
           mcpCommand,
           "MCP",

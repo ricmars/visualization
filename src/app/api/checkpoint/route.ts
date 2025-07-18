@@ -10,8 +10,11 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case "begin": {
-        const { description } = await request.json();
+        const { description, caseid } = await request.json();
+        // Use provided caseid or default to 1
+        const caseId = caseid || 1;
         const session = await checkpointSessionManager.beginSession(
+          caseId,
           description,
         );
 
