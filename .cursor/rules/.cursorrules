@@ -250,6 +250,55 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 - Always import `databaseSystemPrompt` from this file
 - Never duplicate system prompt in other files
 
+## AI Thinking Display
+
+### Real-time Streaming Implementation
+
+- **Streaming Response**: AI thoughts and reasoning are displayed in real-time as they're generated
+- **Visual Feedback**: Users see typing indicators, blinking cursors, and thinking state styling
+- **Message Accumulation**: Content accumulates in a single message rather than creating multiple separate messages
+
+### Key Components
+
+- **`ChatMessage.isThinking`**: Boolean flag indicating active content generation
+- **`TypingIndicator`**: Animated bouncing dots with staggered delays
+- **`BlinkingCursor`**: Pulsing cursor at text end during thinking
+- **Thinking State Styling**: Blue background and border for active messages
+
+### Implementation Guidelines
+
+- **Streaming Handler**: Modify `src/app/api/openai/route.ts` to send content chunks immediately via `processor.sendText()`
+- **State Management**: Use `isThinking` flag to track active generation state
+- **Visual Indicators**: Include typing indicator and blinking cursor for user feedback
+- **Error Handling**: Properly reset thinking state on completion or error
+- **Dark Mode**: Ensure all indicators work in both light and dark themes
+
+### User Experience Benefits
+
+- **Transparency**: Users can see AI's reasoning process in real-time
+- **Engagement**: More natural and interactive conversation flow
+- **Trust**: Visibility into AI decision-making builds user confidence
+- **Feedback**: Clear indication when AI is actively processing
+
+### Enhanced System Prompt Integration
+
+The system prompt (`src/app/lib/databasePrompt.ts`) now includes a structured thinking pattern:
+
+#### Thinking Pattern Components
+
+1. **ANALYZE THE REQUEST**: "Let me analyze what needs to be done here..."
+2. **PLAN THE APPROACH**: "Based on the requirements, I should..."
+3. **CONSIDER ALTERNATIVES**: "I could approach this by... but that might cause issues..."
+4. **EXECUTE WITH REASONING**: "Now I'll create the case because..."
+5. **VALIDATE AND REFINE**: "Let me verify that this is correct..."
+
+#### Implementation Guidelines
+
+- **System Prompt**: Include structured thinking patterns in `databaseSystemPrompt`
+- **Example Responses**: Demonstrate the thinking pattern in `exampleDatabaseResponse`
+- **Real-time Display**: Combine with streaming to show reasoning as it happens
+- **Consistent Pattern**: Use the same thinking structure across all AI interactions
+
 ### Streaming LLM Responses
 
 - Use Server-Sent Events (SSE) format for streaming

@@ -3,11 +3,32 @@ import { FaUndo, FaCheck, FaClock, FaArrowUp } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 
+// Typing indicator component
+const TypingIndicator = () => (
+  <div className="flex items-center space-x-1">
+    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+    <div
+      className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+      style={{ animationDelay: "0.1s" }}
+    ></div>
+    <div
+      className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"
+      style={{ animationDelay: "0.2s" }}
+    ></div>
+  </div>
+);
+
+// Blinking cursor component
+const BlinkingCursor = () => (
+  <span className="inline-block w-0.5 h-4 bg-blue-500 animate-pulse ml-1"></span>
+);
+
 export interface ChatMessage {
   id: string;
   content: string;
   sender: "user" | "assistant";
   timestamp: Date;
+  isThinking?: boolean; // Add flag to indicate if the message is actively being updated
 }
 
 interface CheckpointSession {
@@ -274,6 +295,8 @@ export default function ChatInterface({
               className={`max-w-[85%] p-2.5 rounded-lg text-sm ${
                 msg.sender === "user"
                   ? "bg-blue-500 text-white"
+                  : msg.isThinking
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-gray-900 dark:text-gray-100 border border-blue-200 dark:border-blue-700"
                   : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               }`}
             >
@@ -281,6 +304,7 @@ export default function ChatInterface({
                 <ReactMarkdown components={markdownComponents}>
                   {formatContent(msg.content)}
                 </ReactMarkdown>
+                {msg.isThinking && <BlinkingCursor />}
               </div>
               <div
                 className={`text-xs mt-1.5 ${
@@ -290,6 +314,14 @@ export default function ChatInterface({
                 }`}
               >
                 {msg.timestamp.toLocaleTimeString()}
+                {msg.isThinking && (
+                  <span className="ml-2 flex items-center">
+                    <span className="mr-1 text-blue-600 dark:text-blue-400">
+                      thinking
+                    </span>
+                    <TypingIndicator />
+                  </span>
+                )}
               </div>
             </div>
           </div>

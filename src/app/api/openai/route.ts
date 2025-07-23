@@ -474,7 +474,11 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
               for await (const chunk of completion) {
                 const choice = chunk.choices[0];
                 if (choice?.delta?.content) {
-                  fullContent += choice.delta.content;
+                  const contentChunk = choice.delta.content;
+                  fullContent += contentChunk;
+
+                  // Stream the thinking content to the client in real-time
+                  await processor.sendText(contentChunk);
                 }
                 if (choice?.delta?.tool_calls) {
                   for (const toolCall of choice.delta.tool_calls) {

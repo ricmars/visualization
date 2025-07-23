@@ -129,6 +129,85 @@ Access via:
 - Monitor checkpoint performance: `SELECT COUNT(*) FROM undo_log WHERE checkpoint_id IN (SELECT id FROM checkpoints WHERE status = 'active')`
 - Check checkpoint sources: `SELECT description, created_at FROM checkpoints WHERE status = 'active'`
 
+## AI Thinking Display
+
+The application supports real-time thinking display for the GPT-4o model, providing transparency into the AI's decision-making process.
+
+### Features
+
+- **Real-time streaming**: AI thoughts and reasoning appear as they're generated
+- **Visual indicators**:
+  - Blinking cursor at the end of current text
+  - Animated typing indicator with bouncing dots
+  - "thinking" label with blue styling
+  - Subtle background color change during active thinking
+- **Smooth updates**: Content accumulates in a single message rather than creating multiple separate messages
+
+### Implementation Details
+
+#### Components Modified
+
+- **`src/app/api/openai/route.ts`**: Streaming response handler sends thinking content in real-time
+- **`src/app/components/ChatInterface.tsx`**: Added visual indicators and thinking state management
+- **`src/app/workflow/[id]/page.tsx`**: Message accumulation and thinking flag management
+
+#### Key Interfaces
+
+```typescript
+interface ChatMessage {
+  id: string;
+  content: string;
+  sender: "user" | "assistant";
+  timestamp: Date;
+  isThinking?: boolean; // Indicates active content generation
+}
+```
+
+#### Visual Components
+
+- `TypingIndicator`: Animated bouncing dots with staggered delays
+- `BlinkingCursor`: Pulsing cursor at text end during thinking
+- Thinking state styling: Blue background and border for active messages
+
+### User Experience Benefits
+
+- **Transparency**: Users can see the AI's reasoning process in real-time
+- **Engagement**: More natural and interactive conversation flow
+- **Feedback**: Clear indication when AI is actively processing
+- **Trust**: Visibility into AI decision-making builds user confidence
+
+### Technical Notes
+
+- Thinking indicators automatically clear when streaming completes
+- Error handling properly resets thinking state
+- Dark mode support for all visual indicators
+- Performance optimized with efficient state updates
+
+### Enhanced System Prompt
+
+The system prompt has been enhanced to include a structured thinking and reasoning pattern that makes the AI's decision-making process more transparent:
+
+#### Thinking Pattern Structure
+
+1. **ANALYZE THE REQUEST**: Understanding what needs to be accomplished
+2. **PLAN THE APPROACH**: Logical step-by-step planning
+3. **CONSIDER ALTERNATIVES**: Evaluating different approaches and trade-offs
+4. **EXECUTE WITH REASONING**: Explaining actions as they're taken
+5. **VALIDATE AND REFINE**: Checking work and explaining adjustments
+
+#### Benefits
+
+- **Transparency**: Users can see the AI's reasoning process in real-time
+- **Understanding**: Clear explanation of why certain decisions are made
+- **Trust**: Users can follow the AI's logic and understand the approach
+- **Learning**: Users can learn from the AI's structured problem-solving approach
+
+#### Implementation
+
+- **System Prompt**: Enhanced in `src/app/lib/databasePrompt.ts`
+- **Example Response**: Updated to demonstrate the thinking pattern
+- **Real-time Display**: Combined with streaming to show reasoning as it happens
+
 ## Required Environment Variables
 
 ```bash

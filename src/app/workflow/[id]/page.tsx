@@ -1230,6 +1230,8 @@ export default function WorkflowPage() {
   };
 
   const handleSendMessage = async (message: string) => {
+    let aiMessageId: string; // Declare at function scope
+
     try {
       setIsProcessing(true);
 
@@ -1245,7 +1247,7 @@ export default function WorkflowPage() {
       ]);
 
       // Add a placeholder AI message that will be updated with the response
-      const aiMessageId = uuidv4();
+      aiMessageId = uuidv4();
       setMessages((prev) => [
         ...prev,
         {
@@ -1253,6 +1255,7 @@ export default function WorkflowPage() {
           content: "",
           sender: "assistant",
           timestamp: new Date(),
+          isThinking: true, // Start with thinking indicator
         },
       ]);
 
@@ -1282,6 +1285,7 @@ export default function WorkflowPage() {
 
       const decoder = new TextDecoder();
       let shouldReloadWorkflow = false;
+      let currentThinkingContent = "";
 
       try {
         while (true) {
@@ -1378,16 +1382,21 @@ export default function WorkflowPage() {
                       console.log("Processed text:", processedText);
                     }
 
-                    // Add each message as a separate message instead of accumulating
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        id: uuidv4(),
-                        content: processedText,
-                        sender: "assistant",
-                        timestamp: new Date(),
-                      },
-                    ]);
+                    // Accumulate thinking content in the current AI message
+                    currentThinkingContent += processedText;
+
+                    // Update the current AI message with accumulated content
+                    setMessages((prev) =>
+                      prev.map((msg) =>
+                        msg.id === aiMessageId
+                          ? {
+                              ...msg,
+                              content: currentThinkingContent,
+                              isThinking: true,
+                            }
+                          : msg,
+                      ),
+                    );
                   } else {
                     console.log("Response filtered out:", data.text);
                     console.log(
@@ -1429,6 +1438,15 @@ export default function WorkflowPage() {
                 }
 
                 if (data.done) {
+                  // Clear the thinking indicator when done
+                  setMessages((prev) =>
+                    prev.map((msg) =>
+                      msg.id === aiMessageId
+                        ? { ...msg, isThinking: false }
+                        : msg,
+                    ),
+                  );
+
                   // Refresh the workflow data if tools were executed
                   if (shouldReloadWorkflow) {
                     await refreshWorkflowData();
@@ -1446,6 +1464,14 @@ export default function WorkflowPage() {
       }
     } catch (error) {
       console.error("Error sending message:", error);
+
+      // Clear the thinking indicator on error
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMessageId ? { ...msg, isThinking: false } : msg,
+        ),
+      );
+
       setMessages((prev) => [
         ...prev,
         {

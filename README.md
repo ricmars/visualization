@@ -1,5 +1,21 @@
 # My App
 
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
 ## Project Configuration
 
 **IMPORTANT**: This project uses:
@@ -7,16 +23,6 @@
 - **Port**: 3100
 - **Package Manager**: npm
 - **Database Reset**: `curl -X POST http://localhost:3100/api/reset-db`
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3100](http://localhost:3100) with your browser to see the result.
 
 ## Available Scripts
 
