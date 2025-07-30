@@ -8,20 +8,30 @@ import { SharedTool } from "../../lib/sharedTools";
 
 // Initialize shared tools
 let sharedTools: SharedTool<any, any>[] = [];
+let toolsInitialized = false;
 
 // Initialize tools when server starts
 async function initializeTools() {
   try {
-    if (sharedTools.length === 0) {
+    if (!toolsInitialized) {
       console.log("Initializing checkpoint-aware shared tools for MCP...");
+
+      // Test database connection first
+      const client = await pool.connect();
+      await client.query("SELECT 1");
+      client.release();
+      console.log("Database connection verified");
+
       sharedTools = createCheckpointSharedTools(pool); // Enable checkpoints for MCP
+      toolsInitialized = true;
       console.log(
         `Initialized ${sharedTools.length} tools with checkpoint support`,
       );
     }
   } catch (error) {
     console.error("Error initializing tools:", error);
-    throw error;
+    // Don't throw error, just log it and continue with empty tools array
+    toolsInitialized = true; // Mark as initialized to prevent infinite retries
   }
 }
 
@@ -199,6 +209,8 @@ export async function POST(request: NextRequest) {
 
     // Handle initialization
     if (body.method === "initialize") {
+      console.log("MCP initialize request received");
+
       const response = {
         jsonrpc: "2.0",
         id: body.id,

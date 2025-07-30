@@ -236,3 +236,11 @@ AZURE_CLIENT_SECRET=your-client-secret
 - Run tests to identify issues
 - Check the `.cursor/rules/.cursorrules` for AI assistant patterns
 - Ask for help in team discussions
+
+## ID Handling Convention
+
+- **All IDs (field, step, stage, process, view, etc.) must be passed and handled as integers throughout the codebase.**
+- **String conversion is only allowed for UI keys or HTML attributes, never for business/data logic.**
+- All function signatures, props, and state must use `number` for IDs.
+- Any code, test, or documentation that passes IDs as strings is considered a bug.
+- Linting and code review must enforce this rule.

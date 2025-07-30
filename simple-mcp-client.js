@@ -1,6 +1,28 @@
 #!/usr/bin/env node
 
+/**
+ * Simple MCP Client for Claude Desktop
+ *
+ * This client acts as a bridge between Claude Desktop and your MCP server.
+ * It reads JSON-RPC requests from stdin and forwards them to the MCP server,
+ * then writes the responses back to stdout.
+ *
+ * Usage:
+ *   node simple-mcp-client.js <server-url>
+ *
+ * Examples:
+ *   node simple-mcp-client.js http://localhost:3100/api/mcp
+ *   node simple-mcp-client.js https://your-app.vercel.app/api/mcp
+ *
+ * The client supports both HTTP and HTTPS URLs and will automatically
+ * use the appropriate protocol.
+ *
+ * For Claude Desktop configuration, use this as the MCP server command:
+ *   /path/to/node /path/to/simple-mcp-client.js https://your-app.vercel.app/api/mcp
+ */
+
 const http = require("http");
+const https = require("https");
 
 class SimpleMCPClient {
   constructor(url) {
@@ -8,6 +30,7 @@ class SimpleMCPClient {
     // Force IPv4 to avoid IPv6 connection issues
     this.hostname =
       this.url.hostname === "localhost" ? "127.0.0.1" : this.url.hostname;
+    this.isHttps = this.url.protocol === "https:";
   }
 
   async request(data, retries = 3) {
@@ -31,7 +54,7 @@ class SimpleMCPClient {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: this.hostname,
-        port: this.url.port,
+        port: this.url.port || (this.isHttps ? 443 : 80),
         path: this.url.pathname,
         method: "POST",
         headers: {
@@ -40,18 +63,34 @@ class SimpleMCPClient {
         },
       };
 
-      const req = http.request(options, (res) => {
+      console.error(
+        `Making ${this.isHttps ? "HTTPS" : "HTTP"} request to ${
+          this.hostname
+        }:${options.port}${options.path}`,
+      );
+
+      // Use https for HTTPS URLs, http for HTTP URLs
+      const client = this.isHttps ? https : http;
+      const req = client.request(options, (res) => {
+        console.error(
+          `Received response: ${res.statusCode} ${res.statusMessage}`,
+        );
+
         let body = "";
         res.on("data", (chunk) => (body += chunk));
         res.on("end", () => {
           try {
             if (body.trim()) {
+              console.error(`Response body length: ${body.length} characters`);
               resolve(JSON.parse(body));
             } else {
               // Handle empty responses
+              console.error("Received empty response");
               resolve(null);
             }
           } catch (error) {
+            console.error(`Failed to parse response: ${error.message}`);
+            console.error(`Response body: ${body.substring(0, 200)}...`);
             reject(new Error(`Failed to parse response: ${error.message}`));
           }
         });
@@ -68,7 +107,11 @@ class SimpleMCPClient {
         reject(new Error("Request timeout"));
       });
 
-      req.write(JSON.stringify(data));
+      const requestBody = JSON.stringify(data);
+      console.error(
+        `Sending request body: ${requestBody.substring(0, 100)}...`,
+      );
+      req.write(requestBody);
       req.end();
     });
   }

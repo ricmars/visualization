@@ -481,33 +481,45 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                 ...process,
                 steps: process.steps.map((step) => {
                   if (step.id === stepId) {
-                    // Create new field references from the field IDs
-                    const newFields = fieldIds
-                      .map((fieldId) => {
-                        // Find field by ID
-                        const field = fields.find((f) => f.id === fieldId);
-                        if (field) {
-                          return {
-                            fieldId: field.id,
-                            required: false,
-                          } as FieldReference;
-                        }
-                        return null;
-                      })
-                      .filter(
-                        (field): field is FieldReference => field !== null,
-                      );
+                    // Get existing fields
+                    const existingFields = step.fields || [];
+
+                    // Create a map of existing fields to preserve their properties
+                    const existingFieldsMap = new Map(
+                      existingFields.map((field) => [field.fieldId, field]),
+                    );
+
+                    // Add new fields while preserving existing ones
+                    fieldIds.forEach((fieldId) => {
+                      // Find field by ID
+                      const field = fields.find((f) => f.id === fieldId);
+                      if (
+                        field &&
+                        field.id &&
+                        !existingFieldsMap.has(field.id)
+                      ) {
+                        existingFieldsMap.set(field.id, {
+                          fieldId: field.id,
+                          required: false,
+                        } as FieldReference);
+                      }
+                    });
+
+                    // Convert map back to array - this will include both existing and new fields
+                    const updatedFields = Array.from(
+                      existingFieldsMap.values(),
+                    );
 
                     const updatedStep = {
                       ...step,
-                      fields: newFields,
+                      fields: updatedFields,
                     };
 
                     // Update selectedStep state if this is the current step
                     if (selectedStep && selectedStep.stepId === step.id) {
                       setSelectedStep({
                         ...selectedStep,
-                        fields: newFields,
+                        fields: updatedFields,
                       });
                     }
 

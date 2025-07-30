@@ -46,7 +46,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
 
   // Filter out fields that are already in the step
   const availableFields = existingFields.filter(
-    (field) => !stepFieldIds.includes(field.name),
+    (field) => !stepFieldIds.includes(field.id?.toString() || ""),
   );
 
   useEffect(() => {
@@ -111,9 +111,9 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
   };
 
   const toggleFieldSelection = (fieldId: string) => {
-    setSelectedFieldIds((prev) =>
+    setSelectedFieldIds((prev: string[]) =>
       prev.includes(fieldId)
-        ? prev.filter((id) => id !== fieldId)
+        ? prev.filter((id: string) => id !== fieldId)
         : [...prev, fieldId],
     );
     setError("");
@@ -212,16 +212,22 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                             <label
                               key={field.name}
                               className={`flex items-center p-3 rounded-lg border ${
-                                selectedFieldIds.includes(field.name)
+                                selectedFieldIds.includes(
+                                  field.id?.toString() || "",
+                                )
                                   ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
                                   : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700"
                               } cursor-pointer transition-colors`}
                             >
                               <input
                                 type="checkbox"
-                                checked={selectedFieldIds.includes(field.name)}
+                                checked={selectedFieldIds.includes(
+                                  field.id?.toString() || "",
+                                )}
                                 onChange={() =>
-                                  toggleFieldSelection(field.name)
+                                  toggleFieldSelection(
+                                    field.id?.toString() || "",
+                                  )
                                 }
                                 className="rounded border-gray-300 text-blue-500 focus:ring-blue-500 mr-3"
                               />

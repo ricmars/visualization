@@ -84,14 +84,16 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   const databaseViews = useMemo(() => {
     if (!_views || _views.length === 0) return [];
 
-    return _views.map((view) => ({
-      id: `db-${view.id}`, // Use database ID for database views
-      name: view.name,
-      stageName: "Database View",
-      fields: [], // We'll parse these from the view model
-      isDatabaseView: true,
-      viewData: view,
-    }));
+    return _views
+      .filter((view) => view && view.id && view.name) // Filter out undefined/null views
+      .map((view) => ({
+        id: `db-${view.id}`, // Use database ID for database views
+        name: view.name,
+        stageName: "Database View",
+        fields: [], // We'll parse these from the view model
+        isDatabaseView: true,
+        viewData: view,
+      }));
   }, [_views]);
 
   // Combine database views and linked steps, prioritizing database views
@@ -377,18 +379,23 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
                 if (step) {
                   // Find the actual step in the workflow
                   let stepId: number | undefined;
-                  stages.forEach((stage) => {
-                    stage.processes.forEach((process) => {
-                      process.steps.forEach((step) => {
-                        if (
-                          step.name === step.name &&
-                          step.type === "Collect information"
-                        ) {
-                          stepId = step.id;
-                        }
+                  const stepToFind = collectSteps.find(
+                    (s) => s.id === selectedView,
+                  );
+                  if (stepToFind) {
+                    stages.forEach((stage) => {
+                      stage.processes.forEach((process) => {
+                        process.steps.forEach((step) => {
+                          if (
+                            step.name === stepToFind.name &&
+                            step.type === "Collect information"
+                          ) {
+                            stepId = step.id;
+                          }
+                        });
                       });
                     });
-                  });
+                  }
                   if (stepId) {
                     onAddFieldsToStep(stepId, [fieldName]);
                   }
@@ -407,28 +414,50 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
               (v) => v.id.toString() === selectedView && v.isDatabaseView,
             );
             if (databaseView && onAddFieldsToView) {
-              // It's a database view
-              onAddFieldsToView(databaseView.viewData!.id, fieldIds);
+              // It's a database view - convert field IDs to field names
+              const fieldNames = fieldIds
+                .map((fieldId) => {
+                  const field = fields.find(
+                    (f) => f.id?.toString() === fieldId,
+                  );
+                  return field?.name;
+                })
+                .filter((name): name is string => name !== undefined);
+              onAddFieldsToView(databaseView.viewData!.id, fieldNames);
             } else if (onAddFieldsToStep) {
               // It's a workflow step - find the step ID
               const step = collectSteps.find((s) => s.id === selectedView);
               if (step) {
                 // Find the actual step in the workflow
                 let stepId: number | undefined;
-                stages.forEach((stage) => {
-                  stage.processes.forEach((process) => {
-                    process.steps.forEach((step) => {
-                      if (
-                        step.name === step.name &&
-                        step.type === "Collect information"
-                      ) {
-                        stepId = step.id;
-                      }
+                const stepToFind = collectSteps.find(
+                  (s) => s.id === selectedView,
+                );
+                if (stepToFind) {
+                  stages.forEach((stage) => {
+                    stage.processes.forEach((process) => {
+                      process.steps.forEach((step) => {
+                        if (
+                          step.name === stepToFind.name &&
+                          step.type === "Collect information"
+                        ) {
+                          stepId = step.id;
+                        }
+                      });
                     });
                   });
-                });
+                }
                 if (stepId) {
-                  onAddFieldsToStep(stepId, fieldIds);
+                  // Convert field IDs to field names for workflow steps
+                  const fieldNames = fieldIds
+                    .map((fieldId) => {
+                      const field = fields.find(
+                        (f) => f.id?.toString() === fieldId,
+                      );
+                      return field?.name;
+                    })
+                    .filter((name): name is string => name !== undefined);
+                  onAddFieldsToStep(stepId, fieldNames);
                 }
               }
             }

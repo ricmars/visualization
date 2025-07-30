@@ -7,15 +7,19 @@ console.log("NODE_ENV:", process.env.NODE_ENV);
 // Create a new pool using the DATABASE_URL environment variable
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
-  // Performance optimizations
-  max: 20, // Increase max connections
-  min: 2, // Keep minimum connections ready
-  idleTimeoutMillis: 30000, // Keep connections alive longer
-  connectionTimeoutMillis: 2000, // Faster connection timeout
+  ssl: {
+    rejectUnauthorized: false,
+    // Enable SSL for all environments (required for Neon)
+  },
+  // Performance optimizations with better timeout handling
+  max: 10, // Reduced from 20 to prevent connection exhaustion
+  min: 1, // Reduced from 2 to minimize idle connections
+  idleTimeoutMillis: 60000, // Increased to 60 seconds
+  connectionTimeoutMillis: 10000, // Increased to 10 seconds
+  // Add connection retry logic
+  allowExitOnIdle: true,
+  // Better error handling
+  maxUses: 7500, // Recycle connections after 7500 uses
 });
 
 console.log("Database pool created");
@@ -29,8 +33,72 @@ pool.on("connect", (_client) => {
 pool.on("error", (err) => {
   console.error("Unexpected error on idle client", err);
   console.error("Error stack:", err.stack);
-  process.exit(-1);
+  // Don't exit the process immediately, just log the error
+  // process.exit(-1); // Removed to prevent app crashes
 });
+
+// Add connection cleanup on app shutdown
+process.on("SIGINT", async () => {
+  console.log("Shutting down database pool...");
+  await pool.end();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("Shutting down database pool...");
+  await pool.end();
+  process.exit(0);
+});
+
+// Connection health check function
+export async function checkDatabaseConnection(): Promise<{
+  status: "ok" | "error";
+  message: string;
+}> {
+  try {
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+    return { status: "ok", message: "Database connection is healthy" };
+  } catch (error) {
+    console.error("Database connection check failed:", error);
+    return {
+      status: "error",
+      message:
+        error instanceof Error ? error.message : "Unknown database error",
+    };
+  }
+}
+
+// Retry wrapper for database operations
+export async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000,
+): Promise<T> {
+  let lastError: Error;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      console.warn(
+        `Database operation failed (attempt ${attempt}/${maxRetries}):`,
+        error,
+      );
+
+      if (attempt < maxRetries) {
+        // Wait before retrying, with exponential backoff
+        const waitTime = delay * Math.pow(2, attempt - 1);
+        console.log(`Retrying in ${waitTime}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+      }
+    }
+  }
+
+  throw lastError!;
+}
 
 // Initialize database tables
 export async function initializeDatabase() {
@@ -372,9 +440,11 @@ export const checkpointManager: CheckpointManager = {
 
     console.log(`Found ${undoOps.rows.length} operations to undo`);
 
-    // Begin transaction for rollback
+    // Begin transaction for rollback with better error handling
     const client = await pool.connect();
     try {
+      // Set a shorter statement timeout for rollback operations
+      await client.query("SET statement_timeout = '30s'");
       await client.query("BEGIN");
 
       for (const op of undoOps.rows) {
@@ -403,11 +473,19 @@ export const checkpointManager: CheckpointManager = {
       await client.query("COMMIT");
       console.log("Checkpoint rollback completed successfully");
     } catch (error) {
-      await client.query("ROLLBACK");
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("Failed to rollback transaction:", rollbackError);
+      }
       console.error("Rollback failed:", error);
       throw error;
     } finally {
-      client.release();
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error("Failed to release client:", releaseError);
+      }
     }
   },
 
