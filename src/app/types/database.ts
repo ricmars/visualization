@@ -41,13 +41,6 @@ export function getTableName(ruleTypeId: string): string {
   return ruleType.databaseSchema.tableName;
 }
 
-// Legacy DB_TABLES for backward compatibility (deprecated - use getTableName instead)
-export const LEGACY_DB_TABLES = {
-  CASES: "Cases",
-  FIELDS: "Fields",
-  VIEWS: "Views",
-} as const;
-
 // Step types mapping
 export const STEP_TYPES = {
   COLLECT_INFORMATION: "collect_information",
@@ -68,45 +61,6 @@ export interface DatabaseRecord {
   id: number;
 }
 
-// Dynamic interfaces - use rule type registry to get proper types
-export type CaseRecord = {
-  id?: number;
-  name: string;
-  description: string;
-  model: string; // JSON string containing the workflow structure
-};
-
-export type FieldRecord = {
-  id?: number;
-  name: string;
-  caseID: number;
-  type: string;
-  primary?: boolean;
-  label: string;
-  description: string;
-  order: number;
-  options: string[];
-  required: boolean;
-  defaultValue?: unknown;
-};
-
-export type ViewRecord = {
-  id?: number;
-  name: string;
-  caseID: number;
-  model: {
-    fields: {
-      fieldId: number;
-      required?: boolean;
-      order?: number;
-    }[];
-    layout?: {
-      type: "form" | "table" | "card";
-      columns?: number;
-    };
-  };
-};
-
 // Generic database record type that can be used with any rule type
 export type DynamicRecord<T = any> = T & DatabaseRecord;
 
@@ -121,23 +75,4 @@ export function stringifyModel(model: unknown): string {
 
 export function parseModel<T>(modelString: string): T {
   return JSON.parse(modelString);
-}
-
-// Validation functions
-export function validateStepType(type: string): boolean {
-  return Object.values(STEP_TYPES).includes(
-    type as (typeof STEP_TYPES)[keyof typeof STEP_TYPES],
-  );
-}
-
-export function validateFieldType(type: string): boolean {
-  return fieldTypes.includes(type as FieldType);
-}
-
-export function validateCaseId(caseID: string | number): number {
-  const id = ensureIntegerId(caseID);
-  if (isNaN(id) || id <= 0) {
-    throw new Error("Invalid case ID");
-  }
-  return id;
 }

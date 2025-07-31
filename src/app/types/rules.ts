@@ -1,11 +1,4 @@
 // These types are now dynamically generated from the rule type registry
-// Import the dynamic types from the database module
-import { CaseRecord, FieldRecord, ViewRecord } from "./database";
-
-// Type aliases for backward compatibility
-export type Field = FieldRecord;
-export type View = ViewRecord;
-export type Case = CaseRecord;
 
 export interface Condition {
   field: string;

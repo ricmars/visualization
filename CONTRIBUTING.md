@@ -342,10 +342,9 @@ DELETE /api/dynamic?ruleType=my-rule-type&id=1
 1. **Clear Naming**: Use descriptive, consistent names for rule types
 2. **Proper Categorization**: Group related rule types in the same category
 3. **Comprehensive Validation**: Include all necessary validation rules in the Zod schema
-4. **Meaningful Metadata**: Provide examples and documentation in the metadata
-5. **Version Management**: Use semantic versioning for rule type versions
-6. **Database Design**: Use snake_case for column names and include proper indexes
-7. **UI Configuration**: Create user-friendly forms with helpful placeholders and labels
+4. **Version Management**: Use semantic versioning for rule type versions
+5. **Database Design**: Use snake_case for column names and include proper indexes
+6. **UI Configuration**: Create user-friendly forms with helpful placeholders and labels
 
 ### Troubleshooting
 

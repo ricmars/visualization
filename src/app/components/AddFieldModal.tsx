@@ -208,9 +208,9 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                       <div className="space-y-2 max-h-60 overflow-y-auto">
                         {availableFields
                           .sort((a, b) => a.label.localeCompare(b.label))
-                          .map((field) => (
+                          .map((field, index) => (
                             <label
-                              key={field.id.toString()}
+                              key={field.id?.toString() || index}
                               className={`flex items-center p-3 rounded-lg border ${
                                 selectedFieldIds.includes(
                                   field.id?.toString() || "",

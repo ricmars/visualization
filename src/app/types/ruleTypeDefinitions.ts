@@ -107,23 +107,6 @@ export const caseRuleType: RuleTypeDefinition = {
       console.log(`Created case ${id}: ${data.name}`);
     },
   },
-
-  metadata: {
-    tags: ["workflow", "business-process", "case-management"],
-    examples: [
-      {
-        name: "Customer Onboarding",
-        description: "Process for onboarding new customers",
-        model: '{"stages": []}',
-      },
-    ],
-    author: {
-      name: "System",
-      email: "system@example.com",
-    },
-    createdAt: "2024-01-01T00:00:00Z",
-    updatedAt: "2024-01-01T00:00:00Z",
-  },
 };
 
 // Field Rule Type Definition
@@ -318,27 +301,6 @@ export const fieldRuleType: RuleTypeDefinition = {
       console.log(`Created field ${id}: ${data.name} (${data.type})`);
     },
   },
-
-  metadata: {
-    tags: ["data", "form", "input", "field"],
-    examples: [
-      {
-        name: "customerName",
-        label: "Customer Name",
-        type: "Text",
-        description: "Full name of the customer",
-        required: true,
-        primary: true,
-        order: 1,
-      },
-    ],
-    author: {
-      name: "System",
-      email: "system@example.com",
-    },
-    createdAt: "2024-01-01T00:00:00Z",
-    updatedAt: "2024-01-01T00:00:00Z",
-  },
 };
 
 // View Rule Type Definition
@@ -435,28 +397,6 @@ export const viewRuleType: RuleTypeDefinition = {
     afterCreate: async (data, id) => {
       console.log(`Created view ${id}: ${data.name}`);
     },
-  },
-
-  metadata: {
-    tags: ["ui", "view", "layout", "display"],
-    examples: [
-      {
-        name: "Customer Information Form",
-        model: {
-          fields: [
-            { fieldId: 1, required: true, order: 1 },
-            { fieldId: 2, required: false, order: 2 },
-          ],
-          layout: { type: "form", columns: 2 },
-        },
-      },
-    ],
-    author: {
-      name: "System",
-      email: "system@example.com",
-    },
-    createdAt: "2024-01-01T00:00:00Z",
-    updatedAt: "2024-01-01T00:00:00Z",
   },
 };
 

@@ -44,7 +44,7 @@ jest.mock("../../types/database", () => ({
     };
     return tableMap[ruleTypeId] || ruleTypeId;
   }),
-  validateFieldType: jest.fn().mockReturnValue(true),
+
   FIELD_TYPES: {
     TEXT: "Text",
     DATE: "Date",

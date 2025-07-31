@@ -39,9 +39,6 @@ export interface RuleTypeDefinition {
 
   /** Business logic hooks */
   hooks?: RuleTypeHooks;
-
-  /** Metadata for documentation and tooling */
-  metadata: RuleTypeMetadata;
 }
 
 // Database schema definition
@@ -132,33 +129,6 @@ export interface RuleTypeHooks {
 
   /** Business rule execution */
   executeRules?: (data: any) => Promise<any> | any;
-}
-
-// Metadata for documentation and tooling
-export interface RuleTypeMetadata {
-  /** Tags for categorization */
-  tags: string[];
-
-  /** Examples of valid data */
-  examples: any[];
-
-  /** Related rule types */
-  relatedTypes?: string[];
-
-  /** Documentation URL */
-  documentationUrl?: string;
-
-  /** Author information */
-  author?: {
-    name: string;
-    email?: string;
-  };
-
-  /** Creation date */
-  createdAt: string;
-
-  /** Last modified date */
-  updatedAt: string;
 }
 
 // Registry for managing rule types
@@ -447,7 +417,6 @@ export class RuleTypeRegistry {
     if (!definition.interfaceTemplate)
       errors.push("Interface template is required");
     if (!definition.databaseSchema) errors.push("Database schema is required");
-    if (!definition.metadata) errors.push("Metadata is required");
 
     // Validate database schema
     if (definition.databaseSchema) {

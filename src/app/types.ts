@@ -1,5 +1,5 @@
 import { FieldType } from "./types/fields";
-import { FieldRecord, CaseRecord } from "./types/database";
+import { CaseRecord, FieldRecord } from "./types/dynamicTypes";
 
 /* Interface definition */
 export type fieldType = FieldType;
