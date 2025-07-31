@@ -145,7 +145,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
                   >
                     {getAllFieldTypes().map((fieldType) => (
                       <option key={fieldType} value={fieldType}>
-                        {getFieldTypeDisplayName(fieldType)}
+                        {getFieldTypeDisplayName(fieldType as any)}
                       </option>
                     ))}
                   </select>

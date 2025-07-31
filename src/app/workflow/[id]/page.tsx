@@ -15,6 +15,10 @@ import {
   WorkflowModel,
   StepType,
 } from "../../types";
+import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
+
+// Initialize rule types on module load
+registerRuleTypes();
 
 // Local checkpoint interface for workflow change tracking
 interface WorkflowCheckpoint {

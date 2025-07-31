@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { CreateWorkflowModal } from "./components/CreateWorkflowModal";
-import { DB_TABLES } from "./types/database";
 import { Case } from "./types";
 import { useRouter } from "next/navigation";
 import { fetchWithBaseUrl } from "./lib/fetchWithBaseUrl";
 import { Service } from "./services/service";
 import { databaseSystemPrompt } from "./lib/databasePrompt";
+import { registerRuleTypes } from "./types/ruleTypeDefinitions";
+
+// Initialize rule types on module load
+registerRuleTypes();
 
 /**
  * Main page component for the workflow application
@@ -24,9 +27,7 @@ export default function Home() {
 
   const refreshCases = async () => {
     try {
-      const response = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.CASES}`,
-      );
+      const response = await fetchWithBaseUrl(`/api/dynamic?ruleType=case`);
       if (!response.ok) {
         throw new Error(`Failed to fetch cases: ${response.status}`);
       }
@@ -183,7 +184,7 @@ export default function Home() {
       }
 
       const response = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.CASES}&id=${caseToDelete.id}`,
+        `/api/dynamic?ruleType=case&id=${caseToDelete.id}`,
         {
           method: "DELETE",
         },

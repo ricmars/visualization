@@ -237,6 +237,123 @@ AZURE_CLIENT_SECRET=your-client-secret
 - Check the `.cursor/rules/.cursorrules` for AI assistant patterns
 - Ask for help in team discussions
 
+## Rule Type Registry System
+
+The application uses a dynamic Rule Type Registry System that allows you to define new rule types declaratively without modifying existing code. This system automatically generates database schemas, validation logic, and UI components.
+
+### How It Works
+
+1. **Rule Type Definition**: Define rule types as complete specifications including TypeScript interfaces, validation schemas, database schemas, and UI configurations
+2. **Registration**: Register rule types with the central registry
+3. **Automatic Generation**: The system generates all necessary code automatically
+4. **Dynamic API**: Use a single API endpoint for all CRUD operations on any rule type
+
+### Adding New Rule Types
+
+#### Step 1: Define the Rule Type
+
+Add the new rule type definition to ruleTypeDefinitions.ts
+
+#### Step 2: Register the Rule Type
+
+Add the registration to your initialization code:
+
+```typescript
+// src/app/types/ruleTypeDefinitions.ts
+import { myNewRuleType } from "./myNewRuleType";
+
+export function registerRuleTypes(): void {
+  try {
+    // ... existing registrations
+    ruleTypeRegistry.register(myNewRuleType);
+    console.log("✅ All rule types registered successfully");
+  } catch (error) {
+    console.error("❌ Failed to register rule types:", error);
+    throw error;
+  }
+}
+```
+
+#### Step 3: Initialize Database Tables
+
+The system can automatically create database tables:
+
+```typescript
+// Generate migration SQL
+const migration = await dynamicDatabaseService.generateMigrations();
+console.log(migration);
+
+// Or initialize tables directly
+await dynamicDatabaseService.initializeTables();
+```
+
+### Using the Dynamic API
+
+The dynamic API provides a single endpoint for all rule type operations:
+
+#### List All Rule Types
+
+```bash
+GET /api/dynamic?action=list-rule-types
+```
+
+#### Generate Migration SQL
+
+```bash
+GET /api/dynamic?action=generate-migration
+```
+
+#### Generate TypeScript Types
+
+```bash
+GET /api/dynamic?action=generate-types
+```
+
+#### CRUD Operations
+
+```bash
+# Create
+POST /api/dynamic
+{
+  "ruleType": "my-rule-type",
+  "data": { "name": "Example", "status": "active" }
+}
+
+# Read
+GET /api/dynamic?ruleType=my-rule-type&id=1
+
+# List
+GET /api/dynamic?ruleType=my-rule-type
+
+# Update
+PUT /api/dynamic
+{
+  "ruleType": "my-rule-type",
+  "id": 1,
+  "data": { "name": "Updated Name" }
+}
+
+# Delete
+DELETE /api/dynamic?ruleType=my-rule-type&id=1
+```
+
+### Best Practices
+
+1. **Clear Naming**: Use descriptive, consistent names for rule types
+2. **Proper Categorization**: Group related rule types in the same category
+3. **Comprehensive Validation**: Include all necessary validation rules in the Zod schema
+4. **Meaningful Metadata**: Provide examples and documentation in the metadata
+5. **Version Management**: Use semantic versioning for rule type versions
+6. **Database Design**: Use snake_case for column names and include proper indexes
+7. **UI Configuration**: Create user-friendly forms with helpful placeholders and labels
+
+### Troubleshooting
+
+- **Rule Type Not Found**: Ensure the rule type is properly registered in the registry
+- **Validation Errors**: Check the Zod schema and custom validation logic
+- **Database Errors**: Verify the database schema definition and run migrations
+- **UI Issues**: Check the UI configuration for form fields and display settings
+
 ## ID Handling Convention
 
 - **All IDs (field, step, stage, process, view, etc.) must be passed and handled as integers throughout the codebase.**

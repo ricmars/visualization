@@ -282,10 +282,17 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("MCP HTTP Error:", error);
+    let requestBody;
+    try {
+      requestBody = await request.json();
+    } catch {
+      requestBody = {};
+    }
+
     return NextResponse.json(
       {
         jsonrpc: "2.0",
-        id: null,
+        id: requestBody?.id || null,
         error: {
           code: -32700,
           message: "Parse error",

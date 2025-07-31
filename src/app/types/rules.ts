@@ -1,60 +1,11 @@
-export interface Field {
-  id?: number;
-  name: string;
-  caseID: number;
-  type:
-    | "Address"
-    | "AutoComplete"
-    | "Checkbox"
-    | "Currency"
-    | "Date"
-    | "DateTime"
-    | "Decimal"
-    | "Dropdown"
-    | "Email"
-    | "Integer"
-    | "Location"
-    | "ReferenceValues"
-    | "DataReferenceSingle"
-    | "DataReferenceMulti"
-    | "CaseReferenceSingle"
-    | "CaseReferenceMulti"
-    | "Percentage"
-    | "Phone"
-    | "RadioButtons"
-    | "RichText"
-    | "Status"
-    | "Text"
-    | "TextArea"
-    | "Time"
-    | "URL"
-    | "UserReference";
-  primary?: boolean;
-}
+// These types are now dynamically generated from the rule type registry
+// Import the dynamic types from the database module
+import { CaseRecord, FieldRecord, ViewRecord } from "./database";
 
-export interface View {
-  id?: number;
-  name: string;
-  caseID: number;
-  model: {
-    fields: {
-      fieldId: number;
-      required: boolean;
-      order: number;
-    }[];
-    layout?: {
-      type: "form" | "table" | "card";
-      columns?: number;
-    };
-  };
-}
-
-export interface Case {
-  id?: number;
-  name: string;
-  description: string;
-  model: string; // JSON string containing the workflow structure
-}
+// Type aliases for backward compatibility
+export type Field = FieldRecord;
+export type View = ViewRecord;
+export type Case = CaseRecord;
 
 export interface Condition {
   field: string;

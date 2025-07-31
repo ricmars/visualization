@@ -1,4 +1,5 @@
 import { fieldTypes, FieldType } from "./fields";
+import { ruleTypeRegistry } from "./ruleTypeRegistry";
 
 // Database column names
 export const DB_COLUMNS = {
@@ -15,8 +16,33 @@ export const DB_COLUMNS = {
   REQUIRED: "required",
 } as const;
 
-// Database table names
+// Dynamic database table names - get from rule type registry
 export const DB_TABLES = {
+  get CASES() {
+    const ruleType = ruleTypeRegistry.get("case");
+    return ruleType?.databaseSchema.tableName || "Cases";
+  },
+  get FIELDS() {
+    const ruleType = ruleTypeRegistry.get("field");
+    return ruleType?.databaseSchema.tableName || "Fields";
+  },
+  get VIEWS() {
+    const ruleType = ruleTypeRegistry.get("view");
+    return ruleType?.databaseSchema.tableName || "Views";
+  },
+} as const;
+
+// Helper function to get table name by rule type ID
+export function getTableName(ruleTypeId: string): string {
+  const ruleType = ruleTypeRegistry.get(ruleTypeId);
+  if (!ruleType) {
+    throw new Error(`Rule type '${ruleTypeId}' not found`);
+  }
+  return ruleType.databaseSchema.tableName;
+}
+
+// Legacy DB_TABLES for backward compatibility (deprecated - use getTableName instead)
+export const LEGACY_DB_TABLES = {
   CASES: "Cases",
   FIELDS: "Fields",
   VIEWS: "Views",
@@ -42,29 +68,47 @@ export interface DatabaseRecord {
   id: number;
 }
 
-export interface CaseRecord extends DatabaseRecord {
+// Dynamic interfaces - use rule type registry to get proper types
+export type CaseRecord = {
+  id?: number;
   name: string;
   description: string;
-  model: string; // JSON string
-}
+  model: string; // JSON string containing the workflow structure
+};
 
-export interface FieldRecord extends DatabaseRecord {
+export type FieldRecord = {
+  id?: number;
   name: string;
-  type: string;
-  primary: boolean;
   caseID: number;
+  type: string;
+  primary?: boolean;
   label: string;
   description: string;
   order: number;
-  options: string;
+  options: string[];
   required: boolean;
-}
+  defaultValue?: unknown;
+};
 
-export interface ViewRecord extends DatabaseRecord {
+export type ViewRecord = {
+  id?: number;
   name: string;
-  model: string; // JSON string
   caseID: number;
-}
+  model: {
+    fields: {
+      fieldId: number;
+      required?: boolean;
+      order?: number;
+    }[];
+    layout?: {
+      type: "form" | "table" | "card";
+      columns?: number;
+    };
+  };
+};
+
+// Generic database record type that can be used with any rule type
+export type DynamicRecord<T = any> = T & DatabaseRecord;
 
 // Utility functions
 export function ensureIntegerId(id: string | number): number {

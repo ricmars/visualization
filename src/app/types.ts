@@ -1,36 +1,18 @@
 import { FieldType } from "./types/fields";
+import { FieldRecord, CaseRecord } from "./types/database";
 
 /* Interface definition */
 export type fieldType = FieldType;
 
-export interface Field {
-  /** Unique identifier for the field */
-  id?: number;
-  /** Unique name of the field for the case type - used as key */
-  name: string;
-  /** Field label */
-  label: string;
-  /** Type of the field */
-  type: fieldType;
+// Use dynamic field type from rule type registry
+export type Field = FieldRecord & {
   /** if type is embeddded data, data reference or case reference, set this value to the object name */
   refType?: string;
   /** source of the field - if not set will default to 'User input' */
   source?: "User input" | "System" | "Integration" | "Calculated";
-  /** set to true if the field is a primary field - the field will be exposed in the CaseView summary panel */
-  primary?: boolean;
   /** Example of value of the field - Only used when field is render as a displayField */
   value?: string | number | boolean | Array<string>;
-  /** if type is RadioButtons, Dropdown or AutoComplete - list of valid options */
-  options?: string[];
-  /** set to true if the field is required */
-  required?: boolean;
-  /** display order of the field */
-  order?: number;
-  /** field description */
-  description?: string;
-  /** Default value for the field */
-  defaultValue?: unknown;
-}
+};
 
 export interface FieldReference {
   /** Unique identifier for the field (database ID) */
@@ -165,16 +147,13 @@ export interface MessageDelta {
   oldValue?: Stage | Step | null;
 }
 
-export interface Case {
+// Use dynamic case type from rule type registry
+export type Case = CaseRecord & {
   /** Unique identifier for the case */
   id: number;
-  /** Unique name of the case type */
-  name: string;
   /** Case description */
   description?: string;
-  /** Workflow model as JSON string containing stages structure */
-  model: string;
-}
+};
 
 export interface Application {
   /**

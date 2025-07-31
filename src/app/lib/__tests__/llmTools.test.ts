@@ -3,13 +3,47 @@ import { pool } from "../db";
 import { LLMTool } from "../toolTypes";
 import { waitForPendingPromises, cleanupTimers } from "../testUtils";
 
-// Mock the database types
+// Mock the rule type registry to provide dynamic table names
+jest.mock("../../types/ruleTypeRegistry", () => ({
+  ruleTypeRegistry: {
+    get: jest.fn((id: string) => {
+      const mockRuleTypes: Record<string, any> = {
+        case: {
+          databaseSchema: { tableName: "Cases" },
+        },
+        field: {
+          databaseSchema: { tableName: "Fields" },
+        },
+        view: {
+          databaseSchema: { tableName: "Views" },
+        },
+      };
+      return mockRuleTypes[id];
+    }),
+  },
+}));
+
+// Mock the database types with dynamic approach
 jest.mock("../../types/database", () => ({
   DB_TABLES: {
-    CASES: "Cases",
-    FIELDS: "Fields",
-    VIEWS: "Views",
+    get CASES() {
+      return "Cases";
+    },
+    get FIELDS() {
+      return "Fields";
+    },
+    get VIEWS() {
+      return "Views";
+    },
   },
+  getTableName: jest.fn((ruleTypeId: string) => {
+    const tableMap: Record<string, string> = {
+      case: "Cases",
+      field: "Fields",
+      view: "Views",
+    };
+    return tableMap[ruleTypeId] || ruleTypeId;
+  }),
   validateFieldType: jest.fn().mockReturnValue(true),
   FIELD_TYPES: {
     TEXT: "Text",

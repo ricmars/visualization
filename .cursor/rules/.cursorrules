@@ -82,7 +82,6 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 
 ### Type Validation
 
-- Use Zod for runtime type validation
 - Implement proper type guards for runtime checking
 - Use `unknown` instead of `any` for values whose type you don't know
 - Create custom error types for consistent error handling
@@ -498,7 +497,6 @@ it("should render correctly", () => {
 - Use React Query for server state management
 - Implement proper loading and error states
 - Handle edge cases and null checks
-- Use Zod for runtime type validation
 
 ## UI and Styling
 
@@ -573,6 +571,127 @@ it("should render correctly", () => {
 - E2E tests: `npm test:e2e`
 - Coverage report: `npm test:coverage`
 
+## Rule Type Registry System
+
+### Overview
+
+The Rule Type Registry System is a flexible, dynamic approach to managing different types of rules in the application. Instead of hardcoding validation logic, database schemas, and UI components for each rule type, this system allows you to define rule types declaratively and generates all the necessary code automatically.
+
+### Key Benefits
+
+1. **Dynamic Rule Type Addition**: Add new rule types without modifying existing code
+2. **Automatic Code Generation**: Database schemas, validation, and UI components are generated automatically
+3. **Type Safety**: Full TypeScript support with generated interfaces
+4. **Consistent Patterns**: All rule types follow the same patterns and conventions
+5. **Extensible**: Easy to add new features and capabilities
+6. **Maintainable**: Single source of truth for each rule type definition
+
+### Core Components
+
+1. **Rule Type Registry** (`src/app/types/ruleTypeRegistry.ts`)
+
+   - Central registry for managing all rule types
+   - Provides validation, code generation, and management functions
+
+2. **Dynamic Database Service** (`src/app/lib/dynamicDatabaseService.ts`)
+
+   - Generic database operations for any rule type
+   - Automatic validation and checkpoint tracking
+
+3. **Dynamic API** (`src/app/api/dynamic/route.ts`)
+
+   - RESTful API for all rule types
+   - Single endpoint handles all CRUD operations
+
+4. **Rule Type Definitions** (`src/app/types/ruleTypeDefinitions.ts`)
+   - Declarative definitions of existing rule types
+
+### Registration Pattern
+
+Register the rule type with the registry:
+
+```typescript
+import { ruleTypeRegistry } from "./ruleTypeRegistry";
+import { myRuleType } from "./myRuleType";
+
+ruleTypeRegistry.register(myRuleType);
+```
+
+### Dynamic API Usage Pattern
+
+Use the dynamic API to perform operations:
+
+```typescript
+// Create a new instance
+const response = await fetch("/api/dynamic", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    ruleType: "my-rule-type",
+    data: {
+      name: "Example",
+      // ... other properties
+    },
+  }),
+});
+
+// Read an instance
+const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1");
+
+// List instances
+const response = await fetch("/api/dynamic?ruleType=my-rule-type");
+
+// Update an instance
+const response = await fetch("/api/dynamic", {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    ruleType: "my-rule-type",
+    id: 1,
+    data: {
+      name: "Updated Name",
+    },
+  }),
+});
+
+// Delete an instance
+const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1", {
+  method: "DELETE",
+});
+```
+
+### Best Practices for Rule Type Design
+
+1. **Clear Naming**: Use descriptive, consistent names
+2. **Proper Categorization**: Group related rule types
+3. **Comprehensive Validation**: Include all necessary validation rules
+4. **Meaningful Metadata**: Provide examples and documentation
+5. **Version Management**: Use semantic versioning
+
+### Database Schema Design Rules
+
+1. **Consistent Naming**: Use snake_case for column names
+2. **Proper Indexing**: Add indexes for frequently queried columns
+3. **Foreign Keys**: Define relationships properly
+4. **Constraints**: Use database constraints for data integrity
+5. **Descriptions**: Include column descriptions for documentation
+
+### UI Configuration Rules
+
+1. **User-Friendly Labels**: Use clear, descriptive labels
+2. **Helpful Placeholders**: Provide example values
+3. **Logical Grouping**: Organize fields in logical sections
+4. **Responsive Design**: Consider mobile and desktop layouts
+5. **Accessibility**: Include proper ARIA labels and descriptions
+
+### Business Logic Hooks Rules
+
+1. **Validation**: Use hooks for complex validation logic
+2. **Data Transformation**: Transform data as needed
+3. **Side Effects**: Handle external integrations
+4. **Error Handling**: Provide meaningful error messages
+5. **Logging**: Log important operations for debugging
+
 ## Critical Reminders
 
 ### Before Submitting Code
@@ -599,6 +718,9 @@ it("should render correctly", () => {
 - **Forgetting to commit or rollback checkpoint sessions**
 - **Using createSharedTools() instead of createCheckpointSharedTools() in routes**
 - **Not handling checkpoint rollback failures gracefully**
+- **Not registering rule types in the registry**
+- **Missing required fields in rule type definitions**
+- **Inconsistent naming between TypeScript interface and database schema**
 
 ### Validation Checklist
 
@@ -619,3 +741,7 @@ it("should render correctly", () => {
 - [ ] **No direct use of createSharedTools() in production routes (use createCheckpointSharedTools())**
 - [ ] **Checkpoint sessions are properly committed or rolled back**
 - [ ] **No orphaned active checkpoints in database**
+- [ ] **Rule types are properly registered in the registry**
+- [ ] **All required fields are included in rule type definitions**
+- [ ] **TypeScript interface matches database schema naming**
+- [ ] **Validation schema covers all required validations**

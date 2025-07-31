@@ -5,12 +5,16 @@ import { POST, GET } from "../route";
 jest.mock("../../../lib/db", () => ({
   pool: {
     query: jest.fn(),
+    connect: jest.fn().mockResolvedValue({
+      query: jest.fn().mockResolvedValue({ rows: [{ 1: 1 }] }),
+      release: jest.fn(),
+    }),
   },
 }));
 
-// Mock shared tools
-jest.mock("../../../lib/sharedTools", () => ({
-  createSharedTools: jest.fn(() => [
+// Mock checkpoint tools
+jest.mock("../../../lib/checkpointTools", () => ({
+  createCheckpointSharedTools: jest.fn(() => [
     {
       name: "testTool",
       description: "A test tool",
@@ -24,7 +28,11 @@ jest.mock("../../../lib/sharedTools", () => ({
       execute: jest.fn().mockResolvedValue({ success: true }),
     },
   ]),
-  convertToLLMTools: jest.fn((tools) => tools),
+  checkpointSessionManager: {
+    beginSession: jest.fn().mockResolvedValue({ id: "test-session" }),
+    commitSession: jest.fn().mockResolvedValue(undefined),
+    rollbackSession: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 
 describe("MCP Server", () => {
@@ -49,14 +57,17 @@ describe("MCP Server", () => {
 
   describe("POST /api/mcp", () => {
     it("should handle tools/list request", async () => {
-      const request = new NextRequest("http://localhost:3000/api/mcp", {
-        method: "POST",
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/list",
-        }),
-      });
+      const requestBody = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+      };
+
+      // Create a mock request that properly handles the body
+      const request = {
+        json: jest.fn().mockResolvedValue(requestBody),
+        url: "http://localhost:3000/api/mcp",
+      } as any;
 
       const response = await POST(request);
       const data = await response.json();
@@ -69,18 +80,20 @@ describe("MCP Server", () => {
     });
 
     it("should handle tools/call request", async () => {
-      const request = new NextRequest("http://localhost:3000/api/mcp", {
-        method: "POST",
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: {
-            name: "testTool",
-            arguments: { testParam: "test" },
-          },
-        }),
-      });
+      const requestBody = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "testTool",
+          arguments: { testParam: "test" },
+        },
+      };
+
+      const request = {
+        json: jest.fn().mockResolvedValue(requestBody),
+        url: "http://localhost:3000/api/mcp",
+      } as any;
 
       const response = await POST(request);
       const data = await response.json();
@@ -92,14 +105,16 @@ describe("MCP Server", () => {
     });
 
     it("should handle initialize request", async () => {
-      const request = new NextRequest("http://localhost:3000/api/mcp", {
-        method: "POST",
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-        }),
-      });
+      const requestBody = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+      };
+
+      const request = {
+        json: jest.fn().mockResolvedValue(requestBody),
+        url: "http://localhost:3000/api/mcp",
+      } as any;
 
       const response = await POST(request);
       const data = await response.json();
@@ -112,14 +127,16 @@ describe("MCP Server", () => {
     });
 
     it("should handle unknown method", async () => {
-      const request = new NextRequest("http://localhost:3000/api/mcp", {
-        method: "POST",
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "unknown",
-        }),
-      });
+      const requestBody = {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "unknown",
+      };
+
+      const request = {
+        json: jest.fn().mockResolvedValue(requestBody),
+        url: "http://localhost:3000/api/mcp",
+      } as any;
 
       const response = await POST(request);
       const data = await response.json();

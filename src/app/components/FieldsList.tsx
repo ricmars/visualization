@@ -75,7 +75,7 @@ const FieldsList: React.FC<FieldsListProps> = ({
                           )}
                         </div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">
-                          Type: {getFieldTypeDisplayName(field.type)}
+                          Type: {getFieldTypeDisplayName(field.type as any)}
                         </div>
                       </div>
                       <div className="flex items-center space-x-1">

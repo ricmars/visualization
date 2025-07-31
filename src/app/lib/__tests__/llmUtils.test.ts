@@ -317,8 +317,8 @@ describe("createStreamResponse", () => {
     expect(writer).toBeDefined();
     expect(encoder).toBeDefined();
     expect(response).toBeDefined();
-    expect(response.headers.get("content-type")).toBe("text/event-stream");
-    expect(response.headers.get("cache-control")).toBe("no-cache");
-    expect(response.headers.get("connection")).toBe("keep-alive");
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(response.headers.get("Cache-Control")).toBe("no-cache");
+    expect(response.headers.get("Connection")).toBe("keep-alive");
   });
 });

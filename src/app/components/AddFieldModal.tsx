@@ -210,7 +210,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                           .sort((a, b) => a.label.localeCompare(b.label))
                           .map((field) => (
                             <label
-                              key={field.name}
+                              key={field.id.toString()}
                               className={`flex items-center p-3 rounded-lg border ${
                                 selectedFieldIds.includes(
                                   field.id?.toString() || "",
@@ -236,7 +236,8 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                                   {field.label}
                                 </div>
                                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                                  Type: {getFieldTypeDisplayName(field.type)}
+                                  Type:{" "}
+                                  {getFieldTypeDisplayName(field.type as any)}
                                 </div>
                               </div>
                             </label>
@@ -280,7 +281,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
                       >
                         {getAllFieldTypes().map((fieldType) => (
                           <option key={fieldType} value={fieldType}>
-                            {getFieldTypeDisplayName(fieldType)}
+                            {getFieldTypeDisplayName(fieldType as any)}
                           </option>
                         ))}
                       </select>

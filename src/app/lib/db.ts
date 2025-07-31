@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { registerRuleTypes } from "../types/ruleTypeDefinitions";
 
 console.log("Database configuration:");
 console.log("DATABASE_URL:", process.env.DATABASE_URL ? "Set" : "Not set");
@@ -103,89 +104,19 @@ export async function withRetry<T>(
 // Initialize database tables
 export async function initializeDatabase() {
   try {
-    // Create Cases table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "Cases" (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        name TEXT NOT NULL,
-        description VARCHAR(500) NOT NULL,
-        model TEXT
-      );
-    `);
+    // Register all rule types first
+    registerRuleTypes();
 
-    // Create Fields table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "Fields" (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        type TEXT NOT NULL,
-        name TEXT NOT NULL,
-        "primary" BOOLEAN NOT NULL DEFAULT false,
-        caseid INTEGER NOT NULL,
-        label TEXT NOT NULL,
-        description TEXT NOT NULL DEFAULT '',
-        "order" INTEGER NOT NULL DEFAULT 0,
-        options TEXT NOT NULL DEFAULT '[]',
-        required BOOLEAN NOT NULL DEFAULT false,
-        "defaultValue" TEXT,
-        CONSTRAINT fields_name_caseid_unique UNIQUE (name, caseid)
-      );
-    `);
+    // Import DynamicDatabaseService locally to avoid circular dependency
+    const { DynamicDatabaseService } = require("./dynamicDatabaseService");
 
-    // Create foreign key for Fields if it doesn't exist
-    try {
-      await pool.query(`
-        ALTER TABLE "Fields"
-        ADD CONSTRAINT IF NOT EXISTS fields_caseid_fkey
-        FOREIGN KEY (caseid) REFERENCES "Cases" (id);
-      `);
-    } catch (_error) {
-      console.log(
-        "Foreign key fields_caseid_fkey may already exist, continuing...",
-      );
-    }
+    // Create the dynamic database service
+    const dynamicDbService = new DynamicDatabaseService(pool);
 
-    // Create index for Fields caseID if it doesn't exist
-    try {
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS fields_caseid_idx ON "Fields" (caseid);
-      `);
-    } catch (_error) {
-      console.log("Index fields_caseid_idx may already exist, continuing...");
-    }
+    // Initialize tables for all registered rule types
+    await dynamicDbService.initializeTables();
 
-    // Create Views table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS "Views" (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
-        name TEXT,
-        model TEXT,
-        caseid INTEGER
-      );
-    `);
-
-    // Create foreign key for Views if it doesn't exist
-    try {
-      await pool.query(`
-        ALTER TABLE "Views"
-        ADD CONSTRAINT IF NOT EXISTS views_caseid_fkey
-        FOREIGN KEY (caseid) REFERENCES "Cases" (id);
-      `);
-    } catch (_error) {
-      console.log(
-        "Foreign key views_caseid_fkey may already exist, continuing...",
-      );
-    }
-
-    // Create index for Views caseID if it doesn't exist
-    try {
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS views_caseid_idx ON "Views" (caseid);
-      `);
-    } catch (_error) {
-      console.log("Index views_caseid_idx may already exist, continuing...");
-    }
-
-    // Create undo_log table for checkpoint functionality
+    // Create undo_log table for checkpoint functionality (this is not a rule type, so it stays hardcoded)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "undo_log" (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
