@@ -50,7 +50,7 @@ interface WorkflowDiagramProps {
     options?: string[];
     required?: boolean;
     primary?: boolean;
-  }) => string;
+  }) => Promise<string>;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (field: Field) => void;
   onAddProcess: (stageId: number, processName: string) => void;
@@ -409,13 +409,13 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     onStepsUpdate(updatedStages);
   };
 
-  const handleAddFieldToStep = (field: {
+  const handleAddFieldToStep = async (field: {
     label: string;
     type: Field["type"];
     options?: string[];
     required?: boolean;
     primary?: boolean;
-  }): string => {
+  }): Promise<string> => {
     if (!selectedStep) return "";
 
     // Only allow adding fields to "Collect information" steps
@@ -423,7 +423,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return "";
     }
 
-    const fieldId = onAddField(field);
+    const fieldId = await onAddField(field);
 
     const updatedStages = stages.map((stage: Stage) => {
       if (stage.id === selectedStep.stageId) {

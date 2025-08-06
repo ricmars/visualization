@@ -587,94 +587,89 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleAddField = (field: {
+  const handleAddField = async (field: {
     label: string;
     type: Field["type"];
     options?: string[];
     required?: boolean;
     primary?: boolean;
-  }): string => {
+  }): Promise<string> => {
     if (!selectedCase) return "";
 
     // Generate the actual field name
     const fieldName = field.label.toLowerCase().replace(/\s+/g, "_");
 
-    // Start the async operation in the background
-    (async () => {
-      try {
-        const fieldData = {
-          name: fieldName,
-          type: field.type,
-          label: field.label,
-          required: field.required ?? false,
-          primary: field.primary ?? false,
-          caseid: selectedCase.id,
-          description: field.label,
-          order: 0,
-          options: field.options ?? [],
-        };
+    try {
+      const fieldData = {
+        name: fieldName,
+        type: field.type,
+        label: field.label,
+        required: field.required ?? false,
+        primary: field.primary ?? false,
+        caseid: selectedCase.id,
+        description: field.label,
+        order: 0,
+        options: field.options ?? [],
+      };
 
-        console.log("Creating field with data:", fieldData);
+      console.log("Creating field with data:", fieldData);
 
-        const response = await fetch(
-          `/api/database?table=${DB_TABLES.FIELDS}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              table: DB_TABLES.FIELDS,
-              data: {
-                name: fieldData.name,
-                type: fieldData.type,
-                primary: fieldData.primary,
-                caseid: fieldData.caseid,
-                label: fieldData.label,
-                description: fieldData.description,
-                order: fieldData.order,
-                options: fieldData.options,
-                required: fieldData.required,
-              },
-            }),
+      const response = await fetch(`/api/database?table=${DB_TABLES.FIELDS}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          table: DB_TABLES.FIELDS,
+          data: {
+            name: fieldData.name,
+            type: fieldData.type,
+            primary: fieldData.primary,
+            caseid: fieldData.caseid,
+            label: fieldData.label,
+            description: fieldData.description,
+            order: fieldData.order,
+            options: fieldData.options,
+            required: fieldData.required,
           },
-        );
+        }),
+      });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("=== Field Creation Failed ===");
-          console.error("Status:", response.status);
-          console.error("Status Text:", response.statusText);
-          console.error("Error Response:", errorText);
-          console.error("Request Data:", {
-            table: DB_TABLES.FIELDS,
-            data: fieldData,
-          });
-          throw new Error("Failed to add field");
-        }
-
-        // Refresh the fields state
-        const fieldsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-        );
-        if (fieldsResponse.ok) {
-          const fieldsData = await fieldsResponse.json();
-          setFields(fieldsData.data);
-        }
-
-        // Refresh the model
-        const composedModel = await fetchCaseData(id);
-        setModel(composedModel);
-
-        // Dispatch model updated event for preview
-        window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-      } catch (error) {
-        console.error("Error adding field:", error);
-        alert("Failed to add field. Please try again.");
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("=== Field Creation Failed ===");
+        console.error("Status:", response.status);
+        console.error("Status Text:", response.statusText);
+        console.error("Error Response:", errorText);
+        console.error("Request Data:", {
+          table: DB_TABLES.FIELDS,
+          data: fieldData,
+        });
+        throw new Error("Failed to add field");
       }
-    })();
 
-    return fieldName;
+      // Refresh the fields state
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+      );
+      if (fieldsResponse.ok) {
+        const fieldsData = await fieldsResponse.json();
+        setFields(fieldsData.data);
+      }
+
+      // Refresh the model
+      const composedModel = await fetchCaseData(id);
+      setModel(composedModel);
+
+      // Dispatch model updated event for preview
+      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+
+      return fieldName;
+    } catch (error) {
+      console.error("Error adding field:", error);
+      alert("Failed to add field. Please try again.");
+      throw error;
+    }
   };
 
   const handleUpdateField = async (updates: Partial<Field>) => {
@@ -845,59 +840,29 @@ export default function WorkflowPage() {
         })),
       };
 
-      // Update the case with the modified model (without including the id field)
+      // Update the case in the database
       const updateResponse = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            table: DB_TABLES.CASES,
-            data: {
-              name: selectedCase.name,
-              description: selectedCase.description,
-              model: JSON.stringify(updatedModel),
-            },
+            name: selectedCase.name,
+            description: selectedCase.description,
+            model: JSON.stringify(updatedModel),
           }),
         },
       );
 
       if (!updateResponse.ok) {
-        const errorText = await updateResponse.text();
-        console.error("=== Case Update Failed ===");
-        console.error("Status:", updateResponse.status);
-        console.error("Status Text:", updateResponse.statusText);
-        console.error("Error Response:", errorText);
-        console.error("Request Data:", {
-          table: DB_TABLES.CASES,
-          data: {
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
-          },
-        });
-        throw new Error(
-          `Failed to update case: ${updateResponse.status} ${errorText}`,
-        );
+        throw new Error(`Failed to update case: ${updateResponse.status}`);
       }
 
-      // Update local state immediately
-      setSelectedCase({
-        ...selectedCase,
-        model: JSON.stringify(updatedModel),
-      });
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedModel.stages,
-            }
-          : null,
-      );
+      const { data: updatedCase } = await updateResponse.json();
+      setSelectedCase(updatedCase);
+      setModel(updatedModel);
 
-      // Refresh the fields state
+      // Refresh the fields state to get updated fields
       const fieldsResponse = await fetchWithBaseUrl(
         `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
       );
@@ -920,6 +885,92 @@ export default function WorkflowPage() {
     } catch (error) {
       console.error("Error deleting field:", error);
       alert("Failed to delete field. Please try again.");
+    }
+  };
+
+  const handleRemoveFieldFromView = async (field: Field) => {
+    if (!selectedCase || !field.id || !selectedView) return;
+
+    try {
+      // Extract the actual view ID from the selectedView
+      // selectedView can be "db-123" for database views or a step ID for workflow steps
+      let viewId: number | undefined;
+
+      if (selectedView.startsWith("db-")) {
+        // It's a database view, extract the ID
+        viewId = parseInt(selectedView.substring(3), 10);
+      } else {
+        // It's a workflow step, we don't need to handle this case here
+        // as workflow steps don't use this function
+        return;
+      }
+
+      if (!viewId || isNaN(viewId)) {
+        throw new Error("Invalid view ID");
+      }
+
+      // Find the view in the views array
+      const view = views.find((v) => v.id === viewId);
+      if (!view) {
+        throw new Error("View not found");
+      }
+
+      // Parse the existing view model
+      let viewModel;
+      try {
+        viewModel = JSON.parse(view.model);
+      } catch (_error) {
+        viewModel = { fields: [] };
+      }
+
+      // Remove the field from the view's fields array
+      const originalFieldCount = viewModel.fields?.length || 0;
+      viewModel.fields = (viewModel.fields || []).filter(
+        (fieldRef: { fieldId: number }) => fieldRef.fieldId !== field.id,
+      );
+
+      // Only update if the field was actually removed
+      if (viewModel.fields.length < originalFieldCount) {
+        // Update the view in the database
+        const response = await fetch(
+          `/api/database?table=${DB_TABLES.VIEWS}&id=${view.id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: view.name,
+              caseid: selectedCase.id,
+              model: {
+                fields: viewModel.fields,
+                layout: {
+                  type: "form",
+                  columns: 1,
+                },
+              },
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to update view");
+        }
+
+        // Refresh the views state to get updated views
+        const viewsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+        );
+        if (viewsResponse.ok) {
+          const viewsData = await viewsResponse.json();
+          setViews(viewsData.data);
+        }
+
+        console.log(`Removed field ${field.name} from view ${view.name}`);
+      }
+    } catch (error) {
+      console.error("Error removing field from view:", error);
+      alert("Failed to remove field from view. Please try again.");
     }
   };
 
@@ -2404,6 +2455,7 @@ export default function WorkflowPage() {
                   onAddField={handleAddField}
                   onUpdateField={handleUpdateField}
                   onDeleteField={handleDeleteField}
+                  onRemoveFieldFromView={handleRemoveFieldFromView}
                   onAddFieldsToView={handleAddFieldsToView}
                   onAddFieldsToStep={handleAddFieldsToStep}
                   onFieldsReorder={(stepId: number, fieldIds: string[]) => {
@@ -2502,7 +2554,9 @@ export default function WorkflowPage() {
       <AddFieldModal
         isOpen={isAddFieldModalOpen}
         onClose={() => setIsAddFieldModalOpen(false)}
-        onAddField={handleAddField}
+        onAddField={async (field) => {
+          await handleAddField(field);
+        }}
         buttonRef={addFieldButtonRef as React.RefObject<HTMLButtonElement>}
         allowExistingFields={false}
       />

@@ -522,7 +522,7 @@ export class DynamicDatabaseService {
                 ) {
                   errors.push(`${prop.name} must be an array of strings`);
                 }
-              } catch (error) {
+              } catch {
                 errors.push(`${prop.name} must be an array of strings`);
               }
             }

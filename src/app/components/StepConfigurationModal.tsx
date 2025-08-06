@@ -24,7 +24,7 @@ interface StepConfigurationModalProps {
     options?: string[];
     required?: boolean;
     primary?: boolean;
-  }) => string;
+  }) => Promise<string>;
   onAddExistingField: (stepId: number, fieldIds: number[]) => void;
   onUpdateField: (updates: Partial<Field>) => void;
   onDeleteField: (field: Field) => void;
@@ -197,16 +197,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
         <AddFieldModal
           isOpen={isAddFieldOpen}
           onClose={() => setIsAddFieldOpen(false)}
-          onAddField={(field) => {
-            const newFieldName = onAddField({
+          onAddField={async (field) => {
+            await onAddField({
               ...field,
               primary: field.primary ?? false,
             });
-            // Convert field name to field ID for the step
-            const newField = fields.find((f) => f.name === newFieldName);
-            if (newField?.id) {
-              onAddExistingField(step.id, [newField.id]);
-            }
           }}
           buttonRef={addFieldButtonRef}
           existingFields={fields}

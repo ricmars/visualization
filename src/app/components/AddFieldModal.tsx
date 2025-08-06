@@ -13,7 +13,7 @@ interface AddFieldModalProps {
     options?: string[];
     required: boolean;
     primary?: boolean;
-  }) => void;
+  }) => Promise<void>;
   buttonRef?: React.RefObject<HTMLButtonElement>;
   existingFields?: Field[];
   stepFieldIds?: string[];
@@ -86,7 +86,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
     };
   }, [isOpen, onClose]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (mode === "existing") {
       if (selectedFieldIds.length === 0) {
         setError("Please select at least one field");
@@ -106,7 +106,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
             .map((opt) => opt.trim())
             .filter((opt) => opt.length > 0)
         : [];
-      onAddField({
+      await onAddField({
         label,
         type,
         required,
@@ -133,12 +133,12 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
     setError("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       onClose();
     } else if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit();
+      await handleSubmit();
     }
   };
 

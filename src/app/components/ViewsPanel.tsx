@@ -15,9 +15,10 @@ interface ViewsPanelProps {
     options?: string[];
     required?: boolean;
     primary?: boolean;
-  }) => string;
+  }) => Promise<string>;
   onUpdateField?: (updates: Partial<Field>) => void;
   onDeleteField?: (field: Field) => void;
+  onRemoveFieldFromView?: (field: Field) => void;
   onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
   onAddFieldsToStep?: (stepId: number, fieldNames: string[]) => void;
   onFieldsReorder?: (stepId: number, fieldIds: string[]) => void;
@@ -48,6 +49,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   onAddField,
   onUpdateField,
   onDeleteField,
+  onRemoveFieldFromView,
   onAddFieldsToView,
   onAddFieldsToStep,
   selectedView,
@@ -114,7 +116,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     // Only include database views and unlinked steps
     const combined = [...sortedDatabaseViews, ...unlinkedSteps];
     return combined;
-  }, [collectSteps, databaseViews]);
+  }, [collectSteps, databaseViews]); // Added _views to dependencies
 
   // Get the fields for the selected view
   const selectedViewFields = useMemo(() => {
@@ -178,7 +180,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     }
 
     return [];
-  }, [selectedView, collectSteps, fields, allViews]);
+  }, [selectedView, collectSteps, fields, allViews]); // Added _views to dependencies
 
   // Get the field IDs that are already in the selected view
   const selectedViewFieldIds = useMemo(() => {
@@ -212,7 +214,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     }
 
     return [];
-  }, [selectedView, collectSteps, allViews]);
+  }, [selectedView, collectSteps, allViews]); // Added _views to dependencies
 
   const handleEditSubmit = (updates: {
     label: string;
@@ -260,6 +262,30 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
 
   const onEditField = (field: Field) => {
     setEditingField(field);
+  };
+
+  const handleDeleteField = (field: Field) => {
+    if (!selectedView) return;
+
+    // Check if this is a database view or a workflow step
+    const databaseView = allViews.find(
+      (v) => v.id.toString() === selectedView && v.isDatabaseView,
+    );
+
+    if (databaseView) {
+      // It's a database view - just remove the field from the view
+      if (onRemoveFieldFromView) {
+        onRemoveFieldFromView(field);
+      } else if (onDeleteField) {
+        // Fallback to regular delete if remove from view is not provided
+        onDeleteField(field);
+      }
+    } else {
+      // It's a workflow step - this should delete the field entirely
+      if (onDeleteField) {
+        onDeleteField(field);
+      }
+    }
   };
 
   return (
@@ -342,7 +368,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
                 <StepForm
                   fields={selectedViewFields}
                   onFieldChange={handleFieldChange}
-                  onDeleteField={onDeleteField ?? (() => {})}
+                  onDeleteField={handleDeleteField}
                   onEditField={onEditField}
                   onReorderFields={handleFieldsReorder}
                 />
@@ -361,10 +387,11 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
         onClose={() => setIsAddFieldOpen(false)}
         onAddField={async (field) => {
           if (onAddField) {
-            const fieldName = onAddField({
+            const fieldName = await onAddField({
               ...field,
               primary: field.primary ?? false,
             });
+
             if (selectedView) {
               // Check if this is a database view or a workflow step
               const databaseView = allViews.find(
