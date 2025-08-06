@@ -469,6 +469,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
             let toolCalls: ToolCall[] = [];
             let finishReason = "";
             const streamingStartTime = Date.now();
+            let accumulatedStreamText = "";
 
             try {
               for await (const chunk of completion) {
@@ -476,9 +477,18 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 if (choice?.delta?.content) {
                   const contentChunk = choice.delta.content;
                   fullContent += contentChunk;
+                  accumulatedStreamText += contentChunk;
 
-                  // Stream the thinking content to the client in real-time
-                  await processor.sendText(contentChunk);
+                  // Send accumulated text periodically to avoid word-by-word streaming
+                  // Send when we have a complete sentence or after a certain amount of text
+                  if (
+                    accumulatedStreamText.includes(".") ||
+                    accumulatedStreamText.includes("\n") ||
+                    accumulatedStreamText.length > 50
+                  ) {
+                    await processor.sendText(accumulatedStreamText);
+                    accumulatedStreamText = "";
+                  }
                 }
                 if (choice?.delta?.tool_calls) {
                   for (const toolCall of choice.delta.tool_calls) {
@@ -520,6 +530,11 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 streamError,
               );
               throw new Error(`Streaming error: ${streamError}`);
+            }
+
+            // Send any remaining accumulated text
+            if (accumulatedStreamText.trim()) {
+              await processor.sendText(accumulatedStreamText);
             }
 
             const streamingDuration = Date.now() - streamingStartTime;
