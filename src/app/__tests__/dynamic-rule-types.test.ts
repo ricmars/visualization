@@ -268,7 +268,7 @@ describe("Dynamic Rule Type System", () => {
         name: "", // Invalid: empty name
         type: "invalid_type", // Invalid: not in allowed types
         primary: "not_boolean", // Invalid: not boolean
-        caseID: "not_number", // Invalid: not number
+        caseid: "not_number", // Invalid: not number
         label: "", // Invalid: empty label
         description: "Test",
         order: "not_number", // Invalid: not number

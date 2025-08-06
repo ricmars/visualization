@@ -29,7 +29,7 @@ interface View {
   id: number;
   name: string;
   model: string;
-  caseID: number;
+  caseid: number;
 }
 
 interface CollectStep {

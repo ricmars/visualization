@@ -134,7 +134,7 @@ export const fieldRuleType: RuleTypeDefinition = {
         description: "Field name",
       },
       {
-        name: "caseID",
+        name: "caseid",
         type: "number",
         description: "Reference to parent case",
       },
@@ -297,6 +297,14 @@ export const fieldRuleType: RuleTypeDefinition = {
       return data;
     },
 
+    beforeUpdate: async (data) => {
+      // Ensure options is a JSON string for database storage
+      if (Array.isArray(data.options)) {
+        data.options = JSON.stringify(data.options);
+      }
+      return data;
+    },
+
     afterCreate: async (data, id) => {
       console.log(`Created field ${id}: ${data.name} (${data.type})`);
     },
@@ -327,7 +335,7 @@ export const viewRuleType: RuleTypeDefinition = {
         description: "View name",
       },
       {
-        name: "caseID",
+        name: "caseid",
         type: "number",
         description: "Reference to parent case",
       },

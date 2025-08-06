@@ -36,13 +36,13 @@ describe("extractToolCall", () => {
 
   it("extracts a tool call with nested JSON", () => {
     const text =
-      'TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}}';
+      'TOOL: saveView PARAMS: {"name": "View1", "caseid": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}}';
     const result = extractToolCall(text);
     expect(result).toEqual({
       toolName: "saveView",
       params: {
         name: "View1",
-        caseID: 1,
+        caseid: 1,
         model: {
           fields: [{ fieldId: 1, required: true }],
           layout: { type: "form", columns: 1 },
@@ -53,14 +53,14 @@ describe("extractToolCall", () => {
 
   it("extracts a tool call with braces in string values", () => {
     const text =
-      'TOOL: saveField PARAMS: {"name": "description", "type": "Text", "caseID": 1, "label": "Description (optional)", "description": "Field with braces {like this}"}';
+      'TOOL: saveField PARAMS: {"name": "description", "type": "Text", "caseid": 1, "label": "Description (optional)", "description": "Field with braces {like this}"}';
     const result = extractToolCall(text);
     expect(result).toEqual({
       toolName: "saveField",
       params: {
         name: "description",
         type: "Text",
-        caseID: 1,
+        caseid: 1,
         label: "Description (optional)",
         description: "Field with braces {like this}",
       },
@@ -69,8 +69,8 @@ describe("extractToolCall", () => {
 
   it("extracts multiple tool calls sequentially", () => {
     const text = `TOOL: saveCase PARAMS: {"name": "Test", "description": "Test case", "model": {"stages": []}}
-TOOL: saveField PARAMS: {"name": "field1", "type": "Text", "caseID": 1, "label": "Field 1"}
-TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}}`;
+TOOL: saveField PARAMS: {"name": "field1", "type": "Text", "caseid": 1, "label": "Field 1"}
+TOOL: saveView PARAMS: {"name": "View1", "caseid": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}}`;
     let remainingText = text;
     const toolCalls = [];
     while (true) {
@@ -154,7 +154,7 @@ TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "l
 
   it("extracts a tool call with id for update", () => {
     const toolCallText =
-      'TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseID": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}';
+      'TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseid": 1, "model": {"fields": [{"fieldId": 1, "required": true}], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}';
 
     const result = extractToolCall(toolCallText);
     expect(result).toEqual({
@@ -162,7 +162,7 @@ TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "l
       params: {
         id: 1,
         name: "View1",
-        caseID: 1,
+        caseid: 1,
         model: {
           fields: [{ fieldId: 1, required: true }],
           layout: { type: "form", columns: 1 },
@@ -189,8 +189,8 @@ TOOL: saveView PARAMS: {"name": "View1", "caseID": 1, "model": {"fields": [], "l
   });
 
   it("extracts multiple tool calls with id for updates", () => {
-    const toolCallText = `TOOL: saveField PARAMS: {"id": 1, "name": "field1", "type": "Text", "caseID": 1, "label": "Field 1"}
-TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseID": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}`;
+    const toolCallText = `TOOL: saveField PARAMS: {"id": 1, "name": "field1", "type": "Text", "caseid": 1, "label": "Field 1"}
+TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseid": 1, "model": {"fields": [], "layout": {"type": "form", "columns": 1}}, "stepName": "Test Step"}`;
 
     const result = extractToolCall(toolCallText);
     expect(result).toEqual({
@@ -199,7 +199,7 @@ TOOL: saveView PARAMS: {"id": 1, "name": "View1", "caseID": 1, "model": {"fields
         id: 1,
         name: "field1",
         type: "Text",
-        caseID: 1,
+        caseid: 1,
         label: "Field 1",
       },
     });

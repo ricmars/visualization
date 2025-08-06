@@ -55,7 +55,7 @@ describe("Database Prompt", () => {
         {
           name: "saveField",
           description:
-            "STEP 2: Creates a new field or updates an existing field. Use the caseID returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
+            "STEP 2: Creates a new field or updates an existing field. Use the caseid returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
         },
       ];
 

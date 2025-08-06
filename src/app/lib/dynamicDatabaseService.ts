@@ -192,7 +192,7 @@ export class DynamicDatabaseService {
             tableName,
             { id: result.rows[0].id },
             undefined,
-            data.caseid || data.caseID,
+            data.caseid,
           );
         }
 
@@ -255,8 +255,11 @@ export class DynamicDatabaseService {
     data: any,
   ): Promise<DatabaseResult<T>> {
     const tableName = ruleType.databaseSchema.tableName;
-    const columns = Object.keys(data);
-    const values = Object.values(data);
+
+    // Remove the id field from the data since it's the primary key and shouldn't be updated
+    const { id: _, ...updateData } = data;
+    const columns = Object.keys(updateData);
+    const values = Object.values(updateData);
 
     if (columns.length === 0) {
       return {
@@ -308,7 +311,7 @@ export class DynamicDatabaseService {
             tableName,
             { id },
             currentData,
-            data.caseid || data.caseID,
+            data.caseid,
           );
         }
 
@@ -373,7 +376,7 @@ export class DynamicDatabaseService {
             tableName,
             { id },
             currentData,
-            currentData.caseid || currentData.caseID,
+            currentData.caseid,
           );
         }
 
@@ -499,11 +502,34 @@ export class DynamicDatabaseService {
             typeof data[prop.name] !== "boolean"
           ) {
             errors.push(`${prop.name} must be a boolean`);
-          } else if (
-            prop.type === "string[]" &&
-            !Array.isArray(data[prop.name])
-          ) {
-            errors.push(`${prop.name} must be an array of strings`);
+          } else if (prop.type === "string[]") {
+            // Handle both array and JSON string formats for string[] fields
+            let optionsArray = data[prop.name];
+
+            // If it's already an array, validate it contains strings
+            if (Array.isArray(optionsArray)) {
+              if (!optionsArray.every((item) => typeof item === "string")) {
+                errors.push(`${prop.name} must be an array of strings`);
+              }
+            }
+            // If it's a string, try to parse it as JSON
+            else if (typeof optionsArray === "string") {
+              try {
+                const parsed = JSON.parse(optionsArray);
+                if (
+                  !Array.isArray(parsed) ||
+                  !parsed.every((item) => typeof item === "string")
+                ) {
+                  errors.push(`${prop.name} must be an array of strings`);
+                }
+              } catch (error) {
+                errors.push(`${prop.name} must be an array of strings`);
+              }
+            }
+            // If it's neither array nor string, it's invalid
+            else if (optionsArray !== undefined && optionsArray !== null) {
+              errors.push(`${prop.name} must be an array of strings`);
+            }
           } else if (
             prop.type === "number[]" &&
             !Array.isArray(data[prop.name])
@@ -581,7 +607,7 @@ export class DynamicDatabaseService {
       const userCommand = `Dynamic DB: ${operation} ${ruleTypeId}`;
 
       // Try to extract case ID from data
-      const caseId = data?.caseid || data?.caseID || 1; // Default to 1 if not found
+      const caseId = data?.caseid || 1; // Default to 1 if not found
 
       return await checkpointManager.beginCheckpoint(
         caseId,

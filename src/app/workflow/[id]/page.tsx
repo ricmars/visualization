@@ -81,7 +81,7 @@ interface View {
   id: number;
   name: string;
   model: string;
-  caseID: number;
+  caseid: number;
 }
 
 // Helper function to validate that all stages, processes, and steps have IDs
@@ -120,11 +120,11 @@ function validateModelIds(stages: Partial<Stage>[]): Stage[] {
   });
 }
 
-async function fetchCaseData(caseID: string): Promise<ComposedModel> {
+async function fetchCaseData(caseid: string): Promise<ComposedModel> {
   try {
     // Fetch the case data
     const caseResponse = await fetchWithBaseUrl(
-      `/api/database?table=${DB_TABLES.CASES}&id=${caseID}`,
+      `/api/database?table=${DB_TABLES.CASES}&id=${caseid}`,
     );
     if (!caseResponse.ok) {
       throw new Error(`Failed to fetch case: ${caseResponse.status}`);
@@ -608,10 +608,10 @@ export default function WorkflowPage() {
           label: field.label,
           required: field.required ?? false,
           primary: field.primary ?? false,
-          caseID: selectedCase.id,
+          caseid: selectedCase.id,
           description: field.label,
           order: 0,
-          options: [],
+          options: field.options ?? [],
         };
 
         console.log("Creating field with data:", fieldData);
@@ -629,7 +629,7 @@ export default function WorkflowPage() {
                 name: fieldData.name,
                 type: fieldData.type,
                 primary: fieldData.primary,
-                caseID: fieldData.caseID,
+                caseid: fieldData.caseid,
                 label: fieldData.label,
                 description: fieldData.description,
                 order: fieldData.order,
@@ -696,6 +696,60 @@ export default function WorkflowPage() {
     }
 
     try {
+      // Prepare the request body
+      const requestBody = {
+        table: DB_TABLES.FIELDS,
+        data: {
+          id: editingField.id,
+          name: editingField.name,
+          label: updates.label || editingField.label,
+          type: updates.type || editingField.type,
+          primary: updates.primary ?? editingField.primary,
+          caseid: selectedCase.id,
+          options: (() => {
+            // If updates.options is provided, use it directly
+            if (updates.options !== undefined) {
+              console.log("Using updates.options:", updates.options);
+              return updates.options;
+            }
+
+            // Otherwise, process the existing options
+            if (editingField.options) {
+              if (Array.isArray(editingField.options)) {
+                console.log(
+                  "Using existing array options:",
+                  editingField.options,
+                );
+                return editingField.options;
+              } else {
+                try {
+                  const parsed = JSON.parse(editingField.options);
+                  console.log("Parsed existing options:", parsed);
+                  return parsed;
+                } catch (error) {
+                  console.error("Failed to parse options:", error);
+                  return [];
+                }
+              }
+            }
+
+            console.log("No options found, using empty array");
+            return [];
+          })(),
+          required: updates.required ?? editingField.required,
+          order: updates.order ?? editingField.order ?? 0,
+          description:
+            updates.description ||
+            editingField.description ||
+            "Field description",
+        },
+      };
+
+      // Debug logging for field updates
+      console.log("=== Field Update Request Body ===");
+      console.log("Options type:", typeof requestBody.data.options);
+      console.log("Options is array:", Array.isArray(requestBody.data.options));
+
       // First update the field in the fields table
       const response = await fetch(
         `/api/database?table=${DB_TABLES.FIELDS}&id=${editingField.id}`,
@@ -704,24 +758,7 @@ export default function WorkflowPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            table: DB_TABLES.FIELDS,
-            data: {
-              id: editingField.id,
-              name: editingField.name,
-              label: updates.label || editingField.label,
-              type: updates.type || editingField.type,
-              primary: updates.primary ?? editingField.primary,
-              caseID: selectedCase.id,
-              options: updates.options || editingField.options || [],
-              required: updates.required ?? editingField.required,
-              order: updates.order ?? editingField.order ?? 0,
-              description:
-                updates.description ||
-                editingField.description ||
-                "Field description",
-            },
-          }),
+          body: JSON.stringify(requestBody),
         },
       );
 
@@ -739,6 +776,16 @@ export default function WorkflowPage() {
       // Refresh the model to get updated fields
       const composedModel = await fetchCaseData(id);
       setModel(composedModel);
+
+      // Refresh the fields state to update the UI
+      const fieldsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+      );
+      if (fieldsResponse.ok) {
+        const fieldsData = await fieldsResponse.json();
+        setFields(fieldsData.data);
+      }
+
       setEditingField(null);
 
       // Dispatch model updated event for preview
@@ -1829,7 +1876,7 @@ export default function WorkflowPage() {
           },
           body: JSON.stringify({
             name: view.name,
-            caseID: selectedCase.id,
+            caseid: selectedCase.id,
             model: {
               fields: updatedViewModel.fields,
               layout: {
@@ -2028,7 +2075,7 @@ export default function WorkflowPage() {
                     label: field.label,
                     type: field.type,
                     primary: field.primary,
-                    caseID: selectedCase.id,
+                    caseid: selectedCase.id,
                     options: field.options,
                     required: field.required,
                     order: index + 1, // Only update the order, preserve all other properties
@@ -2093,7 +2140,7 @@ export default function WorkflowPage() {
                     label: field.label,
                     type: field.type,
                     primary: field.primary,
-                    caseID: selectedCase.id,
+                    caseid: selectedCase.id,
                     options: field.options,
                     required: field.required,
                     order: index + 1, // Only update the order, preserve all other properties

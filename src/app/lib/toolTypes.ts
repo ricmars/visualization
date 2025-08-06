@@ -33,7 +33,7 @@ export interface SaveFieldsParams extends ToolParams {
     id?: number;
     name: string;
     type: FieldType;
-    caseID: number;
+    caseid: number;
     primary?: boolean;
     required?: boolean;
     label: string;
@@ -47,7 +47,7 @@ export interface SaveFieldsParams extends ToolParams {
 export interface SaveViewParams extends ToolParams {
   id?: number;
   name: string;
-  caseID: number;
+  caseid: number;
   model: {
     fields: ViewField[];
     layout: ViewLayout;

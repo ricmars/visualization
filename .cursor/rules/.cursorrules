@@ -221,7 +221,7 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 ### Case Creation and Validation
 
 - Use POST for initial case creation, PUT for subsequent updates
-- Include case ID in URL for updates: `/api/database?table=cases&id=${caseID}`
+- Include case ID in URL for updates: `/api/database?table=cases&id=${caseid}`
 - Validate model structure before saving
 - Handle JSON parsing errors gracefully
 
@@ -233,7 +233,7 @@ You are an expert full-stack developer proficient in TypeScript, React, Next.js,
 
 ### View Creation Requirements
 
-- Views must include `caseID` in creation request
+- Views must include `caseid` in creation request
 - View names should be unique and descriptive
 - Views can only reference fields that exist in their parent case
 

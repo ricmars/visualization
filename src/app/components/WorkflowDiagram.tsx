@@ -35,7 +35,7 @@ import AddProcessModal from "./AddProcessModal";
 interface WorkflowDiagramProps {
   stages: Stage[];
   fields: Field[];
-  views: { id: number; name: string; model: string; caseID: number }[];
+  views: { id: number; name: string; model: string; caseid: number }[];
   onStepSelect: (stageId: number, processId: number, stepId: number) => void;
   activeStage?: number;
   activeProcess?: number;

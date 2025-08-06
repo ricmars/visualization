@@ -18,7 +18,7 @@ export interface Action {
 
 export interface Rule {
   id: number;
-  caseID: number;
+  caseid: number;
   name: string;
   description: string;
   conditions: Condition[];
@@ -27,7 +27,7 @@ export interface Rule {
 
 export interface RuleExecution {
   id: number;
-  caseID: number;
+  caseid: number;
   ruleId: number;
   status: "success" | "failure";
   timestamp: string;

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get("table");
     const id = searchParams.get("id");
-    const caseID = searchParams.get("caseID");
+    const caseid = searchParams.get("caseid");
 
     if (!table || !Object.values(DB_TABLES).includes(table as any)) {
       return NextResponse.json(
@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
     if (id) {
       dynamicUrl.searchParams.set("id", id);
     }
-    if (caseID) {
-      dynamicUrl.searchParams.set("caseID", caseID);
+    if (caseid) {
+      dynamicUrl.searchParams.set("caseid", caseid);
     }
 
     // Forward the request to the dynamic API

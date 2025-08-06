@@ -21,6 +21,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
   const [type, setType] = useState(field.type);
   const [isPrimary, setIsPrimary] = useState(field.primary || false);
   const [isRequired, setIsRequired] = useState(field.required || false);
+  const [options, setOptions] = useState("");
   const [error, setError] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +37,19 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       setType(field.type);
       setIsPrimary(field.primary || false);
       setIsRequired(field.required || false);
+      // Parse options from field.options (could be string or array)
+      const parsedOptions = field.options
+        ? Array.isArray(field.options)
+          ? field.options
+          : (() => {
+              try {
+                return JSON.parse(field.options);
+              } catch {
+                return [];
+              }
+            })()
+        : [];
+      setOptions(parsedOptions.join(", "));
     } else {
       document.body.style.overflow = "unset";
     }
@@ -49,13 +63,14 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       setError("Field label is required");
       return;
     }
+    const parsedOptions = options.trim() ? options.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0) : [];
     onSubmit({
       name: field.name,
       label: label.trim(),
       type,
       primary: isPrimary,
       required: isRequired,
-      options: field.options,
+      options: parsedOptions,
     });
     setError("");
     onClose();
@@ -216,6 +231,21 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
                     </span>
                   </Tooltip>
                 </div>
+
+                {(type === "Dropdown" || type === "RadioButtons" || type === "Status" || type === "ReferenceValues") && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Options (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={options}
+                      onChange={(e) => setOptions(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
+                      placeholder="Option 1, Option 2, Option 3"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 mt-4">

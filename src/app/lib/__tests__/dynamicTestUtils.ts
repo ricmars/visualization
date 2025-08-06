@@ -31,7 +31,7 @@ export const mockRuleTypes: MockRuleType[] = [
     sampleData: {
       name: "testField",
       type: "Text",
-      caseID: 1,
+      caseid: 1,
       label: "Test Field",
       description: "Test Description",
       order: 0,
@@ -48,7 +48,7 @@ export const mockRuleTypes: MockRuleType[] = [
     tableName: "Views",
     sampleData: {
       name: "Test View",
-      caseID: 1,
+      caseid: 1,
       model: {
         fields: [{ fieldId: 1, required: true, order: 1 }],
       },

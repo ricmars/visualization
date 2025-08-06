@@ -554,7 +554,7 @@ describe("llmTools", () => {
             id: 1,
             name: "field1",
             type: "Text",
-            caseID: 1,
+            caseid: 1,
             primary: false,
             required: false,
             label: "Field 1",
@@ -571,7 +571,7 @@ describe("llmTools", () => {
             id: 2,
             name: "field2",
             type: "Email",
-            caseID: 1,
+            caseid: 1,
             primary: true,
             required: true,
             label: "Field 2",
@@ -598,14 +598,14 @@ describe("llmTools", () => {
           {
             name: "field1",
             type: "Text",
-            caseID: 1,
+            caseid: 1,
             label: "Field 1",
             description: "Test Description 1",
           },
           {
             name: "field2",
             type: "Email",
-            caseID: 1,
+            caseid: 1,
             label: "Field 2",
             description: "Test Description 2",
             primary: true,
@@ -672,7 +672,7 @@ describe("llmTools", () => {
             id: 1,
             name: "existingField",
             type: "Text",
-            caseID: 1,
+            caseid: 1,
             primary: false,
             required: false,
             label: "Existing Field",
@@ -693,7 +693,7 @@ describe("llmTools", () => {
             id: 2,
             name: "newField",
             type: "Email",
-            caseID: 1,
+            caseid: 1,
             primary: false,
             required: false,
             label: "New Field",
@@ -716,14 +716,14 @@ describe("llmTools", () => {
           {
             name: "existingField",
             type: "Text",
-            caseID: 1,
+            caseid: 1,
             label: "Existing Field",
             description: "Existing Description",
           },
           {
             name: "newField",
             type: "Email",
-            caseID: 1,
+            caseid: 1,
             label: "New Field",
             description: "New Description",
             order: 1,
@@ -738,7 +738,7 @@ describe("llmTools", () => {
             id: 1,
             name: "existingField",
             type: "Text",
-            caseID: 1,
+            caseid: 1,
             label: "Existing Field",
             description: "Existing Description",
             order: 0,
@@ -780,7 +780,7 @@ describe("llmTools", () => {
             id: 1,
             name: "testField",
             type: "InvalidType",
-            caseID: 1,
+            caseid: 1,
             primary: false,
             required: false,
             label: "Test Field",
@@ -804,7 +804,7 @@ describe("llmTools", () => {
             {
               name: "testField",
               type: "InvalidType",
-              caseID: 1,
+              caseid: 1,
               label: "Test Field",
             },
           ],
@@ -837,7 +837,7 @@ describe("llmTools", () => {
           {
             id: 1,
             name: "Test View",
-            caseID: 1,
+            caseid: 1,
             model: '{"fields":[]}',
           },
         ],
@@ -851,7 +851,7 @@ describe("llmTools", () => {
 
       const result = await (saveViewTool!.execute as any)({
         name: "Test View",
-        caseID: 1,
+        caseid: 1,
         model: { fields: [] },
       });
 
@@ -862,7 +862,7 @@ describe("llmTools", () => {
       expect(result).toEqual({
         id: 1,
         name: "Test View",
-        caseID: 1,
+        caseid: 1,
         model: { fields: [] },
       });
     });
@@ -873,7 +873,7 @@ describe("llmTools", () => {
           {
             id: 1,
             name: "Updated View",
-            caseID: 1,
+            caseid: 1,
             model: '{"fields":[]}',
           },
         ],
@@ -889,7 +889,7 @@ describe("llmTools", () => {
       const result = await (saveViewTool!.execute as any)({
         id: 1,
         name: "Updated View",
-        caseID: 1,
+        caseid: 1,
         model: { fields: [] },
       });
 
@@ -900,7 +900,7 @@ describe("llmTools", () => {
       expect(result).toEqual({
         id: 1,
         name: "Updated View",
-        caseID: 1,
+        caseid: 1,
         model: { fields: [] },
       });
     });
@@ -967,9 +967,9 @@ describe("llmTools", () => {
 
   describe("deleteField", () => {
     it("should delete a field successfully", async () => {
-      // Mock the SELECT query to get field name and caseID
+      // Mock the SELECT query to get field name and caseid
       mockQuery.mockResolvedValueOnce({
-        rows: [{ name: "Test Field", caseID: 1 }],
+        rows: [{ name: "Test Field", caseid: 1 }],
         rowCount: 1,
       });
       // Mock the SELECT query to get views that might reference this field
@@ -988,7 +988,7 @@ describe("llmTools", () => {
       const result = await (deleteFieldTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT name, caseID FROM "Fields"'),
+        expect.stringContaining('SELECT name, caseid FROM "Fields"'),
         [1],
       );
       expect(mockQuery).toHaveBeenCalledWith(

@@ -163,7 +163,7 @@ export interface Application {
   /**
    * ID of the case type to open in the main content
    */
-  caseID?: number;
+  caseid?: number;
   /**
    * Name of the case type to open in the main content
    */

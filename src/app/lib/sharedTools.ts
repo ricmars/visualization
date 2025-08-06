@@ -25,132 +25,8 @@ export interface SharedTool<TParams, TResult> {
 }
 
 // Convert LLM tools to shared tools with MCP-compatible schemas
-export function createSharedTools(pool: Pool): (
-  | SharedTool<
-      CreateCaseParams,
-      { id: number; name: string; description: string; model: unknown }
-    >
-  | SharedTool<
-      SaveCaseParams,
-      { id: number; name: string; description: string; model: unknown }
-    >
-  | SharedTool<
-      SaveFieldsParams,
-      {
-        ids: number[];
-        fields: Array<{
-          id: number;
-          name: string;
-          type: string;
-          caseID: number;
-          label: string;
-          description: string;
-          order: number;
-          options: unknown;
-          required: boolean;
-          primary: boolean;
-        }>;
-      }
-    >
-  | SharedTool<
-      SaveViewParams,
-      { id: number; name: string; caseID: number; model: unknown }
-    >
-  | SharedTool<
-      DeleteParams,
-      {
-        success: boolean;
-        deletedId: number;
-        deletedName?: string;
-        type?: string;
-      }
-    >
-  | SharedTool<{ caseID: number }, { fields: unknown[] }>
-  | SharedTool<{ caseID: number }, { views: unknown[] }>
-  | SharedTool<
-      { id: number },
-      {
-        id: number;
-        name: string;
-        description: string;
-        model: unknown;
-        steps: unknown[];
-      }
-    >
-  | SharedTool<
-      {},
-      {
-        cases: Array<{
-          id: number;
-          name: string;
-          description: string;
-        }>;
-      }
-    >
-)[] {
-  const tools: (
-    | SharedTool<
-        CreateCaseParams,
-        { id: number; name: string; description: string; model: unknown }
-      >
-    | SharedTool<
-        SaveCaseParams,
-        { id: number; name: string; description: string; model: unknown }
-      >
-    | SharedTool<
-        SaveFieldsParams,
-        {
-          ids: number[];
-          fields: Array<{
-            id: number;
-            name: string;
-            type: string;
-            caseID: number;
-            label: string;
-            description: string;
-            order: number;
-            options: unknown;
-            required: boolean;
-            primary: boolean;
-          }>;
-        }
-      >
-    | SharedTool<
-        SaveViewParams,
-        { id: number; name: string; caseID: number; model: unknown }
-      >
-    | SharedTool<
-        DeleteParams,
-        {
-          success: boolean;
-          deletedId: number;
-          deletedName?: string;
-          type?: string;
-        }
-      >
-    | SharedTool<{ caseID: number }, { fields: unknown[] }>
-    | SharedTool<{ caseID: number }, { views: unknown[] }>
-    | SharedTool<
-        { id: number },
-        {
-          id: number;
-          name: string;
-          description: string;
-          model: unknown;
-          steps: unknown[];
-        }
-      >
-    | SharedTool<
-        {},
-        {
-          cases: Array<{
-            id: number;
-            name: string;
-            description: string;
-          }>;
-        }
-      >
-  )[] = [
+export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
+  const tools: SharedTool<any, any>[] = [
     {
       name: "createCase",
       description:
@@ -437,7 +313,7 @@ export function createSharedTools(pool: Pool): (
     {
       name: "saveFields",
       description:
-        "STEP 2: Creates multiple fields or updates existing fields in a single operation for better performance. Use the caseID returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
+        "STEP 2: Creates multiple fields or updates existing fields in a single operation for better performance. Use the caseid returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
       parameters: {
         type: "object",
         properties: {
@@ -456,7 +332,7 @@ export function createSharedTools(pool: Pool): (
                   type: "string",
                   description: "Field type (Text, Email, Date, etc.)",
                 },
-                caseID: {
+                caseid: {
                   type: "integer",
                   description: "Case ID this field belongs to",
                 },
@@ -487,7 +363,7 @@ export function createSharedTools(pool: Pool): (
                   description: "Default value for the field",
                 },
               },
-              required: ["name", "type", "caseID", "label"],
+              required: ["name", "type", "caseid", "label"],
             },
             description: "Array of fields to create or update",
           },
@@ -512,7 +388,7 @@ export function createSharedTools(pool: Pool): (
           id: number;
           name: string;
           type: string;
-          caseID: number;
+          caseid: number;
           label: string;
           description: string;
           order: number;
@@ -527,7 +403,7 @@ export function createSharedTools(pool: Pool): (
             id,
             name,
             type,
-            caseID,
+            caseid,
             label,
             description,
             order,
@@ -539,7 +415,7 @@ export function createSharedTools(pool: Pool): (
           // Validation
           if (!name) throw new Error("Field name is required for saveFields");
           if (!type) throw new Error("Field type is required for saveFields");
-          if (!caseID) throw new Error("Case ID is required for saveFields");
+          if (!caseid) throw new Error("Case ID is required for saveFields");
           if (!label) throw new Error("Field label is required for saveFields");
 
           // Validate field type
@@ -548,10 +424,10 @@ export function createSharedTools(pool: Pool): (
           }
 
           // Check for existing field with same name in the same case
-          const existingFieldQuery = `SELECT id FROM "${DB_TABLES.FIELDS}" WHERE name = $1 AND caseID = $2`;
+          const existingFieldQuery = `SELECT id FROM "${DB_TABLES.FIELDS}" WHERE name = $1 AND caseid = $2`;
           const existingFieldResult = await pool.query(existingFieldQuery, [
             name,
-            caseID,
+            caseid,
           ]);
 
           if (
@@ -573,7 +449,7 @@ export function createSharedTools(pool: Pool): (
               id: fieldData.id ?? existingFieldId,
               name: fieldData.name ?? name,
               type: fieldData.type ?? type,
-              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              caseid: fieldData.caseid ?? caseid,
               label: fieldData.label ?? label,
               description: fieldData.description ?? description ?? "",
               order: fieldData.order ?? order ?? 0,
@@ -600,15 +476,15 @@ export function createSharedTools(pool: Pool): (
             // Update existing field
             const query = `
               UPDATE "${DB_TABLES.FIELDS}"
-              SET name = $1, type = $2, caseID = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9
+              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9
               WHERE id = $10
-              RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary"
             `;
             console.log("saveFields UPDATE query:", query);
             console.log("saveFields UPDATE query values:", [
               name,
               type,
-              caseID,
+              caseid,
               label,
               description ?? "",
               order ?? 0,
@@ -621,7 +497,7 @@ export function createSharedTools(pool: Pool): (
             const result = await pool.query(query, [
               name,
               type,
-              caseID,
+              caseid,
               label,
               description ?? "",
               order ?? 0,
@@ -640,14 +516,14 @@ export function createSharedTools(pool: Pool): (
               id: fieldData?.id,
               name: fieldData?.name,
               type: fieldData?.type,
-              caseID: fieldData?.caseID ?? fieldData?.caseid,
+              caseid: fieldData?.caseid ?? fieldData?.caseid,
             });
 
             results.push({
               id: fieldData.id ?? id,
               name: fieldData.name ?? name,
               type: fieldData.type ?? type,
-              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              caseid: fieldData.caseid ?? fieldData.caseid ?? caseid,
               label: fieldData.label ?? label,
               description: fieldData.description ?? description ?? "",
               order: fieldData.order ?? order ?? 0,
@@ -670,15 +546,15 @@ export function createSharedTools(pool: Pool): (
           } else {
             // Create new field
             const query = `
-              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseID, label, description, "order", options, required, "primary")
+              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseid, label, description, "order", options, required, "primary")
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-              RETURNING id, name, type, caseID, label, description, "order", options, required, "primary"
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary"
             `;
             console.log("saveFields INSERT query:", query);
             console.log("saveFields INSERT query values:", [
               name,
               type,
-              caseID,
+              caseid,
               label,
               description ?? "",
               order ?? 0,
@@ -690,7 +566,7 @@ export function createSharedTools(pool: Pool): (
             const result = await pool.query(query, [
               name,
               type,
-              caseID,
+              caseid,
               label,
               description ?? "",
               order ?? 0,
@@ -704,14 +580,14 @@ export function createSharedTools(pool: Pool): (
               id: fieldData?.id,
               name: fieldData?.name,
               type: fieldData?.type,
-              caseID: fieldData?.caseID ?? fieldData?.caseid,
+              caseid: fieldData?.caseid ?? fieldData?.caseid,
             });
 
             results.push({
               id: fieldData.id ?? id,
               name: fieldData.name ?? name,
               type: fieldData.type ?? type,
-              caseID: fieldData.caseID ?? fieldData.caseid ?? caseID,
+              caseid: fieldData.caseid ?? fieldData.caseid ?? caseid,
               label: fieldData.label ?? label,
               description: fieldData.description ?? description ?? "",
               order: fieldData.order ?? order ?? 0,
@@ -757,7 +633,7 @@ export function createSharedTools(pool: Pool): (
             description: "View ID (required for update, omit for create)",
           },
           name: { type: "string", description: "View name" },
-          caseID: {
+          caseid: {
             type: "integer",
             description: "Case ID this view belongs to",
           },
@@ -807,39 +683,39 @@ export function createSharedTools(pool: Pool): (
             required: ["fields", "layout"],
           },
         },
-        required: ["name", "caseID", "model"],
+        required: ["name", "caseid", "model"],
       },
       execute: async (params: SaveViewParams) => {
         console.log("=== saveView EXECUTION STARTED ===");
         console.log("saveView parameters:", JSON.stringify(params, null, 2));
         console.log("saveView called at:", new Date().toISOString());
 
-        const { id, name, caseID, model } = params;
+        const { id, name, caseid, model } = params;
 
         // Validation
         if (!name) throw new Error("View name is required for saveView");
-        if (!caseID) throw new Error("Case ID is required for saveView");
+        if (!caseid) throw new Error("Case ID is required for saveView");
         if (!model) throw new Error("View model is required for saveView");
 
         if (id) {
           // Update existing view
           const query = `
             UPDATE "${DB_TABLES.VIEWS}"
-            SET name = $1, caseID = $2, model = $3
+            SET name = $1, caseid = $2, model = $3
             WHERE id = $4
-            RETURNING id, name, caseID, model
+            RETURNING id, name, caseid, model
           `;
           console.log("saveView UPDATE query:", query);
           console.log("saveView UPDATE query values:", [
             name,
-            caseID,
+            caseid,
             JSON.stringify(model),
             id,
           ]);
 
           const result = await pool.query(query, [
             name,
-            caseID,
+            caseid,
             JSON.stringify(model),
             id,
           ]);
@@ -852,19 +728,19 @@ export function createSharedTools(pool: Pool): (
           console.log("saveView UPDATE successful:", {
             id: viewData?.id,
             name: viewData?.name,
-            caseID: viewData?.caseID ?? viewData?.caseid,
+            caseid: viewData?.caseid ?? viewData?.caseid,
             modelFields: viewData?.model
               ? JSON.parse(viewData.model).fields?.length || 0
               : 0,
           });
 
-          // Validate that all fieldIds in model.fields exist in the database for this caseID
+          // Validate that all fieldIds in model.fields exist in the database for this caseid
           if (model && Array.isArray(model.fields) && model.fields.length > 0) {
             const fieldIds = model.fields.map((f) => f.fieldId);
-            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseID = $2`;
+            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseid = $2`;
             const fieldResult = await pool.query(fieldQuery, [
               fieldIds,
-              caseID,
+              caseid,
             ]);
             const existingFieldIds = new Set(
               fieldResult.rows.map((row) => row.id),
@@ -892,7 +768,7 @@ export function createSharedTools(pool: Pool): (
           return {
             id: viewData?.id,
             name: viewData?.name,
-            caseID: viewData?.caseID ?? viewData?.caseid,
+            caseid: viewData?.caseid ?? viewData?.caseid,
             model:
               typeof viewData?.model === "string"
                 ? JSON.parse(viewData.model)
@@ -901,20 +777,20 @@ export function createSharedTools(pool: Pool): (
         } else {
           // Create new view
           const query = `
-            INSERT INTO "${DB_TABLES.VIEWS}" (name, caseID, model)
+            INSERT INTO "${DB_TABLES.VIEWS}" (name, caseid, model)
             VALUES ($1, $2, $3)
-            RETURNING id, name, caseID, model
+            RETURNING id, name, caseid, model
           `;
           console.log("saveView INSERT query:", query);
           console.log("saveView INSERT query values:", [
             name,
-            caseID,
+            caseid,
             JSON.stringify(model),
           ]);
 
           const result = await pool.query(query, [
             name,
-            caseID,
+            caseid,
             JSON.stringify(model),
           ]);
           const viewData = result.rows[0];
@@ -922,19 +798,19 @@ export function createSharedTools(pool: Pool): (
           console.log("saveView INSERT successful:", {
             id: viewData?.id,
             name: viewData?.name,
-            caseID: viewData?.caseID ?? viewData?.caseid,
+            caseid: viewData?.caseid ?? viewData?.caseid,
             modelFields: viewData?.model
               ? JSON.parse(viewData.model).fields?.length || 0
               : 0,
           });
 
-          // Validate that all fieldIds in model.fields exist in the database for this caseID
+          // Validate that all fieldIds in model.fields exist in the database for this caseid
           if (model && Array.isArray(model.fields) && model.fields.length > 0) {
             const fieldIds = model.fields.map((f) => f.fieldId);
-            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseID = $2`;
+            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseid = $2`;
             const fieldResult = await pool.query(fieldQuery, [
               fieldIds,
-              caseID,
+              caseid,
             ]);
             const existingFieldIds = new Set(
               fieldResult.rows.map((row) => row.id),
@@ -962,7 +838,7 @@ export function createSharedTools(pool: Pool): (
           return {
             id: viewData?.id,
             name: viewData?.name,
-            caseID: viewData?.caseID ?? viewData?.caseid,
+            caseid: viewData?.caseid ?? viewData?.caseid,
             model:
               typeof viewData?.model === "string"
                 ? JSON.parse(viewData.model)
@@ -989,13 +865,13 @@ export function createSharedTools(pool: Pool): (
         const { id } = params;
 
         // Delete associated fields first
-        const deleteFieldsQuery = `DELETE FROM "${DB_TABLES.FIELDS}" WHERE caseID = $1`;
+        const deleteFieldsQuery = `DELETE FROM "${DB_TABLES.FIELDS}" WHERE caseid = $1`;
         console.log("deleteCase deleteFields query:", deleteFieldsQuery);
         console.log("deleteCase deleteFields query values:", [id]);
         await pool.query(deleteFieldsQuery, [id]);
 
         // Delete associated views
-        const deleteViewsQuery = `DELETE FROM "${DB_TABLES.VIEWS}" WHERE caseID = $1`;
+        const deleteViewsQuery = `DELETE FROM "${DB_TABLES.VIEWS}" WHERE caseid = $1`;
         console.log("deleteCase deleteViews query:", deleteViewsQuery);
         console.log("deleteCase deleteViews query values:", [id]);
         await pool.query(deleteViewsQuery, [id]);
@@ -1033,19 +909,19 @@ export function createSharedTools(pool: Pool): (
 
         const { id } = params;
 
-        // First, get the field name and caseID before deleting
-        const getFieldQuery = `SELECT name, caseID FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
+        // First, get the field name and caseid before deleting
+        const getFieldQuery = `SELECT name, caseid FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
         const getFieldResult = await pool.query(getFieldQuery, [id]);
         if (getFieldResult.rowCount === 0) {
           console.error(`deleteField ERROR: No field found with id ${id}`);
           throw new Error(`No field found with id ${id}`);
         }
         const fieldName = getFieldResult.rows[0].name;
-        const caseID = getFieldResult.rows[0].caseID;
+        const caseid = getFieldResult.rows[0].caseid;
 
         // Find all views that use this field and remove the field from them
-        const getViewsQuery = `SELECT id, name, model FROM "${DB_TABLES.VIEWS}" WHERE caseID = $1`;
-        const viewsResult = await pool.query(getViewsQuery, [caseID]);
+        const getViewsQuery = `SELECT id, name, model FROM "${DB_TABLES.VIEWS}" WHERE caseid = $1`;
+        const viewsResult = await pool.query(getViewsQuery, [caseid]);
 
         let updatedViewsCount = 0;
         for (const view of viewsResult.rows) {
@@ -1091,7 +967,7 @@ export function createSharedTools(pool: Pool): (
           id,
           name: fieldName,
           updatedViewsCount,
-          caseID,
+          caseid,
         });
         return {
           success: true,
@@ -1153,33 +1029,33 @@ export function createSharedTools(pool: Pool): (
       parameters: {
         type: "object",
         properties: {
-          caseID: {
+          caseid: {
             type: "integer",
             description: "Case ID to list fields for",
           },
         },
-        required: ["caseID"],
+        required: ["caseid"],
       },
-      execute: async (params: { caseID: number }) => {
+      execute: async (params: { caseid: number }) => {
         console.log("=== listFields EXECUTION STARTED ===");
         console.log("listFields parameters:", JSON.stringify(params, null, 2));
         console.log("listFields called at:", new Date().toISOString());
 
         const query = `
-          SELECT id, name, type, caseID, label, description, "order", options, required, "primary"
+          SELECT id, name, type, caseid, label, description, "order", options, required, "primary"
           FROM "${DB_TABLES.FIELDS}"
-          WHERE caseID = $1
+          WHERE caseid = $1
           ORDER BY "order", name
         `;
         console.log("listFields query:", query);
-        console.log("listFields query values:", [params.caseID]);
+        console.log("listFields query values:", [params.caseid]);
 
-        const result = await pool.query(query, [params.caseID]);
+        const result = await pool.query(query, [params.caseid]);
         const fields = result.rows.map((row) => ({
           id: row.id,
           name: row.name,
           type: row.type,
-          caseID: row.caseID,
+          caseid: row.caseid,
           label: row.label,
           description: row.description,
           order: row.order,
@@ -1189,7 +1065,7 @@ export function createSharedTools(pool: Pool): (
         }));
 
         console.log("listFields successful:", {
-          caseID: params.caseID,
+          caseid: params.caseid,
           fieldCount: fields.length,
         });
 
@@ -1202,34 +1078,34 @@ export function createSharedTools(pool: Pool): (
       parameters: {
         type: "object",
         properties: {
-          caseID: { type: "integer", description: "Case ID to list views for" },
+          caseid: { type: "integer", description: "Case ID to list views for" },
         },
-        required: ["caseID"],
+        required: ["caseid"],
       },
-      execute: async (params: { caseID: number }) => {
+      execute: async (params: { caseid: number }) => {
         console.log("=== listViews EXECUTION STARTED ===");
         console.log("listViews parameters:", JSON.stringify(params, null, 2));
         console.log("listViews called at:", new Date().toISOString());
 
         const query = `
-          SELECT id, name, caseID, model
+          SELECT id, name, caseid, model
           FROM "${DB_TABLES.VIEWS}"
-          WHERE caseID = $1
+          WHERE caseid = $1
           ORDER BY name
         `;
         console.log("listViews query:", query);
-        console.log("listViews query values:", [params.caseID]);
+        console.log("listViews query values:", [params.caseid]);
 
-        const result = await pool.query(query, [params.caseID]);
+        const result = await pool.query(query, [params.caseid]);
         const views = result.rows.map((row) => ({
           id: row.id,
           name: row.name,
-          caseID: row.caseID,
+          caseid: row.caseid,
           model: JSON.parse(row.model),
         }));
 
         console.log("listViews successful:", {
-          caseID: params.caseID,
+          caseid: params.caseid,
           viewCount: views.length,
         });
 
