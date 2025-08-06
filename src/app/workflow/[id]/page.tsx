@@ -753,7 +753,8 @@ export default function WorkflowPage() {
     if (!selectedCase || !field.id) return;
 
     try {
-      // First delete the field from the fields table
+      // Delete the field from the fields table
+      // The deleteField tool will automatically remove the field from all views
       const response = await fetch(
         `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
         {
@@ -772,7 +773,7 @@ export default function WorkflowPage() {
         );
       }
 
-      // Update the case model to remove the field from all steps and views
+      // Update the case model to remove the field from all steps
       const currentModel = JSON.parse(selectedCase.model);
       const updatedModel = {
         ...currentModel,
@@ -797,7 +798,7 @@ export default function WorkflowPage() {
         })),
       };
 
-      // Update the case with the modified model
+      // Update the case with the modified model (without including the id field)
       const updateResponse = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
@@ -808,7 +809,6 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             table: DB_TABLES.CASES,
             data: {
-              id: selectedCase.id,
               name: selectedCase.name,
               description: selectedCase.description,
               model: JSON.stringify(updatedModel),
@@ -826,7 +826,6 @@ export default function WorkflowPage() {
         console.error("Request Data:", {
           table: DB_TABLES.CASES,
           data: {
-            id: selectedCase.id,
             name: selectedCase.name,
             description: selectedCase.description,
             model: JSON.stringify(updatedModel),
@@ -858,6 +857,15 @@ export default function WorkflowPage() {
       if (fieldsResponse.ok) {
         const fieldsData = await fieldsResponse.json();
         setFields(fieldsData.data);
+      }
+
+      // Refresh the views state to get updated views
+      const viewsResponse = await fetchWithBaseUrl(
+        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+      );
+      if (viewsResponse.ok) {
+        const viewsData = await viewsResponse.json();
+        setViews(viewsData.data);
       }
 
       // Dispatch model updated event for preview

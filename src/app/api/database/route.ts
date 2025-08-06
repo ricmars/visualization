@@ -83,11 +83,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
-    const data = await request.json();
+    const requestBody = await request.json();
 
     // Build the dynamic API URL
     const dynamicUrl = new URL("/api/dynamic", request.url);
     dynamicUrl.searchParams.set("ruleType", ruleType);
+
+    // Transform the request body to match what the dynamic API expects
+    // Handle both formats: direct data or wrapped in data property
+    const data = requestBody.data || requestBody;
+    const dynamicRequestBody = {
+      ruleType,
+      data,
+    };
 
     // Forward the request to the dynamic API
     const response = await fetch(dynamicUrl.toString(), {
@@ -95,7 +103,7 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(dynamicRequestBody),
     });
 
     const result = await response.json();
@@ -141,12 +149,21 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
-    const data = await request.json();
+    const requestBody = await request.json();
 
     // Build the dynamic API URL
     const dynamicUrl = new URL("/api/dynamic", request.url);
     dynamicUrl.searchParams.set("ruleType", ruleType);
     dynamicUrl.searchParams.set("id", id);
+
+    // Transform the request body to match what the dynamic API expects
+    // Handle both formats: direct data or wrapped in data property
+    const data = requestBody.data || requestBody;
+    const dynamicRequestBody = {
+      ruleType,
+      id,
+      data,
+    };
 
     // Forward the request to the dynamic API
     const response = await fetch(dynamicUrl.toString(), {
@@ -154,7 +171,7 @@ export async function PUT(request: Request) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(dynamicRequestBody),
     });
 
     const result = await response.json();

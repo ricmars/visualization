@@ -98,11 +98,34 @@ const mockCase = {
       if (init?.method === "PUT") {
         // For update operations, update the in-memory model
         const body = JSON.parse(init.body as string);
-        const updatedModel = JSON.parse(body.data.model);
-        currentModel = updatedModel;
+
+        // Handle field updates
+        if (table === "Fields") {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                success: true,
+                data: body.data || body,
+                affectedRows: 1,
+              }),
+          });
+        }
+
+        // Handle case updates
+        if (table === "Cases" && body.data?.model) {
+          const updatedModel = JSON.parse(body.data.model);
+          currentModel = updatedModel;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ data: mockCase }),
+          });
+        }
+
+        // Handle other updates
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ data: mockCase }),
+          json: () => Promise.resolve({ data: body.data || body }),
         });
       }
 
@@ -365,6 +388,86 @@ describe("Workflow Operations with Dynamic System", () => {
         }),
       });
       expect(response.ok).toBe(true);
+    });
+
+    it("should update a field using database API with wrapped data format", async () => {
+      // Test field update using database API with the wrapped data format
+      const fieldUpdateData = {
+        table: "Fields",
+        data: {
+          id: 1,
+          name: "test_field",
+          type: "text",
+          primary: false,
+          caseID: 1,
+          label: "Updated Test Field",
+          description: "Updated test field description",
+          order: 1,
+          options: [],
+          required: true,
+        },
+      };
+
+      const response = await fetch("/api/database?table=Fields&id=1", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(fieldUpdateData),
+      });
+      expect(response.ok).toBe(true);
+    });
+
+    it("should update a field using database API with direct data format", async () => {
+      // Test field update using database API with the direct data format
+      const fieldUpdateData = {
+        id: 1,
+        name: "test_field",
+        type: "text",
+        primary: false,
+        caseID: 1,
+        label: "Updated Test Field 2",
+        description: "Updated test field description 2",
+        order: 1,
+        options: [],
+        required: false,
+      };
+
+      const response = await fetch("/api/database?table=Fields&id=1", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(fieldUpdateData),
+      });
+      expect(response.ok).toBe(true);
+    });
+
+    it("should delete a field and update case without id field", async () => {
+      // Test field deletion followed by case update without including id field
+      const deleteResponse = await fetch("/api/database?table=Fields&id=1", {
+        method: "DELETE",
+      });
+      expect(deleteResponse.ok).toBe(true);
+
+      // Test case update without id field (which was causing the database constraint error)
+      const caseUpdateData = {
+        name: "Test Case",
+        description: "Test Description",
+        model: JSON.stringify({ stages: [] }),
+      };
+
+      const updateResponse = await fetch("/api/database?table=Cases&id=1", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          table: "Cases",
+          data: caseUpdateData,
+        }),
+      });
+      expect(updateResponse.ok).toBe(true);
     });
 
     it.skip("should handle validation errors from dynamic system", async () => {
