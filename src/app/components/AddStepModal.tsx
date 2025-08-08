@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { StepType } from "../types";
 import { motion, AnimatePresence } from "framer-motion";
+import { getAllStepTypes, getStepTypeDisplayName } from "../utils/stepTypes";
 
 interface AddStepModalProps {
   isOpen: boolean;
@@ -116,11 +117,11 @@ const AddStepModal: React.FC<AddStepModalProps> = ({
                     onChange={(e) => setStepType(e.target.value as StepType)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
-                    <option value="Collect information">
-                      Collect Information
-                    </option>
-                    <option value="Decision">Decision</option>
-                    <option value="Notification">Notification</option>
+                    {getAllStepTypes().map((type) => (
+                      <option key={type} value={type}>
+                        {getStepTypeDisplayName(type)}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

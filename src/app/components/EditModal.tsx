@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StepType } from "../types";
+import { getAllStepTypes, getStepTypeDisplayName } from "../utils/stepTypes";
 
 interface EditModalProps {
   isOpen: boolean;
@@ -119,19 +120,11 @@ const EditModal: React.FC<EditModalProps> = ({
                     onChange={(e) => setEditedType(e.target.value as StepType)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
                   >
-                    <option value="Collect information">
-                      Collect Information
-                    </option>
-                    <option value="Approve/Reject">Approve/Reject</option>
-                    <option value="Automation">Automation</option>
-                    <option value="Create Case">Create Case</option>
-                    <option value="Decision">Decision</option>
-                    <option value="Generate Document">Generate Document</option>
-                    <option value="Generative AI">Generative AI</option>
-                    <option value="Robotic Automation">
-                      Robotic Automation
-                    </option>
-                    <option value="Send Notification">Send Notification</option>
+                    {getAllStepTypes().map((type) => (
+                      <option key={type} value={type}>
+                        {getStepTypeDisplayName(type)}
+                      </option>
+                    ))}
                   </select>
                 </div>
               )}
