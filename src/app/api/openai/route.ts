@@ -247,7 +247,7 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     let workflowContextInstruction = "";
     if (currentCaseId) {
       filteredTools = databaseTools.filter((t) => t.name !== "createCase");
-      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (deleteField, saveFields, saveView, etc).\nFor simple operations, use the specific tools and STOP - do not call saveCase unless making structural changes.\nFor field property updates (defaultValue, primary, required), use ONLY saveFields and then stop. Do not call saveView or saveCase.\nDo not create a new case.`;
+      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls.\nFor field-only changes (defaultValue, primary, required), use saveFields only and then stop.\nDo not mention that you are avoiding saveView/saveCase; simply perform the correct action.`;
     }
 
     // Rely on tool descriptions and system guidance (no heuristic gating)
@@ -483,10 +483,11 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
 
                   // Send accumulated text periodically to avoid word-by-word streaming
                   // Send when we have a complete sentence or after a certain amount of text
+                  // Stream brief reasoning to the user, but batch by sentence/newline
                   if (
                     accumulatedStreamText.includes(".") ||
                     accumulatedStreamText.includes("\n") ||
-                    accumulatedStreamText.length > 50
+                    accumulatedStreamText.length > 120
                   ) {
                     await processor.sendText(accumulatedStreamText);
                     accumulatedStreamText = "";
@@ -534,7 +535,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
               throw new Error(`Streaming error: ${streamError}`);
             }
 
-            // Send any remaining accumulated text
+            // Flush any remaining brief reasoning text
             if (accumulatedStreamText.trim()) {
               await processor.sendText(accumulatedStreamText);
             }
@@ -560,23 +561,23 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 if (loopCount === 1) {
                   proceedMessage = {
                     role: "user" as const,
-                    content: `Please proceed using the available tools. Create the case, fields, and views, then call saveCase to complete the workflow.`,
+                    content: `Proceed using tools: create case, fields, views, then call saveCase to complete.`,
                   };
                 } else if (finishReason === "length") {
                   proceedMessage = {
                     role: "user" as const,
-                    content: `The response was cut off. Continue by creating stages, processes, and steps, then call saveCase to complete the workflow.`,
+                    content: `Continue: create stages, processes, steps; then call saveCase to complete.`,
                   };
                 } else {
                   proceedMessage = {
                     role: "user" as const,
-                    content: `Continue with the available tools: create stages, processes, and steps, then call saveCase to complete the workflow.`,
+                    content: `Continue with tools: create stages/processes/steps, then call saveCase.`,
                   };
                 }
               } else {
                 proceedMessage = {
                   role: "user" as const,
-                  content: `Proceed using the specific tools for the requested change. For field property updates (defaultValue, primary, required), use only saveFields. Do not call saveView or saveCase unless making structural changes.`,
+                  content: `Proceed with the requested field updates using saveFields only.`,
                 };
               }
 
@@ -910,7 +911,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
               continue;
             }
 
-            // If the model returns a final message (no tool call)
+            // If the model returns a final message (no tool call), send it now
             if (fullContent) {
               console.log(
                 "Final message received:",
