@@ -247,8 +247,10 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     let workflowContextInstruction = "";
     if (currentCaseId) {
       filteredTools = databaseTools.filter((t) => t.name !== "createCase");
-      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (deleteField, saveFields, saveView, etc).\nFor simple operations like deleting fields, use the specific tools and STOP - do not call saveCase unless making structural changes.\nDo not create a new case.`;
+      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls (deleteField, saveFields, saveView, etc).\nFor simple operations, use the specific tools and STOP - do not call saveCase unless making structural changes.\nFor field property updates (defaultValue, primary, required), use ONLY saveFields and then stop. Do not call saveView or saveCase.\nDo not create a new case.`;
     }
+
+    // Rely on tool descriptions and system guidance (no heuristic gating)
 
     // Create OpenAI client with fresh token
     console.log("Creating OpenAI client...");
@@ -551,22 +553,30 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 `Model finished without tool calls (reason: ${finishReason}) - adding instruction to proceed with tools`,
               );
 
-              // Different messages based on the situation
+              // Different messages based on context (new vs existing workflow)
               let proceedMessage;
-              if (loopCount === 1) {
-                proceedMessage = {
-                  role: "user" as const,
-                  content: `Please proceed with the workflow creation using the available tools. The tools contain all the information you need to complete this task.`,
-                };
-              } else if (finishReason === "length") {
-                proceedMessage = {
-                  role: "user" as const,
-                  content: `The response was cut off due to length limits. Please continue with the workflow creation using the available tools. Focus on creating the workflow stages, processes, and steps, then call saveCase to complete the workflow.`,
-                };
+              const isNewWorkflow = !currentCaseId;
+              if (isNewWorkflow) {
+                if (loopCount === 1) {
+                  proceedMessage = {
+                    role: "user" as const,
+                    content: `Please proceed using the available tools. Create the case, fields, and views, then call saveCase to complete the workflow.`,
+                  };
+                } else if (finishReason === "length") {
+                  proceedMessage = {
+                    role: "user" as const,
+                    content: `The response was cut off. Continue by creating stages, processes, and steps, then call saveCase to complete the workflow.`,
+                  };
+                } else {
+                  proceedMessage = {
+                    role: "user" as const,
+                    content: `Continue with the available tools: create stages, processes, and steps, then call saveCase to complete the workflow.`,
+                  };
+                }
               } else {
                 proceedMessage = {
                   role: "user" as const,
-                  content: `Please continue with the workflow creation using the available tools. You need to create stages, processes, and steps, then call saveCase to complete the workflow.`,
+                  content: `Proceed using the specific tools for the requested change. For field property updates (defaultValue, primary, required), use only saveFields. Do not call saveView or saveCase unless making structural changes.`,
                 };
               }
 

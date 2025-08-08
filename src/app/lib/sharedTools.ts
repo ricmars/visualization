@@ -90,7 +90,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveCase",
       description:
-        "FINAL STEP: Updates an existing case with the complete workflow model including stages, processes, steps, and viewId references. Use this ONLY when creating a new workflow or when making structural changes that require updating the entire workflow model. DO NOT use this for simple operations like renaming steps, adding fields, or updating views - use the specific tools (saveView, saveFields) for those operations. The model must include viewId values that reference actual view IDs returned from saveView calls. IMPORTANT: Ensure viewId values correspond to the appropriate step names and contain the relevant fields for each step.",
+        "Updates a case with the complete workflow model (stages, processes, steps, viewId references). Use ONLY for structural changes or finalizing new workflows. DO NOT call this for field-only edits (defaults, primary, required) or view tweaks—use saveFields/saveView instead.",
       parameters: {
         type: "object",
         properties: {
@@ -313,7 +313,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "STEP 2: Creates multiple fields or updates existing fields in a single operation for better performance. Use the caseid returned from createCase. Fields store the business data that will be collected in views. Only create fields - do not include them in the workflow model.",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes, including setting defaultValue, marking a field as primary, toggling required, renaming labels, changing order, and updating options. Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {
@@ -707,7 +707,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveView",
       description:
-        "Creates or updates a view for a case. Save the returned view ID for workflow model.",
+        "Creates or updates a view (layout and which existing fields appear). Use ONLY when you are creating or modifying the composition/layout of a view. Do NOT use for setting field defaults/primary/required—use saveFields for those. Save the returned view ID to reference in the workflow model.",
       parameters: {
         type: "object",
         properties: {

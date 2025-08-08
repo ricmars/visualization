@@ -70,7 +70,12 @@ FIELD CREATION GUIDELINES:
 - For Dropdown/RadioButtons, choose one of the provided options as the defaultValue.
 - If no sensible default exists, omit defaultValue.
 
-IMPORTANT: saveCase should ONLY be used for:
+IMPORTANT: saveFields vs saveView vs saveCase:
+- Use saveFields for ANY field-level change (including defaultValue, primary, required). After these edits, STOP. Do not call saveView or saveCase unless also changing views or structure.
+- Use saveView only to change which fields appear in a view and their layout. Do not use saveView to set defaults/primary/required.
+- Use saveCase ONLY for structural updates to the workflow model or to finalize a new workflow.
+
+saveCase should ONLY be used for:
 - Creating a new workflow from scratch
 - Making structural changes to the workflow model (adding/removing stages, processes, or steps)
 - Finalizing workflow creation
@@ -82,7 +87,13 @@ DO NOT use saveCase for:
 - Simple modifications that don't change the workflow structure
 - Deleting fields, views, or other simple operations
 
-For these operations, use the specific tools (saveView, saveFields, deleteField, deleteView) instead.
+For these operations, use the specific tools (saveFields, saveView, deleteField, deleteView) instead.
+
+COMMON SCENARIOS (follow exactly):
+- Adding default values to existing fields in an existing case → Use saveFields only. Do not create views. Do not call saveCase.
+- Marking a field as primary/required → Use saveFields only. Do not create views. Do not call saveCase.
+- Reordering fields inside a view or adding/removing a field from a view → Use saveView only. Do not call saveCase.
+- Adding/removing stages, processes, or steps → Update the model and call saveCase.
 
 Available tools are listed below with their descriptions.`;
 

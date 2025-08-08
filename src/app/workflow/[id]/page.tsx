@@ -263,7 +263,7 @@ export default function WorkflowPage() {
 
       return {
         fullUpdate: true,
-        appName: "My Application",
+        appName: selectedCase?.name || "Workflow",
         channel: "WorkPortal",
         industry: "Banking",
         userName: "John Smith",
@@ -2367,7 +2367,7 @@ export default function WorkflowPage() {
                   d="M10 19l-7-7m0 0l7-7m-7 7h18"
                 />
               </svg>
-              Back to Cases
+              Back
             </button>
             <div className="flex items-center">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
