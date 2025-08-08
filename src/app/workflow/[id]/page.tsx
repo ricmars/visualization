@@ -235,6 +235,44 @@ export default function WorkflowPage() {
         const tmpSteps = [];
         for (const process of stage.processes) {
           for (const step of process.steps) {
+            // Populate from view model when available: map fieldId -> field.name and boolean required
+            if (
+              step.type === "Collect information" &&
+              typeof step.viewId === "number"
+            ) {
+              const view = views.find((v) => v.id === step.viewId);
+              if (view) {
+                try {
+                  const viewModel = JSON.parse(view.model);
+                  if (Array.isArray(viewModel.fields)) {
+                    const stepFields = viewModel.fields
+                      .map((ref: { fieldId: number; required?: boolean }) => {
+                        const field = currentFields.find(
+                          (cf) => cf.id === ref.fieldId,
+                        );
+                        if (!field) return null;
+                        return {
+                          name: field.name,
+                          required: Boolean(ref.required),
+                        };
+                      })
+                      .filter((f: any) => f !== null);
+
+                    tmpSteps.push({
+                      ...step,
+                      fields: stepFields as Array<{
+                        name: string;
+                        required: boolean;
+                      }>,
+                    });
+                    continue;
+                  }
+                } catch (_e) {
+                  // fall through
+                }
+              }
+            }
+            // Default: push step without altering fields
             tmpSteps.push(step);
           }
         }
@@ -279,7 +317,7 @@ export default function WorkflowPage() {
         ],
       };
     },
-    [selectedCase?.name],
+    [selectedCase?.name, views],
   );
 
   // 5. All useEffect hooks

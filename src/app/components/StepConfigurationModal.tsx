@@ -73,18 +73,8 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     };
   }, [isOpen]);
 
-  // Update stepFields when a field is edited
-  useEffect(() => {
-    if (editingField) {
-      const updatedFields = stepFields.map((field) =>
-        field.id === editingField.id ? { ...field, ...editingField } : field,
-      );
-      onAddExistingField(
-        step.id,
-        updatedFields.map((field) => field.id!),
-      );
-    }
-  }, [editingField, stepFields, step.id, onAddExistingField]);
+  // Note: We intentionally avoid updating parent-selected fields here to prevent render loops.
+  // Editing field properties is handled via onUpdateField and reflected through `fields` props.
 
   const handleReorderFields = (startIndex: number, endIndex: number) => {
     const reorderedFields = Array.from(stepFields);
