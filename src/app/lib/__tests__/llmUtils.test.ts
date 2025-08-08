@@ -241,7 +241,7 @@ describe("createStreamProcessor", () => {
     );
     expect(mockWriter.write).toHaveBeenCalledWith(
       encoder.encode(
-        'data: {"text":"Workflow \'Test Case\' saved successfully"}\n\n',
+        'data: {"text":"\\nWorkflow \'Test Case\' saved successfully"}\n\n',
       ),
     );
   });

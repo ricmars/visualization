@@ -627,6 +627,7 @@ describe("llmTools", () => {
           "[]",
           false,
           false,
+          null,
         ],
       );
       expect(mockQuery).toHaveBeenCalledWith(
@@ -641,6 +642,7 @@ describe("llmTools", () => {
           "[]",
           true,
           true,
+          null,
         ],
       );
       expect(result).toEqual({
@@ -679,6 +681,26 @@ describe("llmTools", () => {
             description: "Existing Description",
             order: 0,
             options: "[]",
+          },
+        ],
+      });
+
+      // Mock the UPDATE of the existing field (by name)
+      mockQuery.mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: 1,
+            name: "existingField",
+            type: "Text",
+            caseid: 1,
+            primary: false,
+            required: false,
+            label: "Existing Field",
+            description: "Existing Description",
+            order: 0,
+            options: "[]",
+            defaultValue: null,
           },
         ],
       });
@@ -734,7 +756,7 @@ describe("llmTools", () => {
       expect(result).toEqual({
         ids: [1, 2],
         fields: [
-          {
+          expect.objectContaining({
             id: 1,
             name: "existingField",
             type: "Text",
@@ -745,11 +767,19 @@ describe("llmTools", () => {
             options: [],
             required: false,
             primary: false,
-          },
-          {
-            ...mockResult.rows[0],
+          }),
+          expect.objectContaining({
+            id: 2,
+            name: "newField",
+            type: "Email",
+            caseid: 1,
+            label: "New Field",
+            description: "New Description",
+            order: 1,
             options: [],
-          },
+            required: false,
+            primary: false,
+          }),
         ],
       });
     });

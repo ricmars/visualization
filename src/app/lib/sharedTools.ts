@@ -360,7 +360,8 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 },
                 defaultValue: {
                   type: "string",
-                  description: "Default value for the field",
+                  description:
+                    "Default value for the field (optional but recommended). Use a type-appropriate string: e.g., '0' for Integer/Decimal, 'false' for Checkbox, ISO date like '2025-01-01' for Date, and for Dropdown/RadioButtons use one of the provided options.",
                 },
               },
               required: ["name", "type", "caseid", "label"],
@@ -395,6 +396,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           options: unknown;
           required: boolean;
           primary: boolean;
+          defaultValue?: unknown;
         }> = [];
 
         // Process each field
@@ -410,6 +412,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             options,
             required,
             primary,
+            defaultValue,
           } = field;
 
           // Validation
@@ -434,25 +437,75 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             existingFieldResult.rowCount &&
             existingFieldResult.rowCount > 0
           ) {
-            // Return existing field
+            // Update the existing field (matched by name + case) to persist incoming changes like defaultValue
             const existingFieldId = existingFieldResult.rows[0].id;
             const fullFieldQuery = `SELECT * FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
             const fullFieldResult = await pool.query(fullFieldQuery, [
               existingFieldId,
             ]);
-            const fieldData =
+            const existingRow =
               fullFieldResult && fullFieldResult.rows && fullFieldResult.rows[0]
                 ? fullFieldResult.rows[0]
                 : {};
+
+            const nextLabel = label ?? existingRow.label ?? name;
+            const nextDescription =
+              description ?? existingRow.description ?? "";
+            const nextOrder = order ?? existingRow.order ?? 0;
+            const nextRequired =
+              required ?? (existingRow.required as boolean) ?? false;
+            const nextPrimary =
+              primary ?? (existingRow.primary as boolean) ?? false;
+            const normalizedOptions = Array.isArray(options)
+              ? JSON.stringify(options)
+              : options ??
+                (typeof existingRow.options === "string"
+                  ? existingRow.options
+                  : JSON.stringify(existingRow.options ?? []));
+            const normalizedDefaultValue =
+              defaultValue === undefined || defaultValue === null
+                ? existingRow.defaultValue ?? null
+                : typeof defaultValue === "string"
+                ? defaultValue
+                : JSON.stringify(defaultValue);
+
+            const updateExistingQuery = `
+              UPDATE "${DB_TABLES.FIELDS}"
+              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "defaultValue" = $10
+              WHERE id = $11
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
+            `;
+            const updateExistingValues = [
+              name,
+              type,
+              caseid,
+              nextLabel,
+              nextDescription,
+              nextOrder,
+              normalizedOptions,
+              nextRequired,
+              nextPrimary,
+              normalizedDefaultValue,
+              existingFieldId,
+            ];
+            console.log(
+              "saveFields UPDATE (by name) query values:",
+              updateExistingValues,
+            );
+            const updated = await pool.query(
+              updateExistingQuery,
+              updateExistingValues,
+            );
+            const fieldData = updated.rows[0] || {};
 
             results.push({
               id: fieldData.id ?? existingFieldId,
               name: fieldData.name ?? name,
               type: fieldData.type ?? type,
               caseid: fieldData.caseid ?? caseid,
-              label: fieldData.label ?? label,
-              description: fieldData.description ?? description ?? "",
-              order: fieldData.order ?? order ?? 0,
+              label: fieldData.label ?? nextLabel,
+              description: fieldData.description ?? nextDescription,
+              order: fieldData.order ?? nextOrder,
               options: fieldData.options
                 ? Array.isArray(fieldData.options)
                   ? fieldData.options
@@ -463,11 +516,16 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                         return [];
                       }
                     })()
-                : Array.isArray(options)
-                ? options
-                : [],
-              required: fieldData.required ?? required ?? false,
-              primary: fieldData.primary ?? primary ?? false,
+                : (() => {
+                    try {
+                      return JSON.parse(normalizedOptions);
+                    } catch {
+                      return [];
+                    }
+                  })(),
+              required: fieldData.required ?? nextRequired,
+              primary: fieldData.primary ?? nextPrimary,
+              defaultValue: fieldData.defaultValue ?? normalizedDefaultValue,
             });
             continue;
           }
@@ -476,11 +534,21 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             // Update existing field
             const query = `
               UPDATE "${DB_TABLES.FIELDS}"
-              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9
-              WHERE id = $10
-              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary"
+              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "defaultValue" = $10
+              WHERE id = $11
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
             `;
             console.log("saveFields UPDATE query:", query);
+            // Normalize options & defaultValue for DB storage
+            const normalizedOptions = Array.isArray(options)
+              ? JSON.stringify(options)
+              : options ?? "[]";
+            const normalizedDefaultValue =
+              defaultValue === undefined || defaultValue === null
+                ? null
+                : typeof defaultValue === "string"
+                ? defaultValue
+                : JSON.stringify(defaultValue);
             console.log("saveFields UPDATE query values:", [
               name,
               type,
@@ -488,9 +556,10 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               label,
               description ?? "",
               order ?? 0,
-              options ?? "[]",
+              normalizedOptions,
               required ?? false,
               primary ?? false,
+              normalizedDefaultValue,
               id,
             ]);
 
@@ -501,9 +570,10 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               label,
               description ?? "",
               order ?? 0,
-              options ?? "[]",
+              normalizedOptions,
               required ?? false,
               primary ?? false,
+              normalizedDefaultValue,
               id,
             ]);
             if (result.rowCount === 0) {
@@ -542,15 +612,25 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 : [],
               required: fieldData.required ?? required ?? false,
               primary: fieldData.primary ?? primary ?? false,
+              defaultValue: fieldData.defaultValue ?? defaultValue,
             });
           } else {
             // Create new field
             const query = `
-              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseid, label, description, "order", options, required, "primary")
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary"
+              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseid, label, description, "order", options, required, "primary", "defaultValue")
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
             `;
             console.log("saveFields INSERT query:", query);
+            const normalizedOptions = Array.isArray(options)
+              ? JSON.stringify(options)
+              : options ?? "[]";
+            const normalizedDefaultValue =
+              defaultValue === undefined || defaultValue === null
+                ? null
+                : typeof defaultValue === "string"
+                ? defaultValue
+                : JSON.stringify(defaultValue);
             console.log("saveFields INSERT query values:", [
               name,
               type,
@@ -558,9 +638,10 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               label,
               description ?? "",
               order ?? 0,
-              options ?? "[]",
+              normalizedOptions,
               required ?? false,
               primary ?? false,
+              normalizedDefaultValue,
             ]);
 
             const result = await pool.query(query, [
@@ -570,9 +651,10 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               label,
               description ?? "",
               order ?? 0,
-              options ?? "[]",
+              normalizedOptions,
               required ?? false,
               primary ?? false,
+              normalizedDefaultValue,
             ]);
             const fieldData = result.rows[0] || {};
 
@@ -606,6 +688,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 : [],
               required: fieldData.required ?? required ?? false,
               primary: fieldData.primary ?? primary ?? false,
+              defaultValue: fieldData.defaultValue ?? defaultValue,
             });
           }
         }
@@ -1042,7 +1125,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
         console.log("listFields called at:", new Date().toISOString());
 
         const query = `
-          SELECT id, name, type, caseid, label, description, "order", options, required, "primary"
+          SELECT id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
           FROM "${DB_TABLES.FIELDS}"
           WHERE caseid = $1
           ORDER BY "order", name
@@ -1062,6 +1145,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           options: row.options,
           required: row.required,
           primary: row.primary,
+          defaultValue: row.defaultValue ?? null,
         }));
 
         console.log("listFields successful:", {

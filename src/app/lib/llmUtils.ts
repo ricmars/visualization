@@ -125,10 +125,14 @@ export function createStreamProcessor(
           userMessage = `Deleted case successfully`;
         }
 
+        // Ensure a leading newline so UI separates tool result from preceding stream chunk
+        const safeMessage = userMessage.startsWith("\n")
+          ? userMessage
+          : `\n${userMessage}`;
         await writer.write(
           encoder.encode(
             `data: ${JSON.stringify({
-              text: userMessage,
+              text: safeMessage,
             })}\n\n`,
           ),
         );

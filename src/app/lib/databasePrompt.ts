@@ -62,6 +62,14 @@ WORKFLOW CREATION SEQUENCE:
 3. Create views with saveView (use the case ID from step 1, save the returned view IDs)
 4. Update the case with saveCase (use the view IDs from step 3 in the workflow model)
 
+FIELD CREATION GUIDELINES:
+- Always provide a meaningful label and type-appropriate defaultValue when reasonable.
+- For numeric fields (Integer/Decimal/Percentage/Currency), prefer defaultValue like '0'.
+- For Checkbox, prefer 'false' or 'true' as a string.
+- For Date/DateTime, use ISO strings like '2025-01-01' or '2025-01-01T00:00:00Z'.
+- For Dropdown/RadioButtons, choose one of the provided options as the defaultValue.
+- If no sensible default exists, omit defaultValue.
+
 IMPORTANT: saveCase should ONLY be used for:
 - Creating a new workflow from scratch
 - Making structural changes to the workflow model (adding/removing stages, processes, or steps)

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { FaUndo, FaCheck, FaClock, FaArrowUp } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 
 // Typing indicator component
 const TypingIndicator = () => (
@@ -62,6 +64,53 @@ interface ChatInterfaceProps {
 }
 
 // Function to format content based on its type
+function normalizeMarkdown(original: string): string {
+  let content = original;
+  // Ensure headings like "...text### Heading" start on a new block line
+  content = content.replace(/([^\n])\s*(#{1,6})\s+/g, (match, prev, hashes) => {
+    return `${prev}\n\n${hashes} `;
+  });
+
+  // Ensure unordered list markers start on a new line
+  content = content.replace(/([^\n])\s*([\-*+]\s+)/g, (match, prev, marker) => {
+    return `${prev}\n${marker}`;
+  });
+
+  // Ensure ordered list markers like "1. " start on a new line
+  content = content.replace(/([^\n])\s*(\d+\.\s+)/g, (match, prev, marker) => {
+    return `${prev}\n${marker}`;
+  });
+
+  // Add missing space after unordered list markers at line start: "*Item" -> "* Item"
+  content = content.replace(
+    /(^|\n)([\-*+])(?!\s|[\-*+])/g,
+    (match, start, marker) => {
+      return `${start}${marker} `;
+    },
+  );
+
+  // Add missing space after ordered list markers at line start: "1.Item" -> "1. Item"
+  content = content.replace(/(^|\n)(\d+\.)(?!\s)/g, (match, start, marker) => {
+    return `${start}${marker} `;
+  });
+
+  // Normalize multiple consecutive spaces after list markers
+  content = content.replace(
+    /(^|\n)([\-*+]\s{2,})/g,
+    (match, start) => `${start}* `,
+  );
+
+  // Ensure a blank line between paragraphs when headings or lists follow text immediately
+  content = content.replace(
+    /([\S])\n(#{1,6}|[\-*+]\s|\d+\.\s)/g,
+    (m, prev, next) => {
+      return `${prev}\n\n${next}`;
+    },
+  );
+
+  return content;
+}
+
 function formatContent(content: string): string {
   // Check if content is JSON
   try {
@@ -70,7 +119,7 @@ function formatContent(content: string): string {
     return `\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
   } catch {
     // If it's not JSON, return as is (will be rendered as markdown)
-    return content;
+    return normalizeMarkdown(content);
   }
 }
 
@@ -207,31 +256,23 @@ export default function ChatInterface({
   };
 
   const markdownComponents: Components = {
-    code({ className, children, ...props }) {
+    code({ className, children }) {
       const match = /language-(\w+)/.exec(className || "");
       const isInline = !match;
 
       return isInline ? (
-        <code
-          className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm"
-          {...props}
-        >
+        <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">
           {children}
         </code>
       ) : (
         <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto">
-          <code className={className} {...props}>
-            {children}
-          </code>
+          <code className={className}>{children}</code>
         </pre>
       );
     },
-    pre({ children, ...props }) {
+    pre({ children }) {
       return (
-        <pre
-          className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto"
-          {...props}
-        >
+        <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto">
           {children}
         </pre>
       );
@@ -301,7 +342,10 @@ export default function ChatInterface({
               }`}
             >
               <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown components={markdownComponents}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={markdownComponents}
+                >
                   {formatContent(msg.content)}
                 </ReactMarkdown>
                 {msg.isThinking && <BlinkingCursor />}
@@ -331,7 +375,7 @@ export default function ChatInterface({
 
       {/* Message input */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-3">
-        <div className="flex items-end space-x-2">
+        <div className="flex items-end space-x-2 flex-row items-center">
           <div className="flex-1 min-w-0">
             <textarea
               ref={textareaRef}

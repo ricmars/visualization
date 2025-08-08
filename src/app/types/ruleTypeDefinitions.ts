@@ -294,6 +294,16 @@ export const fieldRuleType: RuleTypeDefinition = {
       if (Array.isArray(data.options)) {
         data.options = JSON.stringify(data.options);
       }
+      // Normalize defaultValue to a string for TEXT column storage
+      if (data.defaultValue !== undefined && data.defaultValue !== null) {
+        if (typeof data.defaultValue !== "string") {
+          try {
+            data.defaultValue = JSON.stringify(data.defaultValue);
+          } catch {
+            data.defaultValue = String(data.defaultValue);
+          }
+        }
+      }
       return data;
     },
 
@@ -301,6 +311,16 @@ export const fieldRuleType: RuleTypeDefinition = {
       // Ensure options is a JSON string for database storage
       if (Array.isArray(data.options)) {
         data.options = JSON.stringify(data.options);
+      }
+      // Normalize defaultValue to a string for TEXT column storage
+      if (data.defaultValue !== undefined && data.defaultValue !== null) {
+        if (typeof data.defaultValue !== "string") {
+          try {
+            data.defaultValue = JSON.stringify(data.defaultValue);
+          } catch {
+            data.defaultValue = String(data.defaultValue);
+          }
+        }
       }
       return data;
     },

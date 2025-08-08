@@ -31,7 +31,12 @@ import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import ViewsPanel from "../../components/ViewsPanel";
 import FieldsList from "../../components/FieldsList";
-import { FaPencilAlt } from "react-icons/fa";
+import {
+  FaPencilAlt,
+  FaChevronLeft,
+  FaChevronRight,
+  FaGripVertical,
+} from "react-icons/fa";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
 import { DB_TABLES, DB_COLUMNS } from "../../types/database";
@@ -58,6 +63,10 @@ const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
 const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
 const MAX_CHECKPOINTS = 10;
 const MODEL_UPDATED_EVENT = "model-updated";
+const CHAT_PANEL_WIDTH_STORAGE_KEY = "chat_panel_width";
+const CHAT_PANEL_EXPANDED_STORAGE_KEY = "chat_panel_expanded";
+const CHAT_MIN_WIDTH = 300;
+const CHAT_MAX_WIDTH = 800;
 
 interface DatabaseCase {
   id: number;
@@ -174,8 +183,8 @@ export default function WorkflowPage() {
   const [activeStep, setActiveStep] = useState<string>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [chatPanelWidth] = useState(500);
-  const [isChatPanelExpanded] = useState(true);
+  const [chatPanelWidth, setChatPanelWidth] = useState(500);
+  const [isChatPanelExpanded, setIsChatPanelExpanded] = useState(true);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
     "flat",
@@ -201,6 +210,10 @@ export default function WorkflowPage() {
   // 3. All useRef hooks
   const addFieldButtonRef = useRef<HTMLButtonElement>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const isResizingRef = useRef(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(0);
+  const lastExpandedWidthRef = useRef<number>(chatPanelWidth);
 
   // 4. useMemo hook
   const workflowModel: WorkflowState = useMemo(() => {
@@ -230,6 +243,24 @@ export default function WorkflowPage() {
           steps: tmpSteps,
         });
       }
+      // Map fields to include sample values from defaultValue
+      const fieldsWithValues: Field[] = currentFields.map((f: any) => {
+        const dv = f?.defaultValue;
+        let value: any = undefined;
+        if (dv !== undefined && dv !== null) {
+          if (typeof dv === "string") {
+            try {
+              value = JSON.parse(dv);
+            } catch {
+              value = dv;
+            }
+          } else {
+            value = dv;
+          }
+        }
+        return { ...f, value } as Field;
+      });
+
       return {
         fullUpdate: true,
         appName: "My Application",
@@ -241,7 +272,7 @@ export default function WorkflowPage() {
         caseTypes: [
           {
             name: selectedCase?.name || "Workflow",
-            fields: currentFields,
+            fields: fieldsWithValues,
             creationFields: [],
             stages: tmpStages,
           },
@@ -270,6 +301,26 @@ export default function WorkflowPage() {
     if (savedPanelTab) {
       setActivePanelTab(savedPanelTab);
     }
+
+    // Load chat panel preferences
+    const savedWidthRaw = localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
+    const savedExpandedRaw = localStorage.getItem(
+      CHAT_PANEL_EXPANDED_STORAGE_KEY,
+    );
+    if (savedWidthRaw) {
+      const parsed = parseInt(savedWidthRaw, 10);
+      if (!Number.isNaN(parsed)) {
+        const clamped = Math.min(
+          Math.max(parsed, CHAT_MIN_WIDTH),
+          CHAT_MAX_WIDTH,
+        );
+        setChatPanelWidth(clamped);
+        lastExpandedWidthRef.current = clamped;
+      }
+    }
+    if (savedExpandedRaw !== null) {
+      setIsChatPanelExpanded(savedExpandedRaw === "true");
+    }
   }, []);
 
   // Save tab to localStorage when it changes
@@ -281,6 +332,72 @@ export default function WorkflowPage() {
   useEffect(() => {
     localStorage.setItem(ACTIVE_PANEL_TAB_STORAGE_KEY, activePanelTab);
   }, [activePanelTab]);
+
+  // Persist chat panel width/expanded
+  useEffect(() => {
+    localStorage.setItem(CHAT_PANEL_WIDTH_STORAGE_KEY, String(chatPanelWidth));
+  }, [chatPanelWidth]);
+  useEffect(() => {
+    localStorage.setItem(
+      CHAT_PANEL_EXPANDED_STORAGE_KEY,
+      String(isChatPanelExpanded),
+    );
+  }, [isChatPanelExpanded]);
+
+  // Resize handlers
+  const handleToggleChatPanel = useCallback(() => {
+    if (isChatPanelExpanded) {
+      lastExpandedWidthRef.current = chatPanelWidth;
+      setIsChatPanelExpanded(false);
+    } else {
+      const restore = lastExpandedWidthRef.current || CHAT_MIN_WIDTH;
+      setChatPanelWidth(
+        Math.min(Math.max(restore, CHAT_MIN_WIDTH), CHAT_MAX_WIDTH),
+      );
+      setIsChatPanelExpanded(true);
+    }
+  }, [isChatPanelExpanded, chatPanelWidth]);
+
+  const onResizeMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      isResizingRef.current = true;
+      resizeStartXRef.current = e.clientX;
+      resizeStartWidthRef.current = chatPanelWidth;
+      // Prevent text selection while dragging
+      document.body.style.userSelect = "none";
+    },
+    [chatPanelWidth],
+  );
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const dx = e.clientX - resizeStartXRef.current;
+      // Handle is at the left edge of the right panel; moving right shrinks the panel
+      const nextWidth = resizeStartWidthRef.current - dx;
+      const clamped = Math.min(
+        Math.max(nextWidth, CHAT_MIN_WIDTH),
+        CHAT_MAX_WIDTH,
+      );
+      setChatPanelWidth(clamped);
+      lastExpandedWidthRef.current = clamped;
+      if (!isChatPanelExpanded) {
+        setIsChatPanelExpanded(true);
+      }
+    };
+    const onMouseUp = () => {
+      if (isResizingRef.current) {
+        isResizingRef.current = false;
+        document.body.style.userSelect = "";
+      }
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [setChatPanelWidth, setIsChatPanelExpanded, isChatPanelExpanded]);
 
   // Load checkpoints from sessionStorage
   useEffect(() => {
@@ -593,6 +710,7 @@ export default function WorkflowPage() {
     options?: string[];
     required?: boolean;
     primary?: boolean;
+    defaultValue?: string;
   }): Promise<string> => {
     if (!selectedCase) return "";
 
@@ -610,6 +728,7 @@ export default function WorkflowPage() {
         description: field.label,
         order: 0,
         options: field.options ?? [],
+        defaultValue: field.defaultValue,
       };
 
       console.log("Creating field with data:", fieldData);
@@ -631,6 +750,7 @@ export default function WorkflowPage() {
             order: fieldData.order,
             options: fieldData.options,
             required: fieldData.required,
+            defaultValue: fieldData.defaultValue,
           },
         }),
       });
@@ -737,6 +857,10 @@ export default function WorkflowPage() {
             updates.description ||
             editingField.description ||
             "Field description",
+          defaultValue:
+            (updates as any).defaultValue !== undefined
+              ? (updates as any).defaultValue
+              : (editingField as any).defaultValue ?? null,
         },
       };
 
@@ -2474,6 +2598,38 @@ export default function WorkflowPage() {
         </main>
       </div>
 
+      {/* Separator & Chat Panel */}
+      {/* Resize Separator with centered toggle button */}
+      <div
+        className="relative w-[6px] bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 cursor-col-resize"
+        onMouseDown={onResizeMouseDown}
+        aria-label="Resize chat panel"
+        title="Drag to resize"
+      >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleToggleChatPanel();
+          }}
+          className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-white dark:bg-gray-900 shadow ring-1 ring-gray-300 dark:ring-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+          aria-label={
+            isChatPanelExpanded ? "Collapse chat panel" : "Expand chat panel"
+          }
+          title={isChatPanelExpanded ? "Collapse" : "Expand"}
+        >
+          {isChatPanelExpanded ? (
+            <FaChevronRight className="h-4 w-4" />
+          ) : (
+            <FaChevronLeft className="h-4 w-4" />
+          )}
+        </button>
+        {/* Grip indicator */}
+        <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">
+          <FaGripVertical className="h-3 w-3" />
+        </div>
+      </div>
+
       {/* Chat Panel */}
       <motion.div
         className="border-l dark:border-gray-700 flex flex-col h-screen overflow-hidden text-sm"
@@ -2483,8 +2639,8 @@ export default function WorkflowPage() {
         }}
         transition={{ duration: 0.3 }}
         style={{
-          minWidth: isChatPanelExpanded ? "300px" : "0px",
-          maxWidth: "800px",
+          minWidth: isChatPanelExpanded ? `${CHAT_MIN_WIDTH}px` : "0px",
+          maxWidth: `${CHAT_MAX_WIDTH}px`,
           fontSize: "14px",
         }}
       >

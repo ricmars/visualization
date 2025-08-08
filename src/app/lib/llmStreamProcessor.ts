@@ -56,11 +56,6 @@ export class SharedLLMStreamProcessor implements LLMStreamProcessor {
         }
       }
 
-      // Process any remaining text at the end of the stream
-      if (accumulatedText.trim()) {
-        await processor.processChunk(accumulatedText);
-      }
-
       await processor.sendDone();
     } catch (error) {
       console.error("Stream processing error:", error);
