@@ -36,6 +36,8 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaGripVertical,
+  FaObjectGroup,
+  FaMagic,
 } from "react-icons/fa";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
@@ -206,6 +208,27 @@ export default function WorkflowPage() {
   >(null);
   const [selectedView, setSelectedView] = useState<string | null>(null);
   const [newProcessName, setNewProcessName] = useState("");
+
+  // Free Form selection & quick chat state
+  const [isFreeFormSelecting, setIsFreeFormSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
+  const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
+  const [quickChatText, setQuickChatText] = useState("");
+  const [quickOverlayPosition, setQuickOverlayPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const quickInputRef = useRef<HTMLInputElement>(null);
 
   // 3. All useRef hooks
   const addFieldButtonRef = useRef<HTMLButtonElement>(null);
@@ -395,6 +418,132 @@ export default function WorkflowPage() {
       setIsChatPanelExpanded(true);
     }
   }, [isChatPanelExpanded, chatPanelWidth]);
+
+  // Helpers for free-form selection
+  const beginFreeFormSelection = useCallback(() => {
+    setSelectedFieldIds([]);
+    setSelectionStart(null);
+    setSelectionRect(null);
+    setIsFreeFormSelecting(true);
+  }, []);
+
+  const onSelectionMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Only left button
+      if (e.button !== 0) return;
+      setSelectionStart({ x: e.clientX, y: e.clientY });
+      setSelectionRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
+    },
+    [],
+  );
+
+  const onSelectionMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!selectionStart) return;
+      const x1 = Math.min(selectionStart.x, e.clientX);
+      const y1 = Math.min(selectionStart.y, e.clientY);
+      const x2 = Math.max(selectionStart.x, e.clientX);
+      const y2 = Math.max(selectionStart.y, e.clientY);
+      setSelectionRect({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+    },
+    [selectionStart],
+  );
+
+  const rectsIntersect = (
+    a: { x: number; y: number; width: number; height: number },
+    b: { x: number; y: number; width: number; height: number },
+  ) => {
+    return (
+      a.x < b.x + b.width &&
+      a.x + a.width > b.x &&
+      a.y < b.y + b.height &&
+      a.y + a.height > b.y
+    );
+  };
+
+  const onSelectionMouseUp = useCallback(() => {
+    if (!selectionRect) {
+      setIsFreeFormSelecting(false);
+      return;
+    }
+    // Find all field items marked with data-field-id that intersect selectionRect
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-field-id]"),
+    );
+    const pickedIds = new Set<number>();
+    // Track bounding box for selected nodes
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    nodes.forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      const r = {
+        x: rect.left,
+        y: rect.top,
+        width: rect.width,
+        height: rect.height,
+      };
+      if (rectsIntersect(selectionRect, r)) {
+        const idStr = el.dataset.fieldId;
+        const idNum = idStr ? parseInt(idStr, 10) : NaN;
+        if (!Number.isNaN(idNum)) pickedIds.add(idNum);
+        // Expand bounding box
+        minX = Math.min(minX, r.x);
+        minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.width);
+        maxY = Math.max(maxY, r.y + r.height);
+      }
+    });
+    const ids = Array.from(pickedIds.values());
+    setSelectedFieldIds(ids);
+    // Compute overlay anchor position near the selection (top-right with clamping)
+    let overlayX = selectionRect.x + selectionRect.width + 8;
+    let overlayY = selectionRect.y - 8; // slightly above
+    if (ids.length > 0 && isFinite(minX) && isFinite(minY) && isFinite(maxX)) {
+      overlayX = maxX + 8;
+      overlayY = minY - 8;
+    }
+    // Clamp within viewport with a conservative width assumption
+    const assumedWidth = 320;
+    const margin = 8;
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    if (overlayX + assumedWidth > viewportW - margin) {
+      // place to the left of selection
+      const leftCandidate =
+        ids.length > 0 && isFinite(minX)
+          ? minX - assumedWidth - 8
+          : selectionRect.x - assumedWidth - 8;
+      overlayX = Math.max(margin, leftCandidate);
+    }
+    // Clamp Y
+    overlayY = Math.max(margin, Math.min(overlayY, viewportH - margin - 120));
+    setQuickOverlayPosition({ x: overlayX, y: overlayY });
+    setIsFreeFormSelecting(false);
+    setSelectionStart(null);
+    setSelectionRect(null);
+    // Open quick chat if we have any ids; still allow opening with none
+    setIsQuickChatOpen(true);
+  }, [selectionRect]);
+
+  const sendQuickChat = useCallback(async () => {
+    if (!quickChatText.trim()) return;
+    const chosenFields = fields.filter((f) =>
+      selectedFieldIds.includes(f.id as number),
+    );
+    const fieldNames = chosenFields.map((f) => f.name);
+    const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
+      selectedFieldIds,
+    )}\nSelected fieldNames=${JSON.stringify(fieldNames)}\n`;
+    const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
+    // Close modal immediately before sending to avoid waiting for LLM stream
+    setIsQuickChatOpen(false);
+    setQuickChatText("");
+    // Fire-and-forget so UI is responsive; errors are logged in handler
+    void handleSendMessage(composedMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields, selectedFieldIds, quickChatText]);
 
   const onResizeMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -2718,13 +2867,23 @@ export default function WorkflowPage() {
                   <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     Chat
                   </h3>
-                  <button
-                    onClick={handleClearChat}
-                    className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-red-200 dark:hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 active:bg-red-50 dark:active:bg-red-900/20 transition-all duration-200 ease-in-out bg-white dark:bg-gray-900"
-                    title="Clear chat history"
-                  >
-                    Clear All
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={beginFreeFormSelection}
+                      className="flex items-center gap-1 px-3 py-1 text-xs text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      title="Free form selection"
+                    >
+                      <FaObjectGroup className="w-3.5 h-3.5" />
+                      Free Form
+                    </button>
+                    <button
+                      onClick={handleClearChat}
+                      className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-red-200 dark:hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 active:bg-red-50 dark:active:bg-red-900/20 transition-all duration-200 ease-in-out bg-white dark:bg-gray-900"
+                      title="Clear chat history"
+                    >
+                      Clear All
+                    </button>
+                  </div>
                 </div>
                 {/* Chat Interface */}
                 <div className="flex-1 overflow-hidden">
@@ -2797,6 +2956,73 @@ export default function WorkflowPage() {
           description: selectedCase?.description || "",
         }}
       />
+
+      {/* Free Form selection overlay */}
+      {isFreeFormSelecting && (
+        <div
+          className="fixed inset-0 z-[60] cursor-crosshair"
+          onMouseDown={onSelectionMouseDown}
+          onMouseMove={onSelectionMouseMove}
+          onMouseUp={onSelectionMouseUp}
+        >
+          {/* Dim background to indicate selection mode */}
+          <div className="absolute inset-0 bg-black/10 dark:bg-white/10 pointer-events-none" />
+          {selectionRect && (
+            <div
+              className="absolute border-2 border-blue-500 bg-blue-500/10"
+              style={{
+                left: selectionRect.x,
+                top: selectionRect.y,
+                width: selectionRect.width,
+                height: selectionRect.height,
+              }}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Quick Chat floating overlay (non-blocking) */}
+      {isQuickChatOpen && quickOverlayPosition && (
+        <div
+          className="fixed z-[70]"
+          style={{ left: quickOverlayPosition.x, top: quickOverlayPosition.y }}
+        >
+          <div className="w-[360px] rounded-xl shadow-2xl ring-1 ring-purple-400/40 border border-purple-300/60 dark:border-purple-700/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-3">
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-purple-600 text-white shadow">
+                <FaMagic className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {selectedFieldIds.length > 0
+                  ? `Selected ${selectedFieldIds.length} field${
+                      selectedFieldIds.length === 1 ? "" : "s"
+                    }`
+                  : "No fields selected"}
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-purple-800 dark:text-purple-300">
+              AI quick action — type and press Enter. Esc to close.
+            </div>
+            <input
+              ref={quickInputRef}
+              className="mt-2 w-full rounded-md border border-purple-300/70 dark:border-purple-700/60 bg-white dark:bg-gray-900 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              placeholder="Quick edit..."
+              value={quickChatText}
+              onChange={(e) => setQuickChatText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void sendQuickChat();
+                }
+                if (e.key === "Escape") {
+                  setIsQuickChatOpen(false);
+                }
+              }}
+              autoFocus
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

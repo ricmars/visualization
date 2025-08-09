@@ -27,6 +27,36 @@ export class Service {
     return await this.generateOpenAIResponse(prompt, systemContext);
   }
 
+  static async generateResponseWithContext(
+    prompt: string,
+    systemContext: string,
+    selectionContext?: {
+      fieldIds?: number[];
+      fieldNames?: string[];
+      viewId?: number;
+    },
+  ) {
+    const contextPayload = selectionContext ? { selectionContext } : undefined;
+    console.log("Calling OpenAI API with selection context...", contextPayload);
+    const response = await fetch("/api/openai", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        systemContext,
+        selectionContext,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate response: ${response.statusText}`);
+    }
+
+    return response;
+  }
+
   private static async generateOpenAIResponse(
     prompt: string,
     systemContext: string,

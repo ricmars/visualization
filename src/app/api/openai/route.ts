@@ -551,33 +551,31 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
             // Handle cases where the model doesn't make tool calls
             if (finishReason !== "tool_calls") {
               console.log(
-                `Model finished without tool calls (reason: ${finishReason}) - adding instruction to proceed with tools`,
+                `Model finished without tool calls (reason: ${finishReason})`,
               );
 
-              // Different messages based on context (new vs existing workflow)
+              // For existing workflows, stop here to avoid duplicate tool re-execution
+              if (currentCaseId) {
+                done = true;
+                break;
+              }
+
+              // For new workflows, encourage tool usage to complete creation
               let proceedMessage;
-              const isNewWorkflow = !currentCaseId;
-              if (isNewWorkflow) {
-                if (loopCount === 1) {
-                  proceedMessage = {
-                    role: "user" as const,
-                    content: `Proceed using tools: create case, fields, views, then call saveCase to complete.`,
-                  };
-                } else if (finishReason === "length") {
-                  proceedMessage = {
-                    role: "user" as const,
-                    content: `Continue: create stages, processes, steps; then call saveCase to complete.`,
-                  };
-                } else {
-                  proceedMessage = {
-                    role: "user" as const,
-                    content: `Continue with tools: create stages/processes/steps, then call saveCase.`,
-                  };
-                }
+              if (loopCount === 1) {
+                proceedMessage = {
+                  role: "user" as const,
+                  content: `Proceed using tools: create case, fields, views, then call saveCase to complete.`,
+                };
+              } else if (finishReason === "length") {
+                proceedMessage = {
+                  role: "user" as const,
+                  content: `Continue: create stages, processes, steps; then call saveCase to complete.`,
+                };
               } else {
                 proceedMessage = {
                   role: "user" as const,
-                  content: `Proceed with the requested field updates using saveFields only.`,
+                  content: `Continue with tools: create stages/processes/steps, then call saveCase.`,
                 };
               }
 
@@ -901,10 +899,12 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 }
                 messages.push(completionMessage);
               } else if (!saveCaseCalled && !isNewWorkflowCreation) {
-                // For existing workflows, don't force saveCase unless it's a structural change
+                // For existing workflows, a successful tool execution completes the request
                 console.log(
-                  "Existing workflow - not forcing saveCase for simple operations",
+                  "Existing workflow - simple operation completed; stopping loop to avoid duplicates",
                 );
+                done = true;
+                break;
               }
 
               // Continue loop for next tool call or final message
