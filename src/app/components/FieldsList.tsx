@@ -47,8 +47,8 @@ const FieldsList: React.FC<FieldsListProps> = ({
             >
               {fields.map((field, index) => (
                 <Draggable
-                  key={`field-${field.name}`}
-                  draggableId={`field-${field.name}`}
+                  key={`field-${field.id ?? field.name}`}
+                  draggableId={`field-${field.id ?? field.name}`}
                   index={index}
                 >
                   {(provided: DraggableProvided) => (

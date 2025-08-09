@@ -2574,56 +2574,71 @@ export default function WorkflowPage() {
   ) => {
     if (!selectedCase) return;
 
+    // Build a map of original orders based on current rendered order
+    const originalOrderById = new Map<number, number>();
+    fields.forEach((f, idx) => {
+      if (typeof f.id === "number") originalOrderById.set(f.id, idx + 1);
+    });
+
+    // Create a copy of the fields array and reorder it
+    const reorderedFields = Array.from(fields);
+    const [removed] = reorderedFields.splice(startIndex, 1);
+    reorderedFields.splice(endIndex, 0, removed);
+
+    // Optimistically update local state immediately so the item stays where dropped
+    // Also update the order property on affected items for consistency
+    const minIndex = Math.min(startIndex, endIndex);
+    const maxIndex = Math.max(startIndex, endIndex);
+    for (let i = minIndex; i <= maxIndex; i += 1) {
+      const field = reorderedFields[i];
+      if (field) (field as any).order = i + 1;
+    }
+    setFields(reorderedFields);
+
     try {
-      // Create a copy of the fields array and reorder it
-      const reorderedFields = Array.from(fields);
-      const [removed] = reorderedFields.splice(startIndex, 1);
-      reorderedFields.splice(endIndex, 0, removed);
+      // Only update the fields whose order actually changed, bounded to the affected range
+      const updates = [] as Promise<Response>[];
+      for (let i = minIndex; i <= maxIndex; i += 1) {
+        const field = reorderedFields[i];
+        if (!field || typeof field.id !== "number") continue;
+        const previousOrder = originalOrderById.get(field.id);
+        const nextOrder = i + 1;
+        if (previousOrder === nextOrder) continue; // skip unchanged
 
-      // Update the database field order for all fields
-      const fieldUpdates = reorderedFields
-        .map((field, index) => {
-          if (field.id) {
-            return fetch(
-              `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
-              {
-                method: "PUT",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  table: DB_TABLES.FIELDS,
-                  data: {
-                    id: field.id,
-                    name: field.name,
-                    label: field.label,
-                    type: field.type,
-                    primary: field.primary,
-                    caseid: selectedCase.id,
-                    options: field.options,
-                    required: field.required,
-                    order: index + 1, // Only update the order, preserve all other properties
-                    description: field.description,
-                  },
-                }),
+        updates.push(
+          fetch(`/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              table: DB_TABLES.FIELDS,
+              data: {
+                id: field.id,
+                name: field.name,
+                label: field.label,
+                type: field.type,
+                primary: field.primary,
+                caseid: selectedCase.id,
+                options: field.options,
+                required: field.required,
+                order: nextOrder,
+                description: field.description,
               },
-            );
-          }
-          return null;
-        })
-        .filter(Boolean);
+            }),
+          }),
+        );
+      }
 
-      // Wait for all field updates to complete
-      await Promise.all(fieldUpdates);
+      if (updates.length > 0) {
+        await Promise.all(updates);
+      }
 
-      // Update local state immediately for better UX
-      setFields(reorderedFields);
-
-      // Dispatch model updated event for preview
+      // Notify preview that model changed
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
       console.error("Error reordering fields:", error);
       alert("Failed to reorder fields. Please try again.");
+      // Optional: revert to original order on failure
+      // setFields(fields);
     }
   };
 
