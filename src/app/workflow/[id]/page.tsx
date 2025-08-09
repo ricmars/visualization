@@ -222,6 +222,7 @@ export default function WorkflowPage() {
     height: number;
   } | null>(null);
   const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
+  const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [quickChatText, setQuickChatText] = useState("");
   const [quickOverlayPosition, setQuickOverlayPosition] = useState<{
@@ -422,6 +423,7 @@ export default function WorkflowPage() {
   // Helpers for free-form selection
   const beginFreeFormSelection = useCallback(() => {
     setSelectedFieldIds([]);
+    setSelectedViewIds([]);
     setSelectionStart(null);
     setSelectionRect(null);
     setIsFreeFormSelecting(true);
@@ -466,11 +468,12 @@ export default function WorkflowPage() {
       setIsFreeFormSelecting(false);
       return;
     }
-    // Find all field items marked with data-field-id that intersect selectionRect
+    // Find all items marked with data-fieldid or data-viewid that intersect selectionRect
     const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-field-id]"),
+      document.querySelectorAll<HTMLElement>("[data-fieldid], [data-viewid]"),
     );
-    const pickedIds = new Set<number>();
+    const pickedFieldIds = new Set<number>();
+    const pickedViewIds = new Set<number>();
     // Track bounding box for selected nodes
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
@@ -485,9 +488,12 @@ export default function WorkflowPage() {
         height: rect.height,
       };
       if (rectsIntersect(selectionRect, r)) {
-        const idStr = el.dataset.fieldId;
+        const idStr = (el as any).dataset.fieldid;
         const idNum = idStr ? parseInt(idStr, 10) : NaN;
-        if (!Number.isNaN(idNum)) pickedIds.add(idNum);
+        if (!Number.isNaN(idNum)) pickedFieldIds.add(idNum);
+        const vStr = (el as any).dataset.viewid;
+        const vNum = vStr ? parseInt(vStr, 10) : NaN;
+        if (!Number.isNaN(vNum)) pickedViewIds.add(vNum);
         // Expand bounding box
         minX = Math.min(minX, r.x);
         minY = Math.min(minY, r.y);
@@ -495,12 +501,34 @@ export default function WorkflowPage() {
         maxY = Math.max(maxY, r.y + r.height);
       }
     });
-    const ids = Array.from(pickedIds.values());
+    const ids = Array.from(pickedFieldIds.values());
+    const vIds = Array.from(pickedViewIds.values());
+    // If user is on Views tab and a view is selected, ensure it is included
+    let augmentedVIds = vIds;
+    if (activeTab === "views" && selectedView) {
+      let currentViewId: number | null = null;
+      if (selectedView.startsWith("db-")) {
+        const parsed = parseInt(selectedView.substring(3), 10);
+        if (!Number.isNaN(parsed)) currentViewId = parsed;
+      } else {
+        const parsed = parseInt(selectedView, 10);
+        if (!Number.isNaN(parsed)) currentViewId = parsed;
+      }
+      if (currentViewId !== null && !augmentedVIds.includes(currentViewId)) {
+        augmentedVIds = [...augmentedVIds, currentViewId];
+      }
+    }
     setSelectedFieldIds(ids);
+    setSelectedViewIds(augmentedVIds);
     // Compute overlay anchor position near the selection (top-right with clamping)
     let overlayX = selectionRect.x + selectionRect.width + 8;
     let overlayY = selectionRect.y - 8; // slightly above
-    if (ids.length > 0 && isFinite(minX) && isFinite(minY) && isFinite(maxX)) {
+    if (
+      (ids.length > 0 || vIds.length > 0) &&
+      isFinite(minX) &&
+      isFinite(minY) &&
+      isFinite(maxX)
+    ) {
       overlayX = maxX + 8;
       overlayY = minY - 8;
     }
@@ -533,9 +561,17 @@ export default function WorkflowPage() {
       selectedFieldIds.includes(f.id as number),
     );
     const fieldNames = chosenFields.map((f) => f.name);
+    const chosenViews = views.filter((v) =>
+      selectedViewIds.includes(v.id as number),
+    );
+    const viewNames = chosenViews.map((v) => v.name);
     const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
       selectedFieldIds,
-    )}\nSelected fieldNames=${JSON.stringify(fieldNames)}\n`;
+    )}\nSelected fieldNames=${JSON.stringify(
+      fieldNames,
+    )}\nSelected viewIds=${JSON.stringify(
+      selectedViewIds,
+    )}\nSelected viewNames=${JSON.stringify(viewNames)}\n`;
     const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
     // Close modal immediately before sending to avoid waiting for LLM stream
     setIsQuickChatOpen(false);
@@ -543,7 +579,7 @@ export default function WorkflowPage() {
     // Fire-and-forget so UI is responsive; errors are logged in handler
     void handleSendMessage(composedMessage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fields, selectedFieldIds, quickChatText]);
+  }, [fields, views, selectedFieldIds, selectedViewIds, quickChatText]);
 
   const onResizeMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -980,17 +1016,29 @@ export default function WorkflowPage() {
   };
 
   const handleUpdateField = async (updates: Partial<Field>) => {
-    if (!selectedCase || !editingField || !editingField.id) {
+    if (!selectedCase) {
+      console.error("Missing required data for field update:", {
+        selectedCase: null,
+      });
+      return;
+    }
+
+    // Prefer an explicit id from updates; otherwise, fallback to current editingField
+    const targetFieldId = updates.id ?? editingField?.id;
+    const targetField =
+      fields.find((f) => f.id === targetFieldId) || editingField || null;
+
+    if (!targetField || !targetField.id) {
       console.error("Missing required data for field update:", {
         selectedCase: selectedCase
           ? { id: selectedCase.id, name: selectedCase.name }
           : null,
-        editingField: editingField
+        editingField: targetField
           ? {
-              id: editingField.id,
-              name: editingField.name,
-              label: editingField.label,
-              type: editingField.type,
+              id: targetField.id,
+              name: targetField.name,
+              label: targetField.label,
+              type: targetField.type,
             }
           : null,
       });
@@ -1002,11 +1050,11 @@ export default function WorkflowPage() {
       const requestBody = {
         table: DB_TABLES.FIELDS,
         data: {
-          id: editingField.id,
-          name: editingField.name,
-          label: updates.label || editingField.label,
-          type: updates.type || editingField.type,
-          primary: updates.primary ?? editingField.primary,
+          id: targetField.id,
+          name: targetField.name,
+          label: updates.label || targetField.label,
+          type: updates.type || targetField.type,
+          primary: updates.primary ?? targetField.primary,
           caseid: selectedCase.id,
           options: (() => {
             // If updates.options is provided, use it directly
@@ -1016,16 +1064,16 @@ export default function WorkflowPage() {
             }
 
             // Otherwise, process the existing options
-            if (editingField.options) {
-              if (Array.isArray(editingField.options)) {
+            if (targetField.options) {
+              if (Array.isArray(targetField.options)) {
                 console.log(
                   "Using existing array options:",
-                  editingField.options,
+                  targetField.options,
                 );
-                return editingField.options;
+                return targetField.options;
               } else {
                 try {
-                  const parsed = JSON.parse(editingField.options);
+                  const parsed = JSON.parse(targetField.options);
                   console.log("Parsed existing options:", parsed);
                   return parsed;
                 } catch (error) {
@@ -1038,16 +1086,16 @@ export default function WorkflowPage() {
             console.log("No options found, using empty array");
             return [];
           })(),
-          required: updates.required ?? editingField.required,
-          order: updates.order ?? editingField.order ?? 0,
+          required: updates.required ?? targetField.required,
+          order: updates.order ?? targetField.order ?? 0,
           description:
             updates.description ||
-            editingField.description ||
+            targetField.description ||
             "Field description",
           defaultValue:
             (updates as any).defaultValue !== undefined
               ? (updates as any).defaultValue
-              : (editingField as any).defaultValue ?? null,
+              : (targetField as any).defaultValue ?? null,
         },
       };
 
@@ -1058,7 +1106,7 @@ export default function WorkflowPage() {
 
       // First update the field in the fields table
       const response = await fetch(
-        `/api/database?table=${DB_TABLES.FIELDS}&id=${editingField.id}`,
+        `/api/database?table=${DB_TABLES.FIELDS}&id=${targetField.id}`,
         {
           method: "PUT",
           headers: {
@@ -2371,10 +2419,105 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleFieldsReorder = async (stepId: string, fieldIds: number[]) => {
+  const handleFieldsReorder = async (
+    selectedViewId: string,
+    fieldIds: number[],
+  ) => {
     if (!selectedCase) return;
 
     try {
+      // If this is a database view (format: "db-<id>"), only update the view model
+      if (selectedViewId.startsWith("db-")) {
+        const viewId = parseInt(selectedViewId.substring(3), 10);
+        if (!viewId || isNaN(viewId)) {
+          throw new Error("Invalid database view ID");
+        }
+
+        const view = views.find((v) => v.id === viewId);
+        if (!view) {
+          throw new Error("View not found");
+        }
+
+        // Parse existing view model
+        let viewModel: {
+          fields?: Array<{
+            fieldId: number;
+            required?: boolean;
+            order?: number;
+          }>;
+          layout?: any;
+        } = {};
+        try {
+          viewModel = JSON.parse(view.model || "{}");
+        } catch (_err) {
+          viewModel = { fields: [] };
+        }
+
+        const existingFieldRefs: Array<{
+          fieldId: number;
+          required?: boolean;
+          order?: number;
+        }> = Array.isArray(viewModel.fields) ? viewModel.fields : [];
+        const fieldRefById = new Map(
+          existingFieldRefs.map((ref) => [ref.fieldId, { ...ref }]),
+        );
+
+        // Reorder: apply provided sequence and preserve properties; set new order index
+        const reorderedRefs: Array<{
+          fieldId: number;
+          required?: boolean;
+          order?: number;
+        }> = [];
+        fieldIds.forEach((fid, index) => {
+          const existing = fieldRefById.get(fid) || { fieldId: fid };
+          reorderedRefs.push({ ...existing, order: index + 1 });
+          fieldRefById.delete(fid);
+        });
+        // Append any refs that weren't included (safety), preserving relative order
+        existingFieldRefs
+          .filter((ref) => fieldRefById.has(ref.fieldId))
+          .forEach((ref) => {
+            reorderedRefs.push({ ...ref, order: reorderedRefs.length + 1 });
+          });
+
+        const updatedViewModel = {
+          ...viewModel,
+          fields: reorderedRefs,
+          layout: viewModel.layout || { type: "form", columns: 1 },
+        };
+
+        const response = await fetch(
+          `/api/database?table=${DB_TABLES.VIEWS}&id=${viewId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: view.name,
+              caseid: selectedCase.id,
+              model: {
+                fields: updatedViewModel.fields,
+                layout: updatedViewModel.layout,
+              },
+            }),
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to update view order");
+        }
+
+        const { data: updatedView } = await response.json();
+        setViews((prev) =>
+          prev.map((v) => (v.id === viewId ? updatedView : v)),
+        );
+
+        // Dispatch for preview
+        window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+        return;
+      }
+
+      // Otherwise, treat as workflow step reorder (update case model only)
+      const stepId = selectedViewId;
       // First, update the workflow model to reflect the new field order
       const updatedStages = workflowModel.stages.map((stage: Stage) => ({
         ...stage,
@@ -2414,54 +2557,8 @@ export default function WorkflowPage() {
         })),
       }));
 
-      // Update the workflow model
+      // Update the workflow model in the case (no field table updates here)
       handleStepsUpdate(updatedStages);
-
-      // Now update the database field order for all fields in this case
-      const fieldUpdates = fieldIds
-        .map((fieldId, index) => {
-          const field = fields.find((f) => f.id === fieldId);
-          if (field && field.id) {
-            return fetch(
-              `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
-              {
-                method: "PUT",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  table: DB_TABLES.FIELDS,
-                  data: {
-                    id: field.id,
-                    name: field.name,
-                    label: field.label,
-                    type: field.type,
-                    primary: field.primary,
-                    caseid: selectedCase.id,
-                    options: field.options,
-                    required: field.required,
-                    order: index + 1, // Only update the order, preserve all other properties
-                    description: field.description,
-                  },
-                }),
-              },
-            );
-          }
-          return null;
-        })
-        .filter(Boolean);
-
-      // Wait for all field updates to complete
-      await Promise.all(fieldUpdates);
-
-      // Refresh the fields state to get updated order
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-      );
-      if (fieldsResponse.ok) {
-        const fieldsData = await fieldsResponse.json();
-        setFields(fieldsData.data);
-      }
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -2769,12 +2866,11 @@ export default function WorkflowPage() {
                   onRemoveFieldFromView={handleRemoveFieldFromView}
                   onAddFieldsToView={handleAddFieldsToView}
                   onAddFieldsToStep={handleAddFieldsToStep}
-                  onFieldsReorder={(stepId: number, fieldIds: string[]) => {
-                    // Convert number stepId to string and string fieldIds to numbers for the handler
-                    const numericFieldIds = fieldIds
-                      .map((id) => parseInt(id, 10))
-                      .filter((id) => !isNaN(id));
-                    handleFieldsReorder(stepId.toString(), numericFieldIds);
+                  onFieldsReorder={(
+                    selectedViewId: string,
+                    fieldIds: number[],
+                  ) => {
+                    handleFieldsReorder(selectedViewId, fieldIds);
                   }}
                   onViewSelect={setSelectedView}
                   selectedView={selectedView}
@@ -2993,11 +3089,17 @@ export default function WorkflowPage() {
                 <FaMagic className="w-3.5 h-3.5" />
               </div>
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {selectedFieldIds.length > 0
+                {selectedFieldIds.length + selectedViewIds.length > 0
                   ? `Selected ${selectedFieldIds.length} field${
                       selectedFieldIds.length === 1 ? "" : "s"
+                    }${
+                      selectedViewIds.length > 0
+                        ? ` and ${selectedViewIds.length} view${
+                            selectedViewIds.length === 1 ? "" : "s"
+                          }`
+                        : ""
                     }`
-                  : "No fields selected"}
+                  : "No items selected"}
               </div>
             </div>
             <div className="mt-1 text-xs text-purple-800 dark:text-purple-300">

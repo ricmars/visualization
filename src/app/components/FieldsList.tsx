@@ -56,7 +56,7 @@ const FieldsList: React.FC<FieldsListProps> = ({
                       ref={provided.innerRef}
                       {...provided.draggableProps}
                       className="flex items-center space-x-3 p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-shadow"
-                      data-field-id={field.id}
+                      data-fieldid={field.id}
                     >
                       <div
                         {...provided.dragHandleProps}

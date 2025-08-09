@@ -675,32 +675,65 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                   const resultObj: ToolResult = result as ToolResult;
                   if (toolName === "saveCase") {
                     await processor.sendText(
-                      `Workflow '${
+                      `\nWorkflow '${
                         resultObj.name || "Unknown"
                       }' saved successfully`,
                     );
                   } else if (toolName === "saveView") {
                     await processor.sendText(
-                      `Saved '${resultObj.name || "Unknown"}'`,
+                      `\nSaved '${resultObj.name || "Unknown"}'`,
                     );
                   } else if (toolName === "saveFields") {
                     const fieldCount =
                       resultObj.fields?.length || resultObj.ids?.length || 0;
-                    await processor.sendText(
-                      `Created ${fieldCount} field${
-                        fieldCount === 1 ? "" : "s"
-                      }`,
-                    );
+                    const fieldNames =
+                      (
+                        resultObj.fields as { name?: string; label?: string }[]
+                      )?.map((f) => f.name || f.label || "Unknown field") || [];
+                    if (fieldNames.length > 0) {
+                      await processor.sendText(
+                        `\nCreated ${fieldCount} field${
+                          fieldCount === 1 ? "" : "s"
+                        }: ${fieldNames.join(", ")}`,
+                      );
+                    } else {
+                      await processor.sendText(
+                        `\nCreated ${fieldCount} field${
+                          fieldCount === 1 ? "" : "s"
+                        }`,
+                      );
+                    }
+                  } else if (toolName === "deleteField") {
+                    const deletedName =
+                      (resultObj as any).deletedName || "Unknown field";
+                    const updatedViewsCount =
+                      (resultObj as any).updatedViewsCount || 0;
+                    if (updatedViewsCount > 0) {
+                      await processor.sendText(
+                        `\nDeleted field: ${deletedName} (removed from ${updatedViewsCount} view${
+                          updatedViewsCount === 1 ? "" : "s"
+                        })`,
+                      );
+                    } else {
+                      await processor.sendText(
+                        `\nDeleted field: ${deletedName}`,
+                      );
+                    }
+                  } else if (toolName === "deleteView") {
+                    const deletedName =
+                      (resultObj as any).deletedName || "Unknown view";
+                    await processor.sendText(`\nDeleted view: ${deletedName}`);
+                  } else if (toolName === "deleteCase") {
+                    await processor.sendText(`\nDeleted case successfully`);
                   } else if (
                     toolName.startsWith("get") ||
                     toolName.startsWith("list")
                   ) {
                     // Don't send any message for get/list tools - they're read-only operations
-                    // These tools are used to check current state, no user notification needed
                   } else {
-                    // For other tools, send a generic success message
+                    // For other tools, send a generic success message with separation
                     await processor.sendText(
-                      `Operation completed successfully`,
+                      `\nOperation completed successfully`,
                     );
                   }
 
@@ -899,12 +932,107 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 }
                 messages.push(completionMessage);
               } else if (!saveCaseCalled && !isNewWorkflowCreation) {
-                // For existing workflows, a successful tool execution completes the request
-                console.log(
-                  "Existing workflow - simple operation completed; stopping loop to avoid duplicates",
+                // For existing workflows, prefer completing the user's multi-step intent in one request:
+                // 1) If only read-only tools ran, continue to allow modifications.
+                // 2) If fields were just created but views weren't updated yet, instruct to update selected view(s) via saveView.
+                // 3) Otherwise, if a state-changing operation completed and there's nothing else implied, stop to avoid duplicates.
+
+                const toolNamesThisIteration = toolCalls.map(
+                  (tc) => tc.function.name || "",
                 );
-                done = true;
-                break;
+                const onlyReadOnlyToolsThisIteration =
+                  toolNamesThisIteration.every(
+                    (name) => name.startsWith("get") || name.startsWith("list"),
+                  );
+                const didSaveFieldsThisIteration =
+                  toolNamesThisIteration.includes("saveFields");
+                const hasSaveViewInHistory = toolCallHistory.some(
+                  (tc) => tc.tool === "saveView",
+                );
+
+                if (onlyReadOnlyToolsThisIteration) {
+                  console.log(
+                    "Existing workflow - read-only tools executed; continuing to allow modifications",
+                  );
+                  messages.push({
+                    role: "user" as const,
+                    content:
+                      "Proceed to apply the requested changes using saveFields and/or saveView for the selected view. Avoid duplicates and validate with list tools if needed.",
+                  });
+                } else if (
+                  didSaveFieldsThisIteration &&
+                  !hasSaveViewInHistory
+                ) {
+                  // Extract newly created field IDs from the most recent tool result(s)
+                  const newFieldIds: number[] = [];
+                  for (let i = messages.length - 1; i >= 0; i--) {
+                    const m = messages[i];
+                    if (m.role === "tool" && typeof m.content === "string") {
+                      try {
+                        const obj = JSON.parse(m.content);
+                        if (Array.isArray(obj?.ids) && obj.ids.length > 0) {
+                          for (const id of obj.ids) {
+                            if (typeof id === "number") newFieldIds.push(id);
+                          }
+                          break;
+                        }
+                      } catch {
+                        // ignore
+                      }
+                    }
+                  }
+
+                  // Extract selected viewIds from the initial user message if present
+                  let selectedViewIds: number[] = [];
+                  const initialUserMsg = messages.find(
+                    (m) => m.role === "user",
+                  );
+                  if (
+                    initialUserMsg &&
+                    typeof initialUserMsg.content === "string"
+                  ) {
+                    const match = initialUserMsg.content.match(
+                      /Selected viewIds=\s*\[(.*?)\]/,
+                    );
+                    if (match && match[1]) {
+                      const parts = match[1]
+                        .split(",")
+                        .map((s) => Number(s.trim()))
+                        .filter((n) => Number.isFinite(n));
+                      if (parts.length > 0) selectedViewIds = parts as number[];
+                    }
+                  }
+
+                  console.log(
+                    "Existing workflow - fields added; prompting to update selected view(s) with new fields",
+                    { selectedViewIds, newFieldIds },
+                  );
+
+                  const viewTargetText =
+                    selectedViewIds.length > 0
+                      ? `the selected view(s) with id(s): ${selectedViewIds.join(
+                          ", ",
+                        )}`
+                      : "the relevant selected view";
+
+                  const fieldListText =
+                    newFieldIds.length > 0
+                      ? ` The newly created fieldIds are: ${newFieldIds.join(
+                          ", ",
+                        )}.`
+                      : "";
+
+                  messages.push({
+                    role: "user" as const,
+                    content: `Now update ${viewTargetText} by appending these fields to model.fields as { fieldId } entries while preserving existing fields and layout, then call saveView with the same name and caseid. Avoid duplicates and keep order sensible.${fieldListText}`,
+                  });
+                } else {
+                  console.log(
+                    "Existing workflow - simple operation completed; stopping loop to avoid duplicates",
+                  );
+                  done = true;
+                  break;
+                }
               }
 
               // Continue loop for next tool call or final message

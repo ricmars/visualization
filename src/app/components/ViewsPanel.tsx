@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useRef, MutableRefObject } from "react";
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  MutableRefObject,
+  useEffect,
+} from "react";
 import { Stage, Field, FieldReference } from "../types";
 import AddFieldModal from "./AddFieldModal";
 import StepForm from "./StepForm";
@@ -21,7 +27,7 @@ interface ViewsPanelProps {
   onRemoveFieldFromView?: (field: Field) => void;
   onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
   onAddFieldsToStep?: (stepId: number, fieldNames: string[]) => void;
-  onFieldsReorder?: (stepId: number, fieldIds: string[]) => void;
+  onFieldsReorder?: (selectedViewId: string, fieldIds: number[]) => void;
   selectedView?: string | null;
   onViewSelect?: (view: string | null) => void;
 }
@@ -118,6 +124,11 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     return combined;
   }, [collectSteps, databaseViews]); // Added _views to dependencies
 
+  // Keep an optimistic ordering per selected view so the UI doesn't snap back while persisting
+  const [optimisticOrderByView, setOptimisticOrderByView] = useState<
+    Record<string, number[]>
+  >({});
+
   // Get the fields for the selected view
   const selectedViewFields = useMemo(() => {
     if (!selectedView) return [];
@@ -148,6 +159,18 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
               }
             },
           );
+          // Apply optimistic order if available for this view
+          const optimisticOrder = optimisticOrderByView[selectedView];
+          if (optimisticOrder && optimisticOrder.length > 0) {
+            const orderIndex = new Map(
+              optimisticOrder.map((fid, idx) => [fid, idx]),
+            );
+            return [...viewFields].sort(
+              (a, b) =>
+                (orderIndex.get(a.id ?? -1) ?? 0) -
+                (orderIndex.get(b.id ?? -1) ?? 0),
+            );
+          }
           return viewFields.sort((a, b) => (a.order || 0) - (b.order || 0));
         }
       } catch (error) {
@@ -171,8 +194,20 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
         }
       });
 
-      // Sort fields by their order from the database
-      return Array.from(uniqueFieldsMap.values()).sort((a, b) => {
+      // Apply optimistic order if available; otherwise sort by order
+      const baseFields = Array.from(uniqueFieldsMap.values());
+      const optimisticOrder = optimisticOrderByView[selectedView];
+      if (optimisticOrder && optimisticOrder.length > 0) {
+        const orderIndex = new Map(
+          optimisticOrder.map((fid, idx) => [fid, idx]),
+        );
+        return baseFields.sort(
+          (a, b) =>
+            (orderIndex.get(a.id ?? -1) ?? 0) -
+            (orderIndex.get(b.id ?? -1) ?? 0),
+        );
+      }
+      return baseFields.sort((a, b) => {
         const orderA = a.order || 0;
         const orderB = b.order || 0;
         return orderA - orderB;
@@ -180,7 +215,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     }
 
     return [];
-  }, [selectedView, collectSteps, fields, allViews]); // Added _views to dependencies
+  }, [selectedView, collectSteps, fields, allViews, optimisticOrderByView]); // include optimistic order
 
   // Get the field IDs that are already in the selected view
   const selectedViewFieldIds = useMemo(() => {
@@ -224,12 +259,14 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   }) => {
     if (editingField && onUpdateField) {
       onUpdateField({
+        id: editingField.id,
         name: editingField.name,
         label: updates.label,
         type: updates.type,
         options: updates.options,
         primary: editingField.primary,
-      });
+        required: updates.required ?? editingField.required,
+      } as Partial<Field>);
       setEditingField(null);
     }
   };
@@ -248,17 +285,36 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
   const handleFieldsReorder = (startIndex: number, endIndex: number) => {
     if (!selectedView || !onFieldsReorder) return;
 
-    // Get the current field order
-    const currentFieldIds = selectedViewFields.map((field) => field.id);
+    // Get the current field order (ensure numeric IDs)
+    const currentFieldIds = selectedViewFields
+      .map((field) => field.id)
+      .filter((id): id is number => typeof id === "number");
 
     // Reorder the fields
     const reorderedFieldIds = Array.from(currentFieldIds);
     const [removed] = reorderedFieldIds.splice(startIndex, 1);
     reorderedFieldIds.splice(endIndex, 0, removed);
 
-    // Call the parent handler with the reordered field IDs, converting selectedView to number
-    onFieldsReorder(Number(selectedView), reorderedFieldIds.map(String));
+    // Optimistically apply the new order so the item stays where dropped
+    setOptimisticOrderByView((prev) => ({
+      ...prev,
+      [selectedView]: reorderedFieldIds,
+    }));
+
+    // Call the parent handler with the selected view identifier and numeric field IDs
+    onFieldsReorder(selectedView, reorderedFieldIds);
   };
+
+  // When upstream data changes (after persistence), clear optimistic order for this view
+  useEffect(() => {
+    if (!selectedView) return;
+    setOptimisticOrderByView((prev) => {
+      if (!(selectedView in prev)) return prev;
+      const next = { ...prev };
+      delete next[selectedView];
+      return next;
+    });
+  }, [stages, _views, selectedView]);
 
   const onEditField = (field: Field) => {
     setEditingField(field);
@@ -308,6 +364,11 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
                     ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500"
                     : "hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
+                data-viewid={
+                  view.isDatabaseView && view.viewData
+                    ? view.viewData.id
+                    : undefined
+                }
               >
                 <div className="font-medium text-gray-900 dark:text-gray-100">
                   {view.name}
