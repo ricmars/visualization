@@ -81,11 +81,23 @@ export async function POST(request: NextRequest) {
       }
 
       case "deleteAll": {
-        await checkpointSessionManager.deleteAllCheckpoints();
+        const { caseid } = await request
+          .json()
+          .catch(() => ({ caseid: undefined }));
+        const caseIdNum =
+          typeof caseid === "number"
+            ? caseid
+            : caseid
+            ? parseInt(caseid)
+            : undefined;
+        await checkpointSessionManager.deleteAllCheckpoints(caseIdNum);
 
         return NextResponse.json({
           success: true,
-          message: "Successfully deleted all checkpoints",
+          message:
+            caseIdNum !== undefined
+              ? `Successfully deleted all checkpoints for case ${caseIdNum}`
+              : "Successfully deleted all checkpoints",
         });
       }
 

@@ -830,12 +830,12 @@ export default function WorkflowPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <div className="text-red-500 mb-4">{error}</div>
-        <button
-          onClick={() => router.push("/")}
+        <a
+          href="/"
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
         >
           Back to Home
-        </button>
+        </a>
       </div>
     );
   }
@@ -2649,8 +2649,8 @@ export default function WorkflowPage() {
         {/* Header row with title and preview switch */}
         <div className="flex justify-between items-center p-6 pb-3 pr-[200px]">
           <div className="flex items-center">
-            <button
-              onClick={() => router.push("/")}
+            <a
+              href="/"
               className="flex items-center text-gray-600 hover:text-gray-900 mr-4"
             >
               <svg
@@ -2667,7 +2667,7 @@ export default function WorkflowPage() {
                 />
               </svg>
               Back
-            </button>
+            </a>
             <div className="flex items-center">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {selectedCase?.name || "Loading..."}

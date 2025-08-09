@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dynamicDatabaseService } from "../../lib/dynamicDatabaseService";
+import { pool } from "../../lib/db";
+import { createSharedTools } from "../../lib/sharedTools";
 import { ruleTypeRegistry } from "../../types/ruleTypeRegistry";
 import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
 
@@ -279,6 +281,30 @@ export async function DELETE(request: Request) {
         },
         { status: 400 },
       );
+    }
+
+    // Special-case: delete a case with cascading cleanup using shared tool
+    if (ruleTypeId === "case") {
+      const tools = createSharedTools(pool);
+      const deleteCaseTool = tools.find((t) => t.name === "deleteCase");
+      if (!deleteCaseTool) {
+        return NextResponse.json(
+          { success: false, error: "deleteCase tool not available" },
+          { status: 500 },
+        );
+      }
+      try {
+        const toolResult = await deleteCaseTool.execute({ id: Number(id) });
+        return NextResponse.json(
+          { success: true, data: toolResult },
+          { status: 200 },
+        );
+      } catch (e) {
+        return NextResponse.json(
+          { success: false, error: e instanceof Error ? e.message : String(e) },
+          { status: 400 },
+        );
+      }
     }
 
     const operation = {

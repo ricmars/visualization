@@ -385,9 +385,13 @@ export class CheckpointSessionManager {
     console.log("Deleted checkpoint:", checkpointId);
   }
 
-  async deleteAllCheckpoints(): Promise<void> {
-    await checkpointManager.deleteAllCheckpoints();
-    console.log("Deleted all checkpoints");
+  async deleteAllCheckpoints(caseid?: number): Promise<void> {
+    await checkpointManager.deleteAllCheckpoints(caseid);
+    if (caseid !== undefined) {
+      console.log(`Deleted all checkpoints for case ${caseid}`);
+    } else {
+      console.log("Deleted all checkpoints");
+    }
   }
 }
 

@@ -76,7 +76,7 @@ export const CreateWorkflowModal: React.FC<CreateWorkflowModalProps> = ({
       >
         <form onSubmit={handleSubmit} className="p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-6">
-            Create New Workflow
+            Create new workflow
           </h2>
           <div className="space-y-4">
             {creationError && (

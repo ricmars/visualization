@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { CreateWorkflowModal } from "./components/CreateWorkflowModal";
+import DeleteWorkflowModal from "./components/DeleteWorkflowModal";
 import { Case } from "./types";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { FaTrash } from "react-icons/fa";
 import { fetchWithBaseUrl } from "./lib/fetchWithBaseUrl";
 import { Service } from "./services/service";
 import { databaseSystemPrompt } from "./lib/databasePrompt";
@@ -24,6 +27,11 @@ export default function Home() {
   const [isCreatingWorkflow, setIsCreatingWorkflow] = useState(false);
   const [creationProgress, setCreationProgress] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isNavigatingId, setIsNavigatingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
   const router = useRouter();
 
   const refreshCases = async () => {
@@ -195,14 +203,23 @@ export default function Home() {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to delete workflow: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to delete workflow: ${response.status} ${errorText}`,
+        );
       }
 
       setCases((prevCases) => prevCases.filter((c) => c.name !== name));
+      setDeleteTarget(null);
     } catch (error) {
       console.error("Error deleting workflow:", error);
       throw error;
     }
+  };
+
+  const handleCardClick = (id: number) => {
+    setIsNavigatingId(id);
+    router.push(`/workflow/${id}`);
   };
 
   return (
@@ -218,7 +235,7 @@ export default function Home() {
           onClick={() => setIsCreateModalOpen(true)}
           className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
         >
-          Create New Workflow
+          Create new workflow
         </button>
       </div>
       {isLoading ? (
@@ -228,24 +245,46 @@ export default function Home() {
       ) : cases.length === 0 ? (
         <div className="flex flex-col justify-center items-center h-64 text-gray-500">
           <p className="text-lg font-medium">No workflow available.</p>
-          <p>Click "Create New Workflow" to create a new one.</p>
+          <p>Click "Create new workflow" to create a new one.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {cases.map((case_) => (
-            <div
+            <Link
+              prefetch
+              href={`/workflow/${case_.id}`}
               key={case_.id}
-              className="border rounded p-4 hover:shadow-lg transition-shadow"
+              onClick={() => handleCardClick(case_.id)}
+              className="group border rounded p-4 hover:shadow-lg transition-all cursor-pointer relative block"
             >
-              <h2 className="text-xl font-semibold mb-2">{case_.name}</h2>
-              <p className="text-gray-600 mb-4">{case_.description}</p>
-              <button
-                onClick={() => router.push(`/workflow/${case_.id}`)}
-                className="text-blue-500 hover:text-blue-700"
-              >
-                Open Workflow
-              </button>
-            </div>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-xl font-semibold mb-1 group-hover:text-blue-700 transition-colors">
+                    {case_.name}
+                  </h2>
+                  <p className="text-gray-600 mb-2 line-clamp-2">
+                    {case_.description}
+                  </p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDeleteTarget({ id: case_.id, name: case_.name });
+                  }}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
+                  aria-label="Delete workflow"
+                  title="Delete workflow"
+                >
+                  <FaTrash className="w-4 h-4" />
+                </button>
+              </div>
+              {isNavigatingId === case_.id && (
+                <div className="absolute inset-0 bg-white/70 flex items-center justify-center rounded">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                </div>
+              )}
+            </Link>
           ))}
         </div>
       )}
@@ -260,6 +299,17 @@ export default function Home() {
         isCreating={isCreatingWorkflow}
         creationProgress={creationProgress}
         creationError={error}
+      />
+      <DeleteWorkflowModal
+        isOpen={!!deleteTarget}
+        caseId={deleteTarget?.id}
+        caseName={deleteTarget?.name}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={async (id) => {
+          const theCase = cases.find((c) => c.id === id);
+          if (!theCase) return;
+          await _handleDeleteWorkflow(theCase.name);
+        }}
       />
     </div>
   );
