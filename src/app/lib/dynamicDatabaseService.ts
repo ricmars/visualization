@@ -365,6 +365,57 @@ export class DynamicDatabaseService {
         id,
       });
 
+      // If deleting a Field, proactively remove references from any Views in the same case
+      if (ruleType.id === "field" && currentData?.caseid) {
+        try {
+          const viewsResult = await this.pool.query(
+            `SELECT id, name, model FROM "Views" WHERE caseid = $1`,
+            [currentData.caseid],
+          );
+          for (const view of viewsResult.rows) {
+            try {
+              const model =
+                typeof view.model === "string"
+                  ? JSON.parse(view.model)
+                  : view.model;
+              if (model && Array.isArray(model.fields)) {
+                const originalCount = model.fields.length;
+                model.fields = model.fields.filter(
+                  (f: { fieldId: number }) => f.fieldId !== id,
+                );
+                if (model.fields.length !== originalCount) {
+                  await this.pool.query(
+                    `UPDATE "Views" SET model = $1 WHERE id = $2`,
+                    [JSON.stringify(model), view.id],
+                  );
+                  // Log as part of checkpoint for traceability
+                  if (checkpointId) {
+                    await this.logOperation(
+                      checkpointId,
+                      "update",
+                      "Views",
+                      { id: view.id },
+                      { model: view.model },
+                      currentData.caseid,
+                    );
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn(
+                `Failed to process view ${view.id} while removing deleted field ${id}:`,
+                err,
+              );
+            }
+          }
+        } catch (cleanupError) {
+          console.warn(
+            `Failed cleaning view references for deleted field ${id} in case ${currentData.caseid}:`,
+            cleanupError,
+          );
+        }
+      }
+
       const result = await this.pool.query(query, [id]);
 
       if (result.rows.length > 0) {

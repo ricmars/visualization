@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DB_TABLES } from "@/app/types/database";
+import { dynamicDatabaseService } from "@/app/lib/dynamicDatabaseService";
+import { registerRuleTypes } from "@/app/types/ruleTypeDefinitions";
 
 // This route now acts as a compatibility layer that delegates to the dynamic API
 // It maintains backward compatibility with existing frontend code
+// Ensure rule types are registered when this route is first loaded
+registerRuleTypes();
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get("table");
     const id = searchParams.get("id");
-    const caseid = searchParams.get("caseid");
 
     if (!table || !Object.values(DB_TABLES).includes(table as any)) {
       return NextResponse.json(
@@ -18,38 +21,61 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Map table names to rule type IDs
     const tableToRuleType: Record<string, string> = {
       [DB_TABLES.CASES]: "case",
       [DB_TABLES.FIELDS]: "field",
       [DB_TABLES.VIEWS]: "view",
     };
 
-    const ruleType = tableToRuleType[table];
-    if (!ruleType) {
+    const ruleTypeId = tableToRuleType[table];
+    if (!ruleTypeId) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
-    // Build the dynamic API URL
-    const dynamicUrl = new URL("/api/dynamic", request.url);
-    dynamicUrl.searchParams.set("ruleType", ruleType);
-    if (id) {
-      dynamicUrl.searchParams.set("id", id);
-    }
-    if (caseid) {
-      dynamicUrl.searchParams.set("caseid", caseid);
+    // Build filters and options (mirror /api/dynamic behavior)
+    const filters: Record<string, any> = {};
+    for (const [key, value] of searchParams.entries()) {
+      if (!["table", "id"].includes(key)) {
+        const numValue = Number(value);
+        filters[key] = isNaN(numValue) ? value : numValue;
+      }
     }
 
-    // Forward the request to the dynamic API
-    const response = await fetch(dynamicUrl.toString(), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const limit = searchParams.get("limit");
+    const offset = searchParams.get("offset");
+    const orderBy = searchParams.get("orderBy");
+    const orderDirection = searchParams.get("orderDirection");
+    const options: any = {};
+    if (limit) options.limit = Number(limit);
+    if (offset) options.offset = Number(offset);
+    if (orderBy) options.orderBy = orderBy;
+    if (orderDirection) options.orderDirection = orderDirection;
 
-    const result = await response.json();
-    return NextResponse.json(result, { status: response.status });
+    const operation = {
+      operation: (id ? "read" : "list") as "read" | "list",
+      ruleTypeId,
+      id: id ? Number(id) : undefined,
+      filters: Object.keys(filters).length ? filters : undefined,
+      options: Object.keys(options).length ? options : undefined,
+    };
+
+    const result = await dynamicDatabaseService.execute(operation as any);
+
+    if (result.success) {
+      return NextResponse.json(
+        {
+          success: true,
+          data: result.data,
+          affectedRows: result.affectedRows,
+        },
+        { status: 200 },
+      );
+    }
+
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: 400 },
+    );
   } catch (error) {
     console.error("Error in database API:", error);
     return NextResponse.json(
@@ -71,43 +97,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // Map table names to rule type IDs
     const tableToRuleType: Record<string, string> = {
       [DB_TABLES.CASES]: "case",
       [DB_TABLES.FIELDS]: "field",
       [DB_TABLES.VIEWS]: "view",
     };
 
-    const ruleType = tableToRuleType[table];
-    if (!ruleType) {
+    const ruleTypeId = tableToRuleType[table];
+    if (!ruleTypeId) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
     const requestBody = await request.json();
-
-    // Build the dynamic API URL
-    const dynamicUrl = new URL("/api/dynamic", request.url);
-    dynamicUrl.searchParams.set("ruleType", ruleType);
-
-    // Transform the request body to match what the dynamic API expects
-    // Handle both formats: direct data or wrapped in data property
     const data = requestBody.data || requestBody;
-    const dynamicRequestBody = {
-      ruleType,
+
+    const result = await dynamicDatabaseService.execute({
+      operation: "create",
+      ruleTypeId,
       data,
-    };
+    } as any);
 
-    // Forward the request to the dynamic API
-    const response = await fetch(dynamicUrl.toString(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(dynamicRequestBody),
-    });
-
-    const result = await response.json();
-    return NextResponse.json(result, { status: response.status });
+    if (result.success) {
+      return NextResponse.json(
+        { success: true, data: result.data, affectedRows: result.affectedRows },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: 400 },
+    );
   } catch (error) {
     console.error("Error in database API:", error);
     return NextResponse.json(
@@ -137,45 +156,37 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Map table names to rule type IDs
     const tableToRuleType: Record<string, string> = {
       [DB_TABLES.CASES]: "case",
       [DB_TABLES.FIELDS]: "field",
       [DB_TABLES.VIEWS]: "view",
     };
 
-    const ruleType = tableToRuleType[table];
-    if (!ruleType) {
+    const ruleTypeId = tableToRuleType[table];
+    if (!ruleTypeId) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
     const requestBody = await request.json();
-
-    // Build the dynamic API URL
-    const dynamicUrl = new URL("/api/dynamic", request.url);
-    dynamicUrl.searchParams.set("ruleType", ruleType);
-    dynamicUrl.searchParams.set("id", id);
-
-    // Transform the request body to match what the dynamic API expects
-    // Handle both formats: direct data or wrapped in data property
     const data = requestBody.data || requestBody;
-    const dynamicRequestBody = {
-      ruleType,
-      id,
+
+    const result = await dynamicDatabaseService.execute({
+      operation: "update",
+      ruleTypeId,
+      id: Number(id),
       data,
-    };
+    } as any);
 
-    // Forward the request to the dynamic API
-    const response = await fetch(dynamicUrl.toString(), {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(dynamicRequestBody),
-    });
-
-    const result = await response.json();
-    return NextResponse.json(result, { status: response.status });
+    if (result.success) {
+      return NextResponse.json(
+        { success: true, data: result.data, affectedRows: result.affectedRows },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: 400 },
+    );
   } catch (error) {
     console.error("Error in database API:", error);
     return NextResponse.json(
@@ -205,33 +216,33 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Map table names to rule type IDs
     const tableToRuleType: Record<string, string> = {
       [DB_TABLES.CASES]: "case",
       [DB_TABLES.FIELDS]: "field",
       [DB_TABLES.VIEWS]: "view",
     };
 
-    const ruleType = tableToRuleType[table];
-    if (!ruleType) {
+    const ruleTypeId = tableToRuleType[table];
+    if (!ruleTypeId) {
       return NextResponse.json({ error: "Unsupported table" }, { status: 400 });
     }
 
-    // Build the dynamic API URL
-    const dynamicUrl = new URL("/api/dynamic", request.url);
-    dynamicUrl.searchParams.set("ruleType", ruleType);
-    dynamicUrl.searchParams.set("id", id);
+    const result = await dynamicDatabaseService.execute({
+      operation: "delete",
+      ruleTypeId,
+      id: Number(id),
+    } as any);
 
-    // Forward the request to the dynamic API
-    const response = await fetch(dynamicUrl.toString(), {
-      method: "DELETE",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const result = await response.json();
-    return NextResponse.json(result, { status: response.status });
+    if (result.success) {
+      return NextResponse.json(
+        { success: true, data: result.data, affectedRows: result.affectedRows },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: 400 },
+    );
   } catch (error) {
     console.error("Error in database API:", error);
     return NextResponse.json(

@@ -780,6 +780,37 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
         if (!caseid) throw new Error("Case ID is required for saveView");
         if (!model) throw new Error("View model is required for saveView");
 
+        // Validate and auto-clean referenced fieldIds for this case BEFORE writing
+        if (model && Array.isArray(model.fields) && model.fields.length > 0) {
+          const fieldIds = model.fields.map((f) => f.fieldId);
+          const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseid = $2`;
+          const fieldResult = await pool.query(fieldQuery, [fieldIds, caseid]);
+          const existingFieldIds = new Set(
+            fieldResult.rows.map((row) => row.id),
+          );
+          const missingFieldIds = fieldIds.filter(
+            (fid) => !existingFieldIds.has(fid),
+          );
+          if (missingFieldIds.length > 0) {
+            console.warn(
+              `saveView: Removing missing field references from view model for case ${caseid}: ${missingFieldIds.join(
+                ", ",
+              )}`,
+            );
+            model.fields = model.fields.filter((f) =>
+              existingFieldIds.has(f.fieldId),
+            );
+          }
+          // Validate field types are recognized
+          for (const row of fieldResult.rows) {
+            if (!fieldTypes.includes(row.type)) {
+              throw new Error(
+                `Field ID ${row.id} has invalid type: ${row.type}`,
+              );
+            }
+          }
+        }
+
         if (id) {
           // Update existing view
           const query = `
@@ -816,37 +847,6 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               ? JSON.parse(viewData.model).fields?.length || 0
               : 0,
           });
-
-          // Validate that all fieldIds in model.fields exist in the database for this caseid
-          if (model && Array.isArray(model.fields) && model.fields.length > 0) {
-            const fieldIds = model.fields.map((f) => f.fieldId);
-            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseid = $2`;
-            const fieldResult = await pool.query(fieldQuery, [
-              fieldIds,
-              caseid,
-            ]);
-            const existingFieldIds = new Set(
-              fieldResult.rows.map((row) => row.id),
-            );
-            const missingFieldIds = fieldIds.filter(
-              (id) => !existingFieldIds.has(id),
-            );
-            if (missingFieldIds.length > 0) {
-              throw new Error(
-                `The following fieldId values do not exist for this case: ${missingFieldIds.join(
-                  ", ",
-                )}`,
-              );
-            }
-            // Validate field types
-            for (const row of fieldResult.rows) {
-              if (!fieldTypes.includes(row.type)) {
-                throw new Error(
-                  `Field ID ${row.id} has invalid type: ${row.type}`,
-                );
-              }
-            }
-          }
 
           return {
             id: viewData?.id,
@@ -886,37 +886,6 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               ? JSON.parse(viewData.model).fields?.length || 0
               : 0,
           });
-
-          // Validate that all fieldIds in model.fields exist in the database for this caseid
-          if (model && Array.isArray(model.fields) && model.fields.length > 0) {
-            const fieldIds = model.fields.map((f) => f.fieldId);
-            const fieldQuery = `SELECT id, type FROM "${DB_TABLES.FIELDS}" WHERE id = ANY($1) AND caseid = $2`;
-            const fieldResult = await pool.query(fieldQuery, [
-              fieldIds,
-              caseid,
-            ]);
-            const existingFieldIds = new Set(
-              fieldResult.rows.map((row) => row.id),
-            );
-            const missingFieldIds = fieldIds.filter(
-              (id) => !existingFieldIds.has(id),
-            );
-            if (missingFieldIds.length > 0) {
-              throw new Error(
-                `The following fieldId values do not exist for this case: ${missingFieldIds.join(
-                  ", ",
-                )}`,
-              );
-            }
-            // Validate field types
-            for (const row of fieldResult.rows) {
-              if (!fieldTypes.includes(row.type)) {
-                throw new Error(
-                  `Field ID ${row.id} has invalid type: ${row.type}`,
-                );
-              }
-            }
-          }
 
           return {
             id: viewData?.id,

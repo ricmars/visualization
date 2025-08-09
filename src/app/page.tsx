@@ -23,10 +23,12 @@ export default function Home() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isCreatingWorkflow, setIsCreatingWorkflow] = useState(false);
   const [creationProgress, setCreationProgress] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   const refreshCases = async () => {
     try {
+      setIsLoading(true);
       const response = await fetchWithBaseUrl(`/api/dynamic?ruleType=case`);
       if (!response.ok) {
         throw new Error(`Failed to fetch cases: ${response.status}`);
@@ -38,6 +40,8 @@ export default function Home() {
       setError(
         error instanceof Error ? error.message : "Failed to fetch cases",
       );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -217,9 +221,14 @@ export default function Home() {
           Create New Workflow
         </button>
       </div>
-      {cases.length === 0 ? (
+      {isLoading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+      ) : cases.length === 0 ? (
+        <div className="flex flex-col justify-center items-center h-64 text-gray-500">
+          <p className="text-lg font-medium">No workflow available.</p>
+          <p>Click "Create New Workflow" to create a new one.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
