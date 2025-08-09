@@ -191,11 +191,11 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           throw new Error("Model stages must be an array");
         }
 
-        // Validate that steps don't contain fields arrays
+        // Validation: embedded fields arrays in steps are not allowed
         for (const stage of model.stages) {
           for (const process of stage.processes || []) {
             for (const step of process.steps || []) {
-              if (step.fields && Array.isArray(step.fields)) {
+              if (step && (step as any).fields) {
                 throw new Error(
                   `Step "${step.name}" contains a fields array. Fields should be stored in views, not in steps. Remove the fields array from the step.`,
                 );
@@ -217,52 +217,56 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           }
         }
 
-        // Validate viewId uniqueness
-        const viewIds = new Set<number>();
+        // Collect viewIds used by steps
+        const referencedViewIds = new Set<number>();
         for (const stage of model.stages) {
           for (const process of stage.processes || []) {
             for (const step of process.steps || []) {
-              if (step.viewId) {
-                if (viewIds.has(step.viewId)) {
-                  throw new Error(
-                    `Duplicate viewId "${step.viewId}" found in steps`,
-                  );
-                }
-                viewIds.add(step.viewId);
+              if (typeof step.viewId === "number") {
+                referencedViewIds.add(step.viewId);
               }
             }
           }
         }
 
-        // Validate that viewIds exist in database
-        if (viewIds.size > 0) {
-          const viewIdsArray = Array.from(viewIds);
-          const viewQuery = `SELECT id, name FROM "${DB_TABLES.VIEWS}" WHERE id = ANY($1)`;
-          const viewResult = await pool.query(viewQuery, [viewIdsArray]);
-          const existingViewIds = new Set(viewResult.rows.map((row) => row.id));
-          const missingViewIds = viewIdsArray.filter(
-            (id) => !existingViewIds.has(id),
+        // Load existing views for this case and error on invalid references
+        if (referencedViewIds.size > 0) {
+          const checkIds = Array.from(referencedViewIds);
+          const viewQuery = `SELECT id FROM "${DB_TABLES.VIEWS}" WHERE id = ANY($1) AND caseid = $2`;
+          const viewResult = await pool.query(viewQuery, [checkIds, id]);
+          const validViewIdsForCase = new Set<number>(
+            viewResult.rows.map((row) => row.id),
           );
 
-          if (missingViewIds.length > 0) {
+          const missing = checkIds.filter(
+            (vid) => !validViewIdsForCase.has(vid),
+          );
+          if (missing.length > 0) {
             throw new Error(
-              `The following viewId values do not exist in the database: ${missingViewIds.join(
+              `The following viewId values do not exist in the database: ${missing.join(
                 ", ",
               )}. Make sure to use the actual IDs returned from saveView calls.`,
             );
           }
-
-          // Provide guidance on view usage
-          const viewMap = new Map(
-            viewResult.rows.map((row) => [row.id, row.name]),
-          );
-          console.log(
-            "Available views for this case:",
-            Array.from(viewMap.entries()).map(
-              ([id, name]) => `ID ${id}: "${name}"`,
-            ),
-          );
         }
+
+        // Validate duplicate viewIds among steps
+        const seenViewIds = new Set<number>();
+        for (const stage of model.stages) {
+          for (const process of stage.processes || []) {
+            for (const step of process.steps || []) {
+              if (typeof step.viewId === "number") {
+                if (seenViewIds.has(step.viewId)) {
+                  throw new Error(
+                    `Duplicate viewId "${step.viewId}" found in steps`,
+                  );
+                }
+                seenViewIds.add(step.viewId);
+              }
+            }
+          }
+        }
+        const cleanedModel = model;
 
         // Update existing case
         const query = `
@@ -275,14 +279,14 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
         console.log("saveCase UPDATE query values:", [
           name,
           description,
-          JSON.stringify(model),
+          JSON.stringify(cleanedModel),
           id,
         ]);
 
         const result = await pool.query(query, [
           name,
           description,
-          JSON.stringify(model),
+          JSON.stringify(cleanedModel),
           id,
         ]);
         if (result.rowCount === 0) {
@@ -306,7 +310,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           model:
             typeof caseData.model === "string"
               ? JSON.parse(caseData.model)
-              : model ?? null,
+              : cleanedModel ?? null,
         };
       },
     },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import WorkflowDiagram from "../../components/WorkflowDiagram";
 import WorkflowLifecycleView from "../../components/WorkflowLifecycleView";
 import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
@@ -170,7 +170,6 @@ async function fetchCaseData(caseid: string): Promise<ComposedModel> {
 export default function WorkflowPage() {
   // 1. Router and params hooks
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
   // 2. All useState hooks
@@ -553,7 +552,7 @@ export default function WorkflowPage() {
     setSelectionRect(null);
     // Open quick chat if we have any ids; still allow opening with none
     setIsQuickChatOpen(true);
-  }, [selectionRect]);
+  }, [activeTab, selectedView, selectionRect]);
 
   const sendQuickChat = useCallback(async () => {
     if (!quickChatText.trim()) return;

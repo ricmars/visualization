@@ -293,12 +293,17 @@ export class DynamicDatabaseService {
         };
       }
 
-      // Create checkpoint for tracking
-      const checkpointId = await this.createCheckpoint(
-        ruleType.id,
-        "update",
-        data,
-      );
+      // Resolve the effective case id for checkpointing/logging
+      const effectiveCaseId: number | undefined =
+        ruleType.id === "case"
+          ? id
+          : (currentData?.caseid as number | undefined);
+
+      // Create checkpoint for tracking with the correct case id
+      const checkpointId = await this.createCheckpoint(ruleType.id, "update", {
+        ...data,
+        caseid: effectiveCaseId,
+      });
 
       const result = await this.pool.query(query, [id, ...values]);
 
@@ -311,7 +316,7 @@ export class DynamicDatabaseService {
             tableName,
             { id },
             currentData,
-            data.caseid,
+            effectiveCaseId,
           );
         }
 
@@ -360,9 +365,16 @@ export class DynamicDatabaseService {
         };
       }
 
-      // Create checkpoint for tracking
+      // Resolve the effective case id for checkpointing/logging
+      const effectiveCaseId: number | undefined =
+        ruleType.id === "case"
+          ? id
+          : (currentData?.caseid as number | undefined);
+
+      // Create checkpoint for tracking with the correct case id
       const checkpointId = await this.createCheckpoint(ruleType.id, "delete", {
         id,
+        caseid: effectiveCaseId,
       });
 
       // If deleting a Field, proactively remove references from any Views in the same case
@@ -427,7 +439,7 @@ export class DynamicDatabaseService {
             tableName,
             { id },
             currentData,
-            currentData.caseid,
+            effectiveCaseId,
           );
         }
 

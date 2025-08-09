@@ -106,13 +106,34 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
 
   // Combine database views and linked steps, prioritizing database views
   const allViews = useMemo(() => {
-    // Create a map of database view names to avoid duplicates
-    const databaseViewNames = new Set(databaseViews.map((v) => v.name));
-
-    // Add steps that don't have corresponding database views (should be rare)
-    const unlinkedSteps = collectSteps.filter(
-      (step) => !databaseViewNames.has(step.name),
+    // Build a set of database view IDs to dedupe by viewId rather than name
+    const databaseViewIds = new Set(
+      databaseViews
+        .map((v) => (v.viewData ? v.viewData.id : undefined))
+        .filter((id): id is number => typeof id === "number"),
     );
+
+    // Only include steps whose viewId is NOT already present as a database view
+    const unlinkedSteps = collectSteps.filter((step) => {
+      // Find the underlying model step to check viewId if available
+      // Our CollectStep doesn't carry viewId directly, so look it up from stages
+      let stepViewId: number | undefined;
+      for (const stage of stages) {
+        for (const process of stage.processes) {
+          const match = process.steps.find(
+            (s) => s.name === step.name && s.type === "Collect information",
+          );
+          if (match && typeof match.viewId === "number") {
+            stepViewId = match.viewId;
+            break;
+          }
+        }
+        if (stepViewId !== undefined) break;
+      }
+      return !(
+        typeof stepViewId === "number" && databaseViewIds.has(stepViewId)
+      );
+    });
 
     // Sort database views alphabetically, but keep workflow steps in their natural order
     const sortedDatabaseViews = databaseViews.sort((a, b) =>
@@ -122,7 +143,7 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     // Only include database views and unlinked steps
     const combined = [...sortedDatabaseViews, ...unlinkedSteps];
     return combined;
-  }, [collectSteps, databaseViews]); // Added _views to dependencies
+  }, [collectSteps, databaseViews, stages]);
 
   // Keep an optimistic ordering per selected view so the UI doesn't snap back while persisting
   const [optimisticOrderByView, setOptimisticOrderByView] = useState<
