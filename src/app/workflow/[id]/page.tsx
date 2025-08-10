@@ -222,6 +222,8 @@ export default function WorkflowPage() {
   } | null>(null);
   const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
   const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
+  const [selectedStageIds, setSelectedStageIds] = useState<number[]>([]);
+  const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [quickChatText, setQuickChatText] = useState("");
   const [quickOverlayPosition, setQuickOverlayPosition] = useState<{
@@ -423,6 +425,8 @@ export default function WorkflowPage() {
   const beginFreeFormSelection = useCallback(() => {
     setSelectedFieldIds([]);
     setSelectedViewIds([]);
+    setSelectedStageIds([]);
+    setSelectedProcessIds([]);
     setSelectionStart(null);
     setSelectionRect(null);
     setIsFreeFormSelecting(true);
@@ -467,12 +471,16 @@ export default function WorkflowPage() {
       setIsFreeFormSelecting(false);
       return;
     }
-    // Find all items marked with data-fieldid or data-viewid that intersect selectionRect
+    // Find all items marked with data-fieldid, data-viewid, data-stageid, or data-processid that intersect selectionRect
     const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-fieldid], [data-viewid]"),
+      document.querySelectorAll<HTMLElement>(
+        "[data-fieldid], [data-viewid], [data-stageid], [data-processid]",
+      ),
     );
     const pickedFieldIds = new Set<number>();
     const pickedViewIds = new Set<number>();
+    const pickedStageIds = new Set<number>();
+    const pickedProcessIds = new Set<number>();
     // Track bounding box for selected nodes
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
@@ -493,6 +501,12 @@ export default function WorkflowPage() {
         const vStr = (el as any).dataset.viewid;
         const vNum = vStr ? parseInt(vStr, 10) : NaN;
         if (!Number.isNaN(vNum)) pickedViewIds.add(vNum);
+        const sStr = (el as any).dataset.stageid;
+        const sNum = sStr ? parseInt(sStr, 10) : NaN;
+        if (!Number.isNaN(sNum)) pickedStageIds.add(sNum);
+        const pStr = (el as any).dataset.processid;
+        const pNum = pStr ? parseInt(pStr, 10) : NaN;
+        if (!Number.isNaN(pNum)) pickedProcessIds.add(pNum);
         // Expand bounding box
         minX = Math.min(minX, r.x);
         minY = Math.min(minY, r.y);
@@ -502,6 +516,8 @@ export default function WorkflowPage() {
     });
     const ids = Array.from(pickedFieldIds.values());
     const vIds = Array.from(pickedViewIds.values());
+    const stIds = Array.from(pickedStageIds.values());
+    const prIds = Array.from(pickedProcessIds.values());
     // If user is on Views tab and a view is selected, ensure it is included
     let augmentedVIds = vIds;
     if (activeTab === "views" && selectedView) {
@@ -519,11 +535,16 @@ export default function WorkflowPage() {
     }
     setSelectedFieldIds(ids);
     setSelectedViewIds(augmentedVIds);
+    setSelectedStageIds(stIds);
+    setSelectedProcessIds(prIds);
     // Compute overlay anchor position near the selection (top-right with clamping)
     let overlayX = selectionRect.x + selectionRect.width + 8;
     let overlayY = selectionRect.y - 8; // slightly above
     if (
-      (ids.length > 0 || vIds.length > 0) &&
+      (ids.length > 0 ||
+        vIds.length > 0 ||
+        stIds.length > 0 ||
+        prIds.length > 0) &&
       isFinite(minX) &&
       isFinite(minY) &&
       isFinite(maxX)
@@ -564,13 +585,38 @@ export default function WorkflowPage() {
       selectedViewIds.includes(v.id as number),
     );
     const viewNames = chosenViews.map((v) => v.name);
+    // Map selected stage and process ids to names from current workflow model
+    const chosenStages = workflowModel.stages.filter((s) =>
+      selectedStageIds.includes(s.id as number),
+    );
+    const stageNames = chosenStages.map((s) => s.name);
+    const processMap: { ids: number[]; names: string[] } = {
+      ids: [],
+      names: [],
+    };
+    for (const stage of workflowModel.stages) {
+      for (const process of stage.processes) {
+        if (selectedProcessIds.includes(process.id as number)) {
+          processMap.ids.push(process.id as number);
+          processMap.names.push(process.name);
+        }
+      }
+    }
     const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
       selectedFieldIds,
     )}\nSelected fieldNames=${JSON.stringify(
       fieldNames,
     )}\nSelected viewIds=${JSON.stringify(
       selectedViewIds,
-    )}\nSelected viewNames=${JSON.stringify(viewNames)}\n`;
+    )}\nSelected viewNames=${JSON.stringify(
+      viewNames,
+    )}\nSelected stageIds=${JSON.stringify(
+      selectedStageIds,
+    )}\nSelected stageNames=${JSON.stringify(
+      stageNames,
+    )}\nSelected processIds=${JSON.stringify(
+      processMap.ids,
+    )}\nSelected processNames=${JSON.stringify(processMap.names)}\n`;
     const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
     // Close modal immediately before sending to avoid waiting for LLM stream
     setIsQuickChatOpen(false);
@@ -1478,38 +1524,68 @@ export default function WorkflowPage() {
   ) => {
     if (!selectedCase) return;
 
-    const newStep: Step = {
-      id: Date.now(),
-      name: stepName,
-      type: stepType,
-      fields: [],
-    };
-
-    const updatedStages = workflowModel.stages.map((stage) =>
-      stage.id === stageId
-        ? {
-            ...stage,
-            processes: stage.processes.map((process) =>
-              process.id === processId
-                ? {
-                    ...process,
-                    steps: [...process.steps, newStep],
-                  }
-                : process,
-            ),
-          }
-        : stage,
-    );
-
-    const updatedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: updatedStages,
-    };
-
-    addCheckpoint(`Added step: ${stepName}`, updatedModel);
-
     try {
+      // 1) If the step collects information, create a corresponding view first
+      let createdViewId: number | undefined;
+      if (stepType === "Collect information") {
+        const createViewResponse = await fetch(
+          `/api/database?table=${DB_TABLES.VIEWS}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: stepName,
+              caseid: selectedCase.id,
+              model: {
+                fields: [],
+                layout: { type: "form", columns: 1 },
+              },
+            }),
+          },
+        );
+        if (!createViewResponse.ok) {
+          throw new Error(
+            `Failed to create view: ${createViewResponse.status}`,
+          );
+        }
+        const { data: createdView } = await createViewResponse.json();
+        createdViewId = createdView?.id;
+      }
+
+      // 2) Create the step, linking the new viewId when applicable
+      const newStep: Step = {
+        id: Date.now(),
+        name: stepName,
+        type: stepType,
+        fields: [],
+        ...(createdViewId ? { viewId: createdViewId } : {}),
+      };
+
+      const updatedStages = workflowModel.stages.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              processes: stage.processes.map((process) =>
+                process.id === processId
+                  ? {
+                      ...process,
+                      steps: [...process.steps, newStep],
+                    }
+                  : process,
+              ),
+            }
+          : stage,
+      );
+
+      const updatedModel: ComposedModel = {
+        name: selectedCase.name,
+        description: selectedCase.description,
+        stages: updatedStages,
+      };
+
+      addCheckpoint(`Added step: ${stepName}`, updatedModel);
+
+      // 3) Persist the updated case with the new step (containing viewId if created)
       const response = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
@@ -1530,6 +1606,19 @@ export default function WorkflowPage() {
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
       setModel(updatedModel);
+
+      // 4) Refresh views so the Views tab reflects the newly created view
+      try {
+        const viewsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
+        );
+        if (viewsResponse.ok) {
+          const viewsData = await viewsResponse.json();
+          setViews(viewsData.data);
+        }
+      } catch (_e) {
+        // Best-effort refresh; ignore failures here
+      }
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -2256,12 +2345,50 @@ export default function WorkflowPage() {
         viewModel.fields?.map((f: { fieldId: number }) => f.fieldId) || [],
       );
 
+      // Resolve field IDs for the provided names, using local cache first, then DB fallback
+      const resolvedFieldIds: number[] = [];
+      const unresolvedNames: string[] = [];
+      for (const fieldName of fieldNames) {
+        const localField = fields.find((f) => f.name === fieldName);
+        if (localField && typeof localField.id === "number") {
+          resolvedFieldIds.push(localField.id);
+        } else {
+          unresolvedNames.push(fieldName);
+        }
+      }
+
+      // DB fallback for unresolved names
+      if (unresolvedNames.length > 0) {
+        const lookups = await Promise.all(
+          unresolvedNames.map(async (fname) => {
+            try {
+              const resp = await fetchWithBaseUrl(
+                `/api/database?table=${DB_TABLES.FIELDS}&${
+                  DB_COLUMNS.CASE_ID
+                }=${selectedCase.id}&name=${encodeURIComponent(fname)}`,
+              );
+              if (resp.ok) {
+                const data = await resp.json();
+                const rec = Array.isArray(data.data)
+                  ? data.data.find((r: any) => r.name === fname)
+                  : data.data?.name === fname
+                  ? data.data
+                  : null;
+                return rec?.id as number | undefined;
+              }
+            } catch (_e) {
+              // ignore
+            }
+            return undefined;
+          }),
+        );
+        for (const id of lookups) {
+          if (typeof id === "number") resolvedFieldIds.push(id);
+        }
+      }
+
       // Add new fields that aren't already in the view
-      const newFields = fieldNames
-        .map((fieldName) => {
-          const field = fields.find((f) => f.name === fieldName);
-          return field ? field.id : null;
-        })
+      const newFields = resolvedFieldIds
         .filter((fieldId) => fieldId && !existingFieldIds.has(fieldId))
         .map((fieldId) => ({
           fieldId,
@@ -2833,6 +2960,8 @@ export default function WorkflowPage() {
                       onStageReorder={handleStageReorder}
                       onProcessReorder={handleProcessReorder}
                       onStepReorder={handleStepReorder}
+                      onAddFieldsToView={handleAddFieldsToView}
+                      onViewFieldsReorder={handleFieldsReorder}
                     />
                   ) : (
                     <WorkflowLifecycleView

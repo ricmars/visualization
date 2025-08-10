@@ -52,12 +52,14 @@ WORKFLOW CREATION SEQUENCE:
 4. Update the case with saveCase (use the view IDs from step 3 in the workflow model)
 
 FIELD CREATION GUIDELINES:
-- Always provide a meaningful label and type-appropriate defaultValue when reasonable.
-- For numeric fields (Integer/Decimal/Percentage/Currency), prefer defaultValue like '0'.
-- For Checkbox, prefer 'false' or 'true' as a string.
-- For Date/DateTime, use ISO strings like '2025-01-01' or '2025-01-01T00:00:00Z'.
-- For Dropdown/RadioButtons, choose one of the provided options as the defaultValue.
-- If no sensible default exists, omit defaultValue.
+- Always provide a meaningful label.
+- You MUST set defaultValue for these types:
+  - Checkbox → use 'false' (or 'true' if explicitly required)
+  - Integer/Decimal/Percentage/Currency → use '0' (string)
+  - Date/DateTime → use ISO strings like '2025-01-01' or '2025-01-01T00:00:00Z'
+  - Dropdown/RadioButtons/Status → choose one of the provided options as the defaultValue
+- For Text/TextArea/Email/URL/Phone/etc., set defaultValue only if a sensible default is explicitly requested; otherwise omit it.
+- If truly no sensible default exists, omit defaultValue.
 
 IMPORTANT: saveFields vs saveView vs saveCase:
 - Use saveFields for ANY field-level change (including defaultValue, primary, required). After these edits, STOP. Do not call saveView or saveCase unless also changing views or structure.

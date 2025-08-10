@@ -8,10 +8,10 @@ export const fieldTypeToDisplayName: Record<FieldType, string> = {
   Currency: "Currency",
   Date: "Date",
   DateTime: "Date & Time",
-  Decimal: "Decimal Number",
+  Decimal: "Decimal",
   Dropdown: "Dropdown",
   Email: "Email",
-  Integer: "Whole Number",
+  Integer: "Integer",
   Location: "Location",
   ReferenceValues: "Reference Values",
   DataReferenceSingle: "Single Data Reference",
@@ -26,7 +26,7 @@ export const fieldTypeToDisplayName: Record<FieldType, string> = {
   Text: "Single Line Text",
   TextArea: "Multi Line Text",
   Time: "Time",
-  URL: "Website URL",
+  URL: "URL",
   UserReference: "User Reference",
 };
 

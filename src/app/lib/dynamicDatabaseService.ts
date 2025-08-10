@@ -608,11 +608,24 @@ export class DynamicDatabaseService {
             typeof data[prop.name] !== "string"
           ) {
             errors.push(`${prop.name} must be a string`);
-          } else if (
-            prop.type === "ViewModel" &&
-            typeof data[prop.name] !== "object"
-          ) {
-            errors.push(`${prop.name} must be an object`);
+          } else if (prop.type === "ViewModel") {
+            const value = data[prop.name];
+            const valueType = typeof value;
+            if (valueType === "object") {
+              // ok
+            } else if (valueType === "string") {
+              // Accept JSON string that parses to an object
+              try {
+                const parsed = JSON.parse(value as string);
+                if (typeof parsed !== "object" || parsed === null) {
+                  errors.push(`${prop.name} must be an object`);
+                }
+              } catch {
+                errors.push(`${prop.name} must be an object`);
+              }
+            } else {
+              errors.push(`${prop.name} must be an object`);
+            }
           }
         }
       });

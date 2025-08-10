@@ -317,7 +317,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes, including setting defaultValue, marking a field as primary, toggling required, renaming labels, changing order, and updating options. Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes, including setting defaultValue, marking a field as primary, toggling required, renaming labels, changing order, and updating options. You MUST provide a type-appropriate defaultValue for Checkbox ('false' or 'true'), Integer/Decimal/Percentage/Currency ('0'), Date/DateTime (ISO string), and Dropdown/RadioButtons/Status (one of the options). For free-text-like fields, include defaultValue only if a sensible default is explicitly requested; otherwise omit it. Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {
@@ -365,7 +365,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 defaultValue: {
                   type: "string",
                   description:
-                    "Default value for the field (optional but recommended). Use a type-appropriate string: e.g., '0' for Integer/Decimal, 'false' for Checkbox, ISO date like '2025-01-01' for Date, and for Dropdown/RadioButtons use one of the provided options.",
+                    "Default value for the field. REQUIRED for Checkbox ('false'/'true'), Integer/Decimal/Percentage/Currency ('0'), Date/DateTime (ISO string), Dropdown/RadioButtons/Status (one option). Optional for free-text-like fields if no sensible default exists.",
                 },
               },
               required: ["name", "type", "caseid", "label"],

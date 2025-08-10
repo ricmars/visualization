@@ -982,8 +982,10 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                     }
                   }
 
-                  // Extract selected viewIds from the initial user message if present
+                  // Extract selected viewIds, stageIds, and processIds from the initial user message if present
                   let selectedViewIds: number[] = [];
+                  let selectedStageIds: number[] = [];
+                  let selectedProcessIds: number[] = [];
                   const initialUserMsg = messages.find(
                     (m) => m.role === "user",
                   );
@@ -1001,19 +1003,56 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                         .filter((n) => Number.isFinite(n));
                       if (parts.length > 0) selectedViewIds = parts as number[];
                     }
+                    const stageMatch = initialUserMsg.content.match(
+                      /Selected stageIds=\s*\[(.*?)\]/,
+                    );
+                    if (stageMatch && stageMatch[1]) {
+                      const parts = stageMatch[1]
+                        .split(",")
+                        .map((s) => Number(s.trim()))
+                        .filter((n) => Number.isFinite(n));
+                      if (parts.length > 0)
+                        selectedStageIds = parts as number[];
+                    }
+                    const processMatch = initialUserMsg.content.match(
+                      /Selected processIds=\s*\[(.*?)\]/,
+                    );
+                    if (processMatch && processMatch[1]) {
+                      const parts = processMatch[1]
+                        .split(",")
+                        .map((s) => Number(s.trim()))
+                        .filter((n) => Number.isFinite(n));
+                      if (parts.length > 0)
+                        selectedProcessIds = parts as number[];
+                    }
                   }
 
                   console.log(
-                    "Existing workflow - fields added; prompting to update selected view(s) with new fields",
-                    { selectedViewIds, newFieldIds },
+                    "Existing workflow - fields added; prompting to update selected context with new fields",
+                    {
+                      selectedViewIds,
+                      selectedStageIds,
+                      selectedProcessIds,
+                      newFieldIds,
+                    },
                   );
 
-                  const viewTargetText =
-                    selectedViewIds.length > 0
-                      ? `the selected view(s) with id(s): ${selectedViewIds.join(
-                          ", ",
-                        )}`
-                      : "the relevant selected view";
+                  let targetText = "the relevant selected context";
+                  const parts: string[] = [];
+                  if (selectedViewIds.length > 0) {
+                    parts.push(`view id(s): ${selectedViewIds.join(", ")}`);
+                  }
+                  if (selectedStageIds.length > 0) {
+                    parts.push(`stage id(s): ${selectedStageIds.join(", ")}`);
+                  }
+                  if (selectedProcessIds.length > 0) {
+                    parts.push(
+                      `process id(s): ${selectedProcessIds.join(", ")}`,
+                    );
+                  }
+                  if (parts.length > 0) {
+                    targetText = `the selected ${parts.join("; ")}`;
+                  }
 
                   const fieldListText =
                     newFieldIds.length > 0
@@ -1024,7 +1063,7 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
 
                   messages.push({
                     role: "user" as const,
-                    content: `Now update ${viewTargetText} by appending these fields to model.fields as { fieldId } entries while preserving existing fields and layout, then call saveView with the same name and caseid. Avoid duplicates and keep order sensible.${fieldListText}`,
+                    content: `Now update ${targetText} with the new fields and take appropriate actions:\n- For views: append to model.fields as { fieldId } and call saveView with the same name and caseid, preserving existing fields and layout.\n- For stages/processes: if this implies structural changes, use saveCase to update the workflow model with correct stages, processes, and steps. Avoid duplicates and keep order sensible.${fieldListText}`,
                   });
                 } else {
                   console.log(

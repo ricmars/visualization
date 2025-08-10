@@ -72,6 +72,8 @@ interface WorkflowDiagramProps {
     startIndex: number,
     endIndex: number,
   ) => void;
+  onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
+  onViewFieldsReorder?: (selectedViewId: string, fieldIds: number[]) => void;
 }
 
 interface EditItem {
@@ -103,6 +105,8 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onStageReorder,
   onProcessReorder,
   onStepReorder,
+  onAddFieldsToView,
+  onViewFieldsReorder,
 }) => {
   const [_isDragging, setIsDragging] = useState(false);
   const [_isAddProcessModalOpen, setIsAddProcessModalOpen] = useState(false);
@@ -122,6 +126,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     name: string;
     fields: FieldReference[];
     type: string;
+    viewId?: number;
   } | null>(null);
 
   const getStepIcon = (stepType: string) => {
@@ -375,6 +380,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
             name: step.name,
             fields: stepFields,
             type: step.type,
+            viewId: (step as any).viewId,
           }
         : null,
     );
@@ -423,46 +429,30 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       return "";
     }
 
-    const fieldId = await onAddField(field);
+    const createdFieldName = await onAddField(field);
 
-    const updatedStages = stages.map((stage: Stage) => {
-      if (stage.id === selectedStep.stageId) {
-        return {
-          ...stage,
-          processes: stage.processes.map((process) => {
-            if (process.id === selectedStep.processId) {
-              return {
-                ...process,
-                steps: process.steps.map((step) => {
-                  if (step.id === selectedStep.stepId) {
-                    // Find the field to get its ID
-                    const field = fields.find((f) => f.name === fieldId);
-                    const updatedFields = [
-                      ...(step.fields || []),
-                      {
-                        fieldId: field?.id || 0,
-                        required: false,
-                      } as FieldReference,
-                    ];
+    // Update the underlying view first, not the case model
+    const viewId = selectedStep.viewId;
+    if (viewId && onAddFieldsToView) {
+      onAddFieldsToView(viewId, [createdFieldName]);
+    }
 
-                    return {
-                      ...step,
-                      fields: updatedFields,
-                    };
-                  }
-                  return step;
-                }),
-              };
-            }
-            return process;
-          }),
-        };
-      }
-      return stage;
-    });
+    // Optimistically update local modal state with the latest fields prop
+    // Find the created field by name; if not present yet, fallback by label
+    const candidate =
+      fields.find((f) => f.name === createdFieldName) ||
+      fields.find((f) => f.label === field.label);
+    if (candidate && typeof candidate.id === "number") {
+      setSelectedStep({
+        ...selectedStep,
+        fields: [
+          ...(selectedStep.fields || []),
+          { fieldId: candidate.id, required: false },
+        ],
+      });
+    }
 
-    onStepsUpdate(updatedStages);
-    return fieldId;
+    return createdFieldName;
   };
 
   const handleAddExistingFieldToStep = (
@@ -471,72 +461,50 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   ): void => {
     if (!selectedStep) return;
 
-    const updatedStages = stages.map((stage) => {
-      if (stage.id === selectedStep.stageId) {
-        return {
-          ...stage,
-          processes: stage.processes.map((process) => {
-            if (process.id === selectedStep.processId) {
-              return {
-                ...process,
-                steps: process.steps.map((step) => {
-                  if (step.id === stepId) {
-                    // Get existing fields
-                    const existingFields = step.fields || [];
+    // Resolve the viewId for this step
+    const viewId = selectedStep.viewId;
+    if (!viewId) return;
 
-                    // Create a map of existing fields to preserve their properties
-                    const existingFieldsMap = new Map(
-                      existingFields.map((field) => [field.fieldId, field]),
-                    );
-
-                    // Add new fields while preserving existing ones
-                    fieldIds.forEach((fieldId) => {
-                      // Find field by ID
-                      const field = fields.find((f) => f.id === fieldId);
-                      if (
-                        field &&
-                        field.id &&
-                        !existingFieldsMap.has(field.id)
-                      ) {
-                        existingFieldsMap.set(field.id, {
-                          fieldId: field.id,
-                          required: false,
-                        } as FieldReference);
-                      }
-                    });
-
-                    // Convert map back to array - this will include both existing and new fields
-                    const updatedFields = Array.from(
-                      existingFieldsMap.values(),
-                    );
-
-                    const updatedStep = {
-                      ...step,
-                      fields: updatedFields,
-                    };
-
-                    // Update selectedStep state if this is the current step
-                    if (selectedStep && selectedStep.stepId === step.id) {
-                      setSelectedStep({
-                        ...selectedStep,
-                        fields: updatedFields,
-                      });
-                    }
-
-                    return updatedStep;
-                  }
-                  return step;
-                }),
-              };
-            }
-            return process;
-          }),
-        };
+    // Determine which of the requested fieldIds are missing from the current view
+    const view = views.find((v) => v.id === viewId);
+    let existingViewFieldIds: number[] = [];
+    if (view) {
+      try {
+        const viewModel = JSON.parse(view.model || "{}");
+        if (Array.isArray(viewModel.fields)) {
+          existingViewFieldIds = viewModel.fields
+            .map((f: { fieldId: number }) => f.fieldId)
+            .filter((id: number) => typeof id === "number");
+        }
+      } catch {
+        existingViewFieldIds = [];
       }
-      return stage;
-    });
+    }
 
-    onStepsUpdate(updatedStages);
+    const missingFieldIds = fieldIds.filter(
+      (fid) => !existingViewFieldIds.includes(fid),
+    );
+
+    // 1) Add any missing fields to the view by name
+    if (missingFieldIds.length > 0 && onAddFieldsToView) {
+      const missingFieldNames = missingFieldIds
+        .map((id) => fields.find((f) => f.id === id)?.name)
+        .filter((n): n is string => !!n);
+      if (missingFieldNames.length > 0) {
+        onAddFieldsToView(viewId, missingFieldNames);
+      }
+    }
+
+    // 2) Reorder the view fields to match the provided order
+    if (onViewFieldsReorder) {
+      onViewFieldsReorder(`db-${viewId}`, fieldIds);
+    }
+
+    // Optimistically update local modal state
+    setSelectedStep({
+      ...selectedStep,
+      fields: fieldIds.map((id) => ({ fieldId: id, required: false })),
+    });
   };
 
   // Type guard to check if a field is a Field type
@@ -583,6 +551,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                               : ""
                           }
                         `}
+                        data-stageid={stage.id}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -660,6 +629,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                               ? "shadow-lg ring-2 ring-blue-500/50"
                                               : ""
                                           }`}
+                                          data-processid={process.id}
                                         >
                                           <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
