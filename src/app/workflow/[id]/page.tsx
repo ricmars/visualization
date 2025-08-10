@@ -1642,6 +1642,19 @@ export default function WorkflowPage() {
   ) => {
     if (!selectedCase) return;
 
+    // Find the step being deleted to cascade delete its associated view (if any)
+    let viewIdToDelete: number | undefined;
+    try {
+      const stage = workflowModel.stages.find((s) => s.id === stageId);
+      const process = stage?.processes.find((p) => p.id === processId);
+      const step = process?.steps.find((st) => st.id === stepId);
+      if (step && typeof (step as any).viewId === "number") {
+        viewIdToDelete = (step as any).viewId as number;
+      }
+    } catch (_e) {
+      // Best-effort discovery; proceed regardless
+    }
+
     const updatedStages = workflowModel.stages.map((stage) =>
       stage.id === stageId
         ? {
@@ -1667,6 +1680,24 @@ export default function WorkflowPage() {
     addCheckpoint("Deleted step", updatedModel);
 
     try {
+      // If the step had a linked view, delete it from the database first
+      if (typeof viewIdToDelete === "number") {
+        try {
+          const deleteResp = await fetch(
+            `/api/database?table=${DB_TABLES.VIEWS}&id=${viewIdToDelete}`,
+            { method: "DELETE" },
+          );
+          if (!deleteResp.ok) {
+            const errText = await deleteResp.text();
+            console.warn(
+              `Failed to delete linked view ${viewIdToDelete}: ${deleteResp.status} ${errText}`,
+            );
+          }
+        } catch (e) {
+          console.warn("Error deleting linked view for step:", e);
+        }
+      }
+
       const response = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
@@ -1688,6 +1719,19 @@ export default function WorkflowPage() {
       setSelectedCase(updatedCase);
       setModel(updatedModel);
 
+      // Refresh views to reflect any deleted linked views
+      try {
+        const viewsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+        );
+        if (viewsResponse.ok) {
+          const viewsData = await viewsResponse.json();
+          setViews(viewsData.data);
+        }
+      } catch (_e) {
+        // ignore
+      }
+
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
@@ -1698,6 +1742,20 @@ export default function WorkflowPage() {
 
   const handleDeleteProcess = async (stageId: number, processId: number) => {
     if (!selectedCase) return;
+
+    // Gather all view IDs linked to steps within this process for cascade deletion
+    let viewIdsToDelete: number[] = [];
+    try {
+      const stage = workflowModel.stages.find((s) => s.id === stageId);
+      const process = stage?.processes.find((p) => p.id === processId);
+      if (process) {
+        viewIdsToDelete = (process.steps || [])
+          .map((st) => (st as any).viewId as number | undefined)
+          .filter((vid): vid is number => typeof vid === "number");
+      }
+    } catch (_e) {
+      // Best-effort
+    }
 
     const updatedStages = workflowModel.stages.map((stage) =>
       stage.id === stageId
@@ -1719,6 +1777,21 @@ export default function WorkflowPage() {
     addCheckpoint("Deleted process", updatedModel);
 
     try {
+      // Best-effort delete of any linked views in parallel
+      if (viewIdsToDelete.length > 0) {
+        try {
+          await Promise.allSettled(
+            viewIdsToDelete.map((vid) =>
+              fetch(`/api/database?table=${DB_TABLES.VIEWS}&id=${vid}`, {
+                method: "DELETE",
+              }),
+            ),
+          );
+        } catch (_e) {
+          // ignore
+        }
+      }
+
       const response = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
@@ -1740,6 +1813,17 @@ export default function WorkflowPage() {
       setSelectedCase(updatedCase);
       setModel(updatedModel);
 
+      // Refresh views after cascade deletions
+      try {
+        const viewsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+        );
+        if (viewsResponse.ok) {
+          const viewsData = await viewsResponse.json();
+          setViews(viewsData.data);
+        }
+      } catch (_e) {}
+
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
     } catch (error) {
@@ -1750,6 +1834,22 @@ export default function WorkflowPage() {
 
   const handleDeleteStage = async (stageId: number) => {
     if (!selectedCase) return;
+
+    // Gather all view IDs from all steps within this stage for cascade deletion
+    let viewIdsToDelete: number[] = [];
+    try {
+      const stage = workflowModel.stages.find((s) => s.id === stageId);
+      if (stage) {
+        for (const proc of stage.processes || []) {
+          const ids = (proc.steps || [])
+            .map((st) => (st as any).viewId as number | undefined)
+            .filter((vid): vid is number => typeof vid === "number");
+          viewIdsToDelete.push(...ids);
+        }
+      }
+    } catch (_e) {
+      // ignore
+    }
 
     const updatedStages = workflowModel.stages.filter(
       (stage) => stage.id !== stageId,
@@ -1764,6 +1864,19 @@ export default function WorkflowPage() {
     addCheckpoint("Deleted stage", updatedModel);
 
     try {
+      // Best-effort delete of any linked views in parallel
+      if (viewIdsToDelete.length > 0) {
+        try {
+          await Promise.allSettled(
+            viewIdsToDelete.map((vid) =>
+              fetch(`/api/database?table=${DB_TABLES.VIEWS}&id=${vid}`, {
+                method: "DELETE",
+              }),
+            ),
+          );
+        } catch (_e) {}
+      }
+
       const response = await fetch(
         `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
         {
@@ -1784,6 +1897,17 @@ export default function WorkflowPage() {
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
       setModel(updatedModel);
+
+      // Refresh views after cascade deletions
+      try {
+        const viewsResponse = await fetchWithBaseUrl(
+          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
+        );
+        if (viewsResponse.ok) {
+          const viewsData = await viewsResponse.json();
+          setViews(viewsData.data);
+        }
+      } catch (_e) {}
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
