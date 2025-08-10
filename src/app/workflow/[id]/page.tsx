@@ -1036,7 +1036,14 @@ export default function WorkflowPage() {
         throw new Error("Failed to add field");
       }
 
-      // Refresh the fields state
+      // Optimistically insert the created field into local state so UI updates immediately
+      const createResult = await response.json();
+      const createdField = createResult?.data;
+      if (createdField) {
+        setFields((prev) => [...prev, createdField]);
+      }
+
+      // Refresh the fields state from server to ensure consistency
       const fieldsResponse = await fetchWithBaseUrl(
         `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
       );
@@ -2430,9 +2437,18 @@ export default function WorkflowPage() {
 
       const { data: updatedView } = await response.json();
 
+      // Normalize model shape to always be a string for downstream JSON.parse usage
+      const normalizedUpdatedView = {
+        ...updatedView,
+        model:
+          typeof updatedView.model === "string"
+            ? updatedView.model
+            : JSON.stringify(updatedView.model ?? {}),
+      };
+
       // Update the local views state
       setViews((prevViews) =>
-        prevViews.map((v) => (v.id === viewId ? updatedView : v)),
+        prevViews.map((v) => (v.id === viewId ? normalizedUpdatedView : v)),
       );
 
       addCheckpoint(`Updated database view: ${view.name}`, workflowModel);

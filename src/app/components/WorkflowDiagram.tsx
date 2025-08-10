@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   DragDropContext,
   Droppable,
@@ -128,6 +128,50 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     type: string;
     viewId?: number;
   } | null>(null);
+
+  // Keep the selected step's fields in sync with the underlying view model and fields list
+  useEffect(() => {
+    if (!isConfigModalOpen || !selectedStep || !selectedStep.viewId) return;
+
+    const view = views.find((v) => v.id === selectedStep.viewId);
+    if (!view) return;
+
+    let parsedFields: Array<{ fieldId: number; required: boolean }> = [];
+    try {
+      const viewModel = JSON.parse(view.model || "{}");
+      if (Array.isArray(viewModel.fields)) {
+        parsedFields = viewModel.fields
+          .map((f: { fieldId: number; required?: boolean }) => ({
+            fieldId: Number(f.fieldId),
+            required: !!f.required,
+          }))
+          .filter(
+            (f: { fieldId: number; required: boolean }) =>
+              typeof f.fieldId === "number" && !isNaN(f.fieldId),
+          );
+      }
+    } catch {
+      // ignore
+    }
+
+    // If nothing changed, skip updating to avoid loops
+    const currentIds = (selectedStep.fields || []).map(
+      (f: FieldReference) => f.fieldId,
+    );
+    const nextIds = parsedFields.map((f) => f.fieldId);
+    const sameLength = currentIds.length === nextIds.length;
+    const sameOrder =
+      sameLength && currentIds.every((id, i) => id === nextIds[i]);
+    if (sameOrder) return;
+
+    setSelectedStep({
+      ...selectedStep,
+      fields: parsedFields.map((f) => ({
+        fieldId: f.fieldId,
+        required: f.required,
+      })),
+    });
+  }, [isConfigModalOpen, selectedStep, views, fields]);
 
   const getStepIcon = (stepType: string) => {
     // Map step types to appropriate icons
