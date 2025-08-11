@@ -2103,6 +2103,8 @@ export default function WorkflowPage() {
                     if (
                       lowerText.includes("created") ||
                       lowerText.includes("saved") ||
+                      lowerText.includes("deleted") ||
+                      lowerText.includes("removed") ||
                       lowerText.includes("operation completed successfully") ||
                       (lowerText.includes("workflow") &&
                         lowerText.includes("saved successfully"))
@@ -2138,6 +2140,11 @@ export default function WorkflowPage() {
                   // Refresh the workflow data if tools were executed
                   if (shouldReloadWorkflow) {
                     await refreshWorkflowData();
+                    // Clear selection caches that can cause stale UI
+                    setSelectedView(null);
+                    setActiveStage(undefined);
+                    setActiveProcess(undefined);
+                    setActiveStep(undefined);
                   }
                   break;
                 }

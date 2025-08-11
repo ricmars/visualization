@@ -218,6 +218,7 @@ ${contextLine}`;
         ];
         let loopCount = 0;
         let done = false;
+        let nudgedToUseTools = false;
         let toolCallHistory: Array<{
           tool: string;
           timestamp: number;
@@ -323,9 +324,9 @@ ${contextLine}`;
           );
         }
 
-        while (!done && loopCount < 15) {
+        while (!done && loopCount < 30) {
           // Force completion if we're at max iterations
-          if (loopCount >= 15) {
+          if (loopCount >= 30) {
             console.log("Reached maximum iterations, forcing completion");
             done = true;
             break;
@@ -390,6 +391,8 @@ ${contextLine}`;
             let finishReason = "";
             const streamingStartTime = Date.now();
             let accumulatedStreamText = "";
+            // Track whether we've already sent any streamed text to the client
+            let didStreamContent = false;
 
             try {
               for await (const chunk of completion) {
@@ -408,6 +411,7 @@ ${contextLine}`;
                     accumulatedStreamText.length > 120
                   ) {
                     await processor.sendText(accumulatedStreamText);
+                    didStreamContent = true;
                     accumulatedStreamText = "";
                   }
                 }
@@ -456,6 +460,7 @@ ${contextLine}`;
             // Flush any remaining brief reasoning text
             if (accumulatedStreamText.trim()) {
               await processor.sendText(accumulatedStreamText);
+              didStreamContent = true;
             }
 
             const streamingDuration = Date.now() - streamingStartTime;
@@ -471,11 +476,22 @@ ${contextLine}`;
               console.log(
                 `Model finished without tool calls (reason: ${finishReason})`,
               );
-              if (fullContent) {
-                await processor.sendText(fullContent);
+              if (!nudgedToUseTools) {
+                messages.push({
+                  role: "user" as const,
+                  content:
+                    "Continue using the available tools to complete the requested changes. Avoid summaries; call tools directly.",
+                });
+                nudgedToUseTools = true;
+                continue;
+              } else {
+                // Only send the full content if we haven't already streamed it
+                if (fullContent && !didStreamContent) {
+                  await processor.sendText(fullContent);
+                }
+                done = true;
+                break;
               }
-              done = true;
-              break;
             }
 
             // If the model wants to call a function
@@ -522,6 +538,8 @@ ${contextLine}`;
                   if (!tool) throw new Error(`Tool ${toolName} not found`);
 
                   console.log(`Executing tool ${toolName}...`);
+                  // Stream a status update to the client immediately when execution starts
+                  await processor.sendText(`\nExecuting ${toolName}...`);
                   const toolExecutionStartTime = Date.now();
                   const result = await tool.execute(toolArgs);
                   const toolExecutionDuration =
@@ -708,7 +726,7 @@ ${contextLine}`;
             }
 
             // If the model returns a final message (no tool call), send it now
-            if (fullContent) {
+            if (fullContent && !didStreamContent) {
               console.log(
                 "Final message received:",
                 fullContent.substring(0, 200) + "...",
