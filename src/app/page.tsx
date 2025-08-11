@@ -9,7 +9,7 @@ import Link from "next/link";
 import { FaTrash } from "react-icons/fa";
 import { fetchWithBaseUrl } from "./lib/fetchWithBaseUrl";
 import { Service } from "./services/service";
-import { databaseSystemPrompt } from "./lib/databasePrompt";
+import { buildDatabaseSystemPrompt } from "./lib/databasePrompt";
 import { registerRuleTypes } from "./types/ruleTypeDefinitions";
 
 // Initialize rule types on module load
@@ -69,7 +69,7 @@ export default function Home() {
       // Use the AI service to create the workflow
       const response = await Service.generateResponse(
         `Create a new workflow with name "${name}" and description "${description}".`,
-        databaseSystemPrompt,
+        buildDatabaseSystemPrompt(),
       );
 
       if (!response.ok) {

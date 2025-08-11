@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { databaseSystemPrompt } from "../../lib/databasePrompt";
+import { buildDatabaseSystemPrompt } from "../../lib/databasePrompt";
 import { pool } from "../../lib/db";
 
 import {
@@ -244,10 +244,8 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
 
     // Filter out createCase if working on an existing workflow
     let filteredTools = databaseTools;
-    let workflowContextInstruction = "";
     if (currentCaseId) {
       filteredTools = databaseTools.filter((t) => t.name !== "createCase");
-      workflowContextInstruction = `\nYou are working on workflow case ID: ${currentCaseId}.\nUse this ID for all tool calls.\nFor field-only changes (defaultValue, primary, required), use saveFields only and then stop.\nDo not mention that you are avoiding saveView/saveCase; simply perform the correct action.`;
     }
 
     // Rely on tool descriptions and system guidance (no heuristic gating)
@@ -256,32 +254,15 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     console.log("Creating OpenAI client...");
     const openai = await createOpenAIClient();
 
-    // Build enhanced system prompt
-    const enhancedSystemPrompt = `${databaseSystemPrompt}
+    // Build enhanced system prompt (compact)
+    const systemCore = buildDatabaseSystemPrompt();
+    const contextLine = `Context: caseId=${currentCaseId ?? "NEW"}; mode=${
+      currentCaseId ? "EXISTING" : "NEW"
+    }`;
+    const enhancedSystemPrompt = `${systemCore}
 
-${getToolsContext(filteredTools)}${workflowContextInstruction}
-
-Current case ID: ${currentCaseId || "NEW"}
-
-CRITICAL WORKFLOW COMPLETION RULES:
-1. For NEW workflows: Create case → Create fields → Create views → Call saveCase with complete model
-2. For EXISTING workflows: Use specific tools for simple operations (deleteField, saveFields, saveView) - DO NOT call saveCase unless making structural changes
-3. saveCase should ONLY be called for:
-   - Creating new workflows from scratch
-   - Making structural changes (adding/removing stages, processes, or steps)
-   - Finalizing new workflow creation
-4. For simple operations on existing workflows (delete field, add field, update view), use the specific tools and STOP - do not call saveCase
-5. After creating fields, you MUST create MULTIPLE views before calling saveCase (for new workflows only)
-6. Each workflow step needs its own view - create separate views for different data collection steps
-7. The saveCase call must include stages, processes, and steps with UNIQUE viewId references
-8. Create COMPREHENSIVE workflows with multiple fields and views - don't create minimal workflows
-9. Think about all the data that needs to be collected and managed in the workflow
-10. DO NOT reuse the same viewId for multiple steps - each step needs its own view
-11. IMPORTANT: Use the exact viewIds and fieldIds returned from previous tool calls - do not make up IDs
-
-VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, Decimal, Dropdown, Email, Integer, Location, ReferenceValues, DataReferenceSingle, DataReferenceMulti, CaseReferenceSingle, CaseReferenceMulti, Percentage, Phone, RadioButtons, RichText, Status, Text, TextArea, Time, URL, UserReference
-- Use "Integer" for whole numbers, "Decimal" for numbers with decimals
-- Use "Text" for single line text, "TextArea" for multi-line text`;
+${getToolsContext(filteredTools)}
+${contextLine}`;
 
     console.log("Building enhanced system prompt...");
     console.log("Enhanced system prompt length:", enhancedSystemPrompt.length);
@@ -652,6 +633,61 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 });
 
                 try {
+                  // Destructive tool guard: block delete operations unless user's prompt explicitly asks for deletion
+                  const destructiveTools = new Set([
+                    "deleteField",
+                    "deleteView",
+                    "deleteCase",
+                  ]);
+                  const userIntentText = (prompt || "").toLowerCase();
+                  const deletionKeywords = [
+                    // English
+                    "delete",
+                    "remove",
+                    "drop",
+                    "eliminate",
+                    "erase",
+                    "purge",
+                    "clear",
+                    // French
+                    "supprimer",
+                    "supprime",
+                    "retirer",
+                    // Spanish/Portuguese
+                    "borrar",
+                    "eliminar",
+                    "remover",
+                    // German
+                    "löschen",
+                    "entfernen",
+                    // Italian
+                    "eliminare",
+                    "rimuovere",
+                    // Japanese
+                    "削除",
+                    // Russian
+                    "удалить",
+                    "удаление",
+                  ];
+                  const isExplicitDeleteRequested = deletionKeywords.some(
+                    (kw) => userIntentText.includes(kw),
+                  );
+                  if (
+                    destructiveTools.has(toolName) &&
+                    !isExplicitDeleteRequested
+                  ) {
+                    const errorStr = `Deletion blocked: no explicit delete/remove instruction in the user's request. Perform non-destructive edits instead (e.g., saveFields for label changes or saveView for layout).`;
+                    await processor.sendText(`\n${errorStr}`);
+                    messages.push({
+                      role: "tool",
+                      content: JSON.stringify({ error: errorStr }),
+                      tool_call_id: toolCall.id,
+                    });
+                    // Log context size (no trimming)
+                    trimMessages();
+                    return { success: false, error: errorStr } as any;
+                  }
+
                   const tool = filteredTools.find((t) => t.name === toolName);
                   if (!tool) throw new Error(`Tool ${toolName} not found`);
 

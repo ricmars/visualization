@@ -1,46 +1,28 @@
 import {
-  databaseSystemPrompt,
+  buildDatabaseSystemPrompt,
   getCompleteToolsContext,
 } from "../databasePrompt";
 
 describe("Database Prompt", () => {
-  describe("databaseSystemPrompt", () => {
+  describe("buildDatabaseSystemPrompt", () => {
     // Removed the test for prompt length as requested
 
     it("should mention that tools are self-documenting", () => {
-      expect(databaseSystemPrompt).toContain("self-documenting");
+      const prompt = buildDatabaseSystemPrompt();
+      expect(prompt).toContain("self-documenting");
     });
 
     it("should mention tool descriptions contain information", () => {
-      expect(databaseSystemPrompt).toContain("tool description");
+      const prompt = buildDatabaseSystemPrompt();
+      expect(prompt).toContain("tool");
     });
 
-    it("should mention step sequence", () => {
-      expect(databaseSystemPrompt).toContain("sequence");
-    });
-
-    it("should mention critical rules", () => {
-      expect(databaseSystemPrompt).toContain("critical rules");
-    });
-
-    it("should include enhanced view creation guidelines", () => {
-      expect(databaseSystemPrompt).toContain(
-        "CRITICAL VIEW CREATION GUIDELINES",
-      );
-      expect(databaseSystemPrompt).toContain(
-        "View names should match or closely relate to the step names they will be used for",
-      );
-      expect(databaseSystemPrompt).toContain(
-        "Always save the returned view ID and use it in the corresponding step's viewId field",
-      );
-    });
-
-    it("should include workflow creation sequence", () => {
-      expect(databaseSystemPrompt).toContain("WORKFLOW CREATION SEQUENCE");
-      expect(databaseSystemPrompt).toContain("Create the case with createCase");
-      expect(databaseSystemPrompt).toContain("Create fields with saveField");
-      expect(databaseSystemPrompt).toContain("Create views with saveView");
-      expect(databaseSystemPrompt).toContain("Update the case with saveCase");
+    it("should include view guidance and constraints concisely", () => {
+      const prompt = buildDatabaseSystemPrompt();
+      expect(prompt).toContain("One view per workflow step");
+      expect(prompt).toContain("unique viewId");
+      expect(prompt).toContain("IDs as integers");
+      expect(prompt).toContain("defaultValue (exact case)");
     });
   });
 
