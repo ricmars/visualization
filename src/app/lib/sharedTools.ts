@@ -266,7 +266,51 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             }
           }
         }
-        const cleanedModel = model;
+        // Auto-assign missing IDs for new stages/processes/steps to reduce friction for the model
+        // This allocator only assigns IDs where they are missing or non-integer. It never changes existing numeric IDs.
+        const cleanedModel = { ...model } as typeof model;
+        try {
+          // Determine max IDs present to ensure uniqueness within the case model
+          let maxStageId = 0;
+          let maxProcessId = 0;
+          let maxStepId = 0;
+          for (const stage of cleanedModel.stages) {
+            if (typeof (stage as any).id === "number") {
+              maxStageId = Math.max(maxStageId, (stage as any).id);
+            }
+            for (const process of stage.processes || []) {
+              if (typeof (process as any).id === "number") {
+                maxProcessId = Math.max(maxProcessId, (process as any).id);
+              }
+              for (const step of process.steps || []) {
+                if (typeof (step as any).id === "number") {
+                  maxStepId = Math.max(maxStepId, (step as any).id);
+                }
+              }
+            }
+          }
+
+          for (const stage of cleanedModel.stages) {
+            if (typeof (stage as any).id !== "number") {
+              (stage as any).id = ++maxStageId;
+            }
+            for (const process of stage.processes || []) {
+              if (typeof (process as any).id !== "number") {
+                (process as any).id = ++maxProcessId;
+              }
+              for (const step of process.steps || []) {
+                if (typeof (step as any).id !== "number") {
+                  (step as any).id = ++maxStepId;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn(
+            "saveCase: ID auto-assignment failed; proceeding with provided model.",
+            e,
+          );
+        }
 
         // Update existing case
         const query = `

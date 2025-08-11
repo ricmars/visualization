@@ -714,6 +714,45 @@ ${contextLine}`;
               // Wait for all tool calls to complete
               await Promise.all(toolCallPromises);
 
+              // Generic post-condition verification loop:
+              // After any mutating tool call (saveCase/saveView/saveFields/delete*), ask the model to self-verify against the user goal.
+              // We provide only the latest tool results + last user prompt, and instruct the model to either:
+              // - call additional tools to satisfy unmet constraints, or
+              // - return a terse confirmation that constraints are satisfied.
+              // This keeps it generic for any request without hardcoding rules.
+              const mutatingTools = [
+                "saveCase",
+                "saveView",
+                "saveFields",
+                "deleteField",
+                "deleteView",
+                "deleteCase",
+              ];
+              const anyMutations = toolCalls.some((tc) =>
+                mutatingTools.includes(tc.function.name || ""),
+              );
+
+              if (anyMutations) {
+                // Summarize last tool results for context
+                const lastToolResults = messages
+                  .filter((m) => m.role === "tool")
+                  .slice(-Math.max(1, toolCalls.length))
+                  .map((m) => (typeof m.content === "string" ? m.content : ""))
+                  .join("\n");
+
+                messages.push({
+                  role: "system",
+                  content:
+                    "Post-condition check: Verify the user's goal is truly satisfied based on the latest state. If anything is missing or inconsistent, call the appropriate tools to fix it. If everything is correct, reply concisely with 'All constraints satisfied.' Avoid summaries.",
+                });
+                messages.push({ role: "user", content: enhancedPrompt });
+                messages.push({
+                  role: "user",
+                  content: `Latest tool results JSON: ${lastToolResults}`,
+                });
+                // Loop continues; next iteration will either call more tools or end with a short confirmation
+              }
+
               const loopDuration = Date.now() - loopStartTime;
               console.log(
                 `=== Loop iteration ${loopCount} completed in ${loopDuration}ms (${Math.round(

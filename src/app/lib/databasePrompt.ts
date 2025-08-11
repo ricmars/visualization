@@ -38,9 +38,12 @@ Field defaults (minimal):
 - Otherwise omit defaultValue.
 
 Constraints:
-- Use IDs exactly as returned; never invent; treat IDs as integers.
+- IDs:
+  - For existing entities (case, fields, views, existing stages/processes/steps): use IDs exactly as returned; never change them.
+  - When creating new stages, processes, or steps in saveCase: you MAY assign new integer IDs that are unique within the current case model if not provided by tools. Do NOT invent IDs for views or fields; use IDs returned from saveView/saveFields.
+  - IDs as integers.
 - Use defaultValue (exact case), never defaultvalue.
-  - Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
+- Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
 
 Tools are self-documenting. Follow each tool’s description and parameters.`;
 }
