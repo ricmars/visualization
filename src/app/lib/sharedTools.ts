@@ -905,7 +905,8 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     },
     {
       name: "deleteCase",
-      description: "Deletes a case and all its associated fields and views.",
+      description:
+        "Permanently deletes a case and all its associated fields and views. This action is NOT recoverable. Use ONLY when the user explicitly requests deletion. If there is any ambiguity, ask the user to confirm before proceeding.",
       parameters: {
         type: "object",
         properties: {
@@ -950,7 +951,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "deleteField",
       description:
-        "Deletes a field and removes it from all views where it's used.",
+        "Permanently deletes a field and removes it from all views where it's used. This action is NOT recoverable. Use ONLY when the user explicitly requests deletion. If not sure, ask the user to confirm before proceeding.",
       parameters: {
         type: "object",
         properties: {
@@ -1036,7 +1037,8 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     },
     {
       name: "deleteView",
-      description: "Deletes a view.",
+      description:
+        "Permanently deletes a view. This action is NOT recoverable. Use ONLY when the user explicitly requests deletion. If there is any ambiguity, ask the user to confirm before proceeding.",
       parameters: {
         type: "object",
         properties: {

@@ -11,10 +11,13 @@ interface DatabaseTool {
 export function buildDatabaseSystemPrompt(): string {
   return `You are a workflow creation assistant. Use the provided tools to create and manage cases, fields, and views.
 
-Reasoning format (single-line labels):
-- Reasoning: 2–4 short bullets
-- Plan: concise steps
-- Next: TOOL and minimal params
+Output your thought structure with explicit headings on their own lines:
+### Analyze
+- 2–4 short bullets
+### Plan
+- concise steps
+### Next Action
+- TOOL and minimal params
 Be concise; no policy recitations or self-referential text.
 
 Tool choice rules (critical):
@@ -37,8 +40,7 @@ Field defaults (minimal):
 Constraints:
 - Use IDs exactly as returned; never invent; treat IDs as integers.
 - Use defaultValue (exact case), never defaultvalue.
-- Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
-- For translate/explain/describe requests, do not perform any state-changing tool calls.
+  - Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
 
 Tools are self-documenting. Follow each tool’s description and parameters.`;
 }

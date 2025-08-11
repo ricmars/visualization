@@ -66,15 +66,15 @@ interface ChatInterfaceProps {
 // Function to format content based on its type
 function normalizeMarkdown(original: string): string {
   let content = original;
-  // Normalize section headings like *Reasoning, *Plan, *Next Action to markdown headings
+  // Normalize headings and colon/bullet variants in one pass
+  // Matches line starts like: "Analyze", "Reasoning", "Plan", "Next Action"
+  // with optional leading bullet and optional trailing colon
   content = content.replace(
-    /(^|\n)\*?\s*Reasoning\s*(\n|$)/gi,
-    "$1\n### Reasoning\n",
-  );
-  content = content.replace(/(^|\n)\*?\s*Plan\s*(\n|$)/gi, "$1\n### Plan\n");
-  content = content.replace(
-    /(^|\n)\*?\s*Next Action\s*(\n|$)/gi,
-    "$1\n### Next Action\n",
+    /(^|\n)\s*(?:[-*]\s*)?(Analyze|Reasoning|Plan|Next Action)\s*(?::\s*|(?=\n|$))/gi,
+    (matched, start, label) => {
+      const hasColon = /:\s*$/.test(matched);
+      return `${start}\n### ${label}\n\n${hasColon ? "- " : ""}`;
+    },
   );
   // Ensure headings like "...text### Heading" start on a new block line
   content = content.replace(/([^\n])\s*(#{1,6})\s+/g, (match, prev, hashes) => {

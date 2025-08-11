@@ -743,3 +743,24 @@ const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1", {
 - [ ] **All required fields are included in rule type definitions**
 - [ ] **TypeScript interface matches database schema naming**
 - [ ] **Validation schema covers all required validations**
+
+## LLM Tool Usage Rules (Authoritative)
+
+- Tool-first policy: Tool descriptions are the source of truth for behavior. Assume clients may only see the tool descriptions (e.g., MCP); do not rely on hidden system prompts.
+- Language-agnostic: Do not depend on English keywords or heuristics to infer intent. Users may speak any language.
+- Destructive actions (deleteCase, deleteField, deleteView):
+  - Permanent and not recoverable.
+  - Only call when the user is explicit about deletion. If ambiguous, ask the user to confirm first (use the user’s language).
+- Workflow operations:
+  - New workflow: createCase → saveFields → saveView → saveCase to persist the structural model.
+  - Existing workflow: use saveFields for field-only edits; use saveView for view composition/layout; use saveCase only for structural changes (stages/processes/steps).
+- Conventions:
+  - IDs must be integers (never strings).
+  - Use `defaultValue` casing consistently; do not accept `defaultvalue`.
+- What to avoid:
+  - No language-specific keyword gates (e.g., searching for “delete” tokens).
+  - No grafting of additional instructions into the user prompt; keep guidance in system and tool descriptions.
+
+### Destructive Action Confirmation Template
+
+If deletion intent is ambiguous, ask: "Please confirm you want to permanently delete this item; this action cannot be undone." Then stop until the user responds.

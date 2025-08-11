@@ -142,90 +142,26 @@ export async function POST(request: Request) {
 
     // Parse system context to check if we're working with an existing workflow
     let currentCaseId: number | null = null;
-    let isExistingWorkflow = false;
-    let extractedCaseName: string | null = null;
-    let extractedCaseDescription: string | null = null;
-
+    let _isExistingWorkflow = false;
     if (systemContext) {
       try {
         const contextData = JSON.parse(systemContext);
         console.log("Parsed system context:", contextData);
         if (contextData.currentCaseId) {
           currentCaseId = contextData.currentCaseId;
-          isExistingWorkflow = true;
+          _isExistingWorkflow = true;
           console.log(
             "Detected existing workflow with case ID:",
             currentCaseId,
           );
         }
       } catch (_parseError) {
-        console.log(
-          "System context is not JSON, treating as regular system prompt",
-        );
+        console.log("System context is not JSON; proceeding without it");
       }
     }
 
-    // Extract case name and description from the prompt for new workflows
-    if (!isExistingWorkflow) {
-      // Try to extract case name and description from the prompt
-      const nameMatch =
-        prompt.match(/name\s*["']([^"']+)["']/i) ||
-        prompt.match(/workflow\s*["']([^"']+)["']/i) ||
-        prompt.match(/create.*?["']([^"']+)\s*workflow["']/i);
-
-      const descMatch =
-        prompt.match(/description\s*["']([^"']+)["']/i) ||
-        prompt.match(/for\s+([^.]+)/i);
-
-      if (nameMatch) {
-        extractedCaseName = nameMatch[1];
-        console.log("Extracted case name from prompt:", extractedCaseName);
-      }
-
-      if (descMatch) {
-        extractedCaseDescription = descMatch[1];
-        console.log(
-          "Extracted case description from prompt:",
-          extractedCaseDescription,
-        );
-      }
-
-      // If we couldn't extract, use defaults based on the prompt content
-      if (!extractedCaseName) {
-        if (prompt.toLowerCase().includes("tire")) {
-          extractedCaseName = "Tire Replacement Workflow";
-        } else if (prompt.toLowerCase().includes("kitchen")) {
-          extractedCaseName = "Kitchen Renovation Workflow";
-        } else if (prompt.toLowerCase().includes("loan")) {
-          extractedCaseName = "Loan Application Workflow";
-        } else {
-          extractedCaseName = "Workflow";
-        }
-        console.log("Using default case name:", extractedCaseName);
-      }
-
-      if (!extractedCaseDescription) {
-        extractedCaseDescription = "A workflow for managing the process";
-        console.log(
-          "Using default case description:",
-          extractedCaseDescription,
-        );
-      }
-    }
-
-    // Enhance the user prompt with explicit instructions
-    let enhancedPrompt = prompt;
-
-    if (isExistingWorkflow && currentCaseId) {
-      enhancedPrompt = `${prompt}
-
-Working with existing case ID: ${currentCaseId}. For simple operations like deleting fields, use the specific tools (deleteField, saveFields, saveView) and STOP - do not call saveCase unless making structural changes to the workflow.`;
-    } else {
-      // For new workflow creation
-      enhancedPrompt = `${prompt}
-
-Create case, fields, views, then call saveCase with complete workflow model.`;
-    }
+    // Keep the original user prompt as-is; rely on tool descriptions, not prompt grafting
+    const enhancedPrompt = prompt;
 
     // Get checkpoint-aware database tools (unified approach)
     console.log("Getting checkpoint-aware database tools...");
@@ -254,13 +190,14 @@ Create case, fields, views, then call saveCase with complete workflow model.`;
     console.log("Creating OpenAI client...");
     const openai = await createOpenAIClient();
 
-    // Build enhanced system prompt (compact)
+    // Build lightweight system prompt
     const systemCore = buildDatabaseSystemPrompt();
     const contextLine = `Context: caseId=${currentCaseId ?? "NEW"}; mode=${
       currentCaseId ? "EXISTING" : "NEW"
     }`;
     const enhancedSystemPrompt = `${systemCore}
 
+Use ONLY the provided tools. Tool descriptions are authoritative. Destructive tools must be called ONLY when the user is explicit; if unsure, ask for confirmation.
 ${getToolsContext(filteredTools)}
 ${contextLine}`;
 
@@ -534,39 +471,11 @@ ${contextLine}`;
               console.log(
                 `Model finished without tool calls (reason: ${finishReason})`,
               );
-
-              // For existing workflows, proactively nudge the model to execute appropriate tools
-              if (currentCaseId) {
-                messages.push({
-                  role: "user" as const,
-                  content:
-                    "Proceed to apply the requested changes using the appropriate tools now.\n- For field-only changes (label, description, order, options, required, primary, defaultValue, type): use saveFields for the selected fields.\n- For view composition/layout changes: use saveView.\n- Only use saveCase for structural workflow model updates.\nDo not summarize; call the tool(s) directly.",
-                });
-                // Continue to next iteration to allow tool execution
-                continue;
+              if (fullContent) {
+                await processor.sendText(fullContent);
               }
-
-              // For new workflows, encourage tool usage to complete creation
-              let proceedMessage;
-              if (loopCount === 1) {
-                proceedMessage = {
-                  role: "user" as const,
-                  content: `Proceed using tools: create case, fields, views, then call saveCase to complete.`,
-                };
-              } else if (finishReason === "length") {
-                proceedMessage = {
-                  role: "user" as const,
-                  content: `Continue: create stages, processes, steps; then call saveCase to complete.`,
-                };
-              } else {
-                proceedMessage = {
-                  role: "user" as const,
-                  content: `Continue with tools: create stages/processes/steps, then call saveCase.`,
-                };
-              }
-
-              messages.push(proceedMessage);
-              continue; // Continue to next iteration
+              done = true;
+              break;
             }
 
             // If the model wants to call a function
@@ -600,32 +509,6 @@ ${contextLine}`;
                   JSON.stringify(toolArgs, null, 2),
                 );
 */
-                // Check for duplicate field creation and encourage view creation
-                if (toolName === "saveFields" && toolArgs.name) {
-                  const existingFieldCalls = toolCallHistory.filter(
-                    (tc) => tc.tool === "saveFields",
-                  );
-                  const existingViewCalls = toolCallHistory.filter(
-                    (tc) => tc.tool === "saveView",
-                  );
-
-                  if (existingFieldCalls.length > 0) {
-                    console.log(
-                      `WARNING: Field creation detected - ensure this is not a duplicate: ${toolArgs.name}`,
-                    );
-                  }
-
-                  // If we have many fields but few views, encourage view creation
-                  if (
-                    existingFieldCalls.length >= 5 &&
-                    existingViewCalls.length < 2
-                  ) {
-                    console.log(
-                      `WARNING: Many fields created (${existingFieldCalls.length}) but few views (${existingViewCalls.length}). Consider creating views now.`,
-                    );
-                  }
-                }
-
                 // Track tool call history
                 toolCallHistory.push({
                   tool: toolName,
@@ -633,60 +516,7 @@ ${contextLine}`;
                 });
 
                 try {
-                  // Destructive tool guard: block delete operations unless user's prompt explicitly asks for deletion
-                  const destructiveTools = new Set([
-                    "deleteField",
-                    "deleteView",
-                    "deleteCase",
-                  ]);
-                  const userIntentText = (prompt || "").toLowerCase();
-                  const deletionKeywords = [
-                    // English
-                    "delete",
-                    "remove",
-                    "drop",
-                    "eliminate",
-                    "erase",
-                    "purge",
-                    "clear",
-                    // French
-                    "supprimer",
-                    "supprime",
-                    "retirer",
-                    // Spanish/Portuguese
-                    "borrar",
-                    "eliminar",
-                    "remover",
-                    // German
-                    "löschen",
-                    "entfernen",
-                    // Italian
-                    "eliminare",
-                    "rimuovere",
-                    // Japanese
-                    "削除",
-                    // Russian
-                    "удалить",
-                    "удаление",
-                  ];
-                  const isExplicitDeleteRequested = deletionKeywords.some(
-                    (kw) => userIntentText.includes(kw),
-                  );
-                  if (
-                    destructiveTools.has(toolName) &&
-                    !isExplicitDeleteRequested
-                  ) {
-                    const errorStr = `Deletion blocked: no explicit delete/remove instruction in the user's request. Perform non-destructive edits instead (e.g., saveFields for label changes or saveView for layout).`;
-                    await processor.sendText(`\n${errorStr}`);
-                    messages.push({
-                      role: "tool",
-                      content: JSON.stringify({ error: errorStr }),
-                      tool_call_id: toolCall.id,
-                    });
-                    // Log context size (no trimming)
-                    trimMessages();
-                    return { success: false, error: errorStr } as any;
-                  }
+                  // No heuristic blocking: rely on tool descriptions for safety and confirmation
 
                   const tool = filteredTools.find((t) => t.name === toolName);
                   if (!tool) throw new Error(`Tool ${toolName} not found`);
@@ -873,303 +703,6 @@ ${contextLine}`;
                 )}s) ===`,
               );
 
-              // Check if saveCase was called in this iteration
-              const saveCaseCalled = toolCalls.some(
-                (tc) => tc.function.name === "saveCase",
-              );
-
-              // If we're at max iterations or saveCase was called, we can complete
-              if (loopCount >= 15 || saveCaseCalled) {
-                console.log(
-                  `Loop completion: ${
-                    saveCaseCalled
-                      ? "saveCase called"
-                      : "max iterations reached"
-                  }`,
-                );
-                done = true;
-                break;
-              }
-
-              // Only force saveCase if this is a new workflow creation, not for simple operations
-              const isNewWorkflowCreation = !currentCaseId;
-              const hasDeleteOperations = toolCallHistory.some((tc) =>
-                tc.tool.startsWith("delete"),
-              );
-
-              console.log("=== Loop completion check ===");
-              console.log("saveCaseCalled:", saveCaseCalled);
-              console.log("isNewWorkflowCreation:", isNewWorkflowCreation);
-              console.log("currentCaseId:", currentCaseId);
-              console.log("hasDeleteOperations:", hasDeleteOperations);
-              console.log(
-                "toolCallHistory:",
-                toolCallHistory.map((tc) => tc.tool),
-              );
-
-              // If saveCase wasn't called and we haven't reached max iterations,
-              // and this is a new workflow creation (not a simple operation like field deletion)
-              if (
-                !saveCaseCalled &&
-                isNewWorkflowCreation &&
-                !hasDeleteOperations
-              ) {
-                console.log(
-                  "saveCase not called - adding completion reminder for new workflow",
-                );
-
-                // Check what has been created so far
-                const hasFields = toolCallHistory.some(
-                  (tc) => tc.tool === "saveFields",
-                );
-                const hasViews = toolCallHistory.some(
-                  (tc) => tc.tool === "saveView",
-                );
-
-                // Count what's been created
-                // For saveFields, we need to count the actual number of fields created, not the number of calls
-                // Each saveFields call can create multiple fields
-                const saveFieldsCalls = toolCallHistory.filter(
-                  (tc) => tc.tool === "saveFields",
-                );
-
-                // Get the actual field count from the tool results in messages
-                let fieldCount = 0;
-                for (const message of messages) {
-                  if (
-                    message.role === "tool" &&
-                    typeof message.content === "string"
-                  ) {
-                    try {
-                      const result = JSON.parse(message.content);
-                      // Check if this is a saveFields result
-                      if (result.fields && Array.isArray(result.fields)) {
-                        fieldCount += result.fields.length;
-                      } else if (result.ids && Array.isArray(result.ids)) {
-                        fieldCount += result.ids.length;
-                      }
-                    } catch (_parseError) {
-                      // Ignore parsing errors for non-JSON messages
-                    }
-                  }
-                }
-
-                // If we couldn't parse any results, fall back to counting calls
-                if (fieldCount === 0) {
-                  fieldCount = saveFieldsCalls.length;
-                }
-
-                const viewCount = toolCallHistory.filter(
-                  (tc) => tc.tool === "saveView",
-                ).length;
-
-                console.log(
-                  `Progress: ${fieldCount} fields, ${viewCount} views created`,
-                );
-
-                let completionMessage;
-
-                // If we're getting close to max iterations, be more aggressive
-                if (loopCount >= 12) {
-                  completionMessage = {
-                    role: "user" as const,
-                    content: `URGENT: ${fieldCount} fields, ${viewCount} views. Call saveCase NOW with workflow model.`,
-                  };
-                } else if (hasFields && !hasViews) {
-                  // Check if we have enough fields for a comprehensive workflow
-                  if (fieldCount < 3) {
-                    completionMessage = {
-                      role: "user" as const,
-                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create more fields then views.`,
-                    };
-                  } else if (fieldCount >= 8) {
-                    // Force view creation if we have too many fields
-                    completionMessage = {
-                      role: "user" as const,
-                      content: `STOP: ${fieldCount} fields created. Create views now for each workflow step.`,
-                    };
-                  } else {
-                    completionMessage = {
-                      role: "user" as const,
-                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create views for each workflow step.`,
-                    };
-                  }
-                } else if (hasViews) {
-                  // Check if we have enough views for a proper workflow
-                  if (viewCount < 3) {
-                    completionMessage = {
-                      role: "user" as const,
-                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Create more views then call saveCase.`,
-                    };
-                  } else {
-                    completionMessage = {
-                      role: "user" as const,
-                      content: `Progress: ${fieldCount} fields, ${viewCount} views. Call saveCase with workflow model now.`,
-                    };
-                  }
-                } else {
-                  completionMessage = {
-                    role: "user" as const,
-                    content: `Progress: ${fieldCount} fields, ${viewCount} views. Create workflow and call saveCase.`,
-                  };
-                }
-                messages.push(completionMessage);
-              } else if (!saveCaseCalled && !isNewWorkflowCreation) {
-                // For existing workflows, prefer completing the user's multi-step intent in one request:
-                // 1) If only read-only tools ran, continue to allow modifications.
-                // 2) If fields were just created but views weren't updated yet, instruct to update selected view(s) via saveView.
-                // 3) Otherwise, if a state-changing operation completed and there's nothing else implied, stop to avoid duplicates.
-
-                const toolNamesThisIteration = toolCalls.map(
-                  (tc) => tc.function.name || "",
-                );
-                const onlyReadOnlyToolsThisIteration =
-                  toolNamesThisIteration.every(
-                    (name) => name.startsWith("get") || name.startsWith("list"),
-                  );
-                const didSaveFieldsThisIteration =
-                  toolNamesThisIteration.includes("saveFields");
-                const hasSaveViewInHistory = toolCallHistory.some(
-                  (tc) => tc.tool === "saveView",
-                );
-
-                if (onlyReadOnlyToolsThisIteration) {
-                  console.log(
-                    "Existing workflow - read-only tools executed; continuing to allow modifications",
-                  );
-                  messages.push({
-                    role: "user" as const,
-                    content:
-                      "Proceed to apply the requested changes using saveFields and/or saveView for the selected view. Avoid duplicates and validate with list tools if needed.",
-                  });
-                } else if (
-                  didSaveFieldsThisIteration &&
-                  !hasSaveViewInHistory
-                ) {
-                  // Extract newly created field IDs from the most recent tool result(s)
-                  const newFieldIds: number[] = [];
-                  for (let i = messages.length - 1; i >= 0; i--) {
-                    const m = messages[i];
-                    if (m.role === "tool" && typeof m.content === "string") {
-                      try {
-                        const obj = JSON.parse(m.content);
-                        if (Array.isArray(obj?.ids) && obj.ids.length > 0) {
-                          for (const id of obj.ids) {
-                            if (typeof id === "number") newFieldIds.push(id);
-                          }
-                          break;
-                        }
-                      } catch {
-                        // ignore
-                      }
-                    }
-                  }
-
-                  // Extract selected viewIds, stageIds, and processIds from the initial user message if present
-                  let selectedViewIds: number[] = [];
-                  let selectedStageIds: number[] = [];
-                  let selectedProcessIds: number[] = [];
-                  const initialUserMsg = messages.find(
-                    (m) => m.role === "user",
-                  );
-                  if (
-                    initialUserMsg &&
-                    typeof initialUserMsg.content === "string"
-                  ) {
-                    const match = initialUserMsg.content.match(
-                      /Selected viewIds=\s*\[(.*?)\]/,
-                    );
-                    if (match && match[1]) {
-                      const parts = match[1]
-                        .split(",")
-                        .map((s) => Number(s.trim()))
-                        .filter((n) => Number.isFinite(n));
-                      if (parts.length > 0) selectedViewIds = parts as number[];
-                    }
-                    const stageMatch = initialUserMsg.content.match(
-                      /Selected stageIds=\s*\[(.*?)\]/,
-                    );
-                    if (stageMatch && stageMatch[1]) {
-                      const parts = stageMatch[1]
-                        .split(",")
-                        .map((s) => Number(s.trim()))
-                        .filter((n) => Number.isFinite(n));
-                      if (parts.length > 0)
-                        selectedStageIds = parts as number[];
-                    }
-                    const processMatch = initialUserMsg.content.match(
-                      /Selected processIds=\s*\[(.*?)\]/,
-                    );
-                    if (processMatch && processMatch[1]) {
-                      const parts = processMatch[1]
-                        .split(",")
-                        .map((s) => Number(s.trim()))
-                        .filter((n) => Number.isFinite(n));
-                      if (parts.length > 0)
-                        selectedProcessIds = parts as number[];
-                    }
-                  }
-
-                  // If no explicit selection context was provided, STOP to avoid unintended view updates
-                  if (
-                    selectedViewIds.length === 0 &&
-                    selectedStageIds.length === 0 &&
-                    selectedProcessIds.length === 0
-                  ) {
-                    console.log(
-                      "Existing workflow - fields updated with no selections; stopping to avoid unintended view changes",
-                    );
-                    done = true;
-                    break;
-                  }
-
-                  console.log(
-                    "Existing workflow - fields added; prompting to update selected context with new fields",
-                    {
-                      selectedViewIds,
-                      selectedStageIds,
-                      selectedProcessIds,
-                      newFieldIds,
-                    },
-                  );
-
-                  let targetText = "the relevant selected context";
-                  const parts: string[] = [];
-                  if (selectedViewIds.length > 0) {
-                    parts.push(`view id(s): ${selectedViewIds.join(", ")}`);
-                  }
-                  if (selectedStageIds.length > 0) {
-                    parts.push(`stage id(s): ${selectedStageIds.join(", ")}`);
-                  }
-                  if (selectedProcessIds.length > 0) {
-                    parts.push(
-                      `process id(s): ${selectedProcessIds.join(", ")}`,
-                    );
-                  }
-                  if (parts.length > 0) {
-                    targetText = `the selected ${parts.join("; ")}`;
-                  }
-
-                  const fieldListText =
-                    newFieldIds.length > 0
-                      ? ` The newly created fieldIds are: ${newFieldIds.join(
-                          ", ",
-                        )}.`
-                      : "";
-
-                  messages.push({
-                    role: "user" as const,
-                    content: `Now update ${targetText} with the new fields and take appropriate actions:\n- For views: append to model.fields as { fieldId } and call saveView with the same name and caseid, preserving existing fields and layout.\n- For stages/processes: if this implies structural changes, use saveCase to update the workflow model with correct stages, processes, and steps. Avoid duplicates and keep order sensible.${fieldListText}`,
-                  });
-                } else {
-                  console.log(
-                    "Existing workflow - simple operation completed; stopping loop to avoid duplicates",
-                  );
-                  done = true;
-                  break;
-                }
-              }
-
               // Continue loop for next tool call or final message
               continue;
             }
@@ -1213,43 +746,7 @@ ${contextLine}`;
         );
         console.log(`Tool call history:`, toolCallHistory);
 
-        // Check if saveCase was called during the entire process
-        const saveCaseWasCalled = toolCallHistory.some(
-          (tc) => tc.tool === "saveCase",
-        );
-        const isNewWorkflowCreation = !currentCaseId;
-
-        console.log("=== Final completion check ===");
-        console.log("saveCaseWasCalled:", saveCaseWasCalled);
-        console.log("isNewWorkflowCreation:", isNewWorkflowCreation);
-        console.log("currentCaseId:", currentCaseId);
-        console.log(
-          "toolCallHistory:",
-          toolCallHistory.map((tc) => tc.tool),
-        );
-
-        if (!saveCaseWasCalled && isNewWorkflowCreation) {
-          console.warn(
-            "WARNING: saveCase was never called - workflow is incomplete!",
-          );
-          await processor.sendText(
-            "\n🚨 WARNING: Workflow creation incomplete! saveCase was never called.\n",
-          );
-          await processor.sendText(
-            "The workflow model with stages, processes, and steps was not created.\n",
-          );
-        } else if (saveCaseWasCalled) {
-          console.log(
-            "SUCCESS: saveCase was called - workflow creation completed!",
-          );
-          await processor.sendText(
-            "\n✅ Workflow creation completed successfully!\n",
-          );
-        } else if (!saveCaseWasCalled && !isNewWorkflowCreation) {
-          // For existing workflows, simple operations don't need saveCase
-          console.log("Operation completed successfully on existing workflow");
-          await processor.sendText("\n✅ Operation completed successfully!\n");
-        }
+        // Finalization is handled by the model output and tool results; no heuristic completion checks
 
         // Commit checkpoint session on successful completion
         try {
