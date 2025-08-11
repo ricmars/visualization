@@ -554,10 +554,15 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                 `Model finished without tool calls (reason: ${finishReason})`,
               );
 
-              // For existing workflows, stop here to avoid duplicate tool re-execution
+              // For existing workflows, proactively nudge the model to execute appropriate tools
               if (currentCaseId) {
-                done = true;
-                break;
+                messages.push({
+                  role: "user" as const,
+                  content:
+                    "Proceed to apply the requested changes using the appropriate tools now.\n- For field-only changes (label, description, order, options, required, primary, defaultValue, type): use saveFields for the selected fields.\n- For view composition/layout changes: use saveView.\n- Only use saveCase for structural workflow model updates.\nDo not summarize; call the tool(s) directly.",
+                });
+                // Continue to next iteration to allow tool execution
+                continue;
               }
 
               // For new workflows, encourage tool usage to complete creation
@@ -684,24 +689,66 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                       `\nSaved '${resultObj.name || "Unknown"}'`,
                     );
                   } else if (toolName === "saveFields") {
-                    const fieldCount =
-                      resultObj.fields?.length || resultObj.ids?.length || 0;
-                    const fieldNames =
+                    // Determine created vs updated from tool arguments (presence of id in fields)
+                    const fieldsParam: Array<{
+                      id?: number;
+                      name?: string;
+                      label?: string;
+                    }> = Array.isArray(toolArgs?.fields) ? toolArgs.fields : [];
+
+                    const createdParam = fieldsParam.filter(
+                      (f) =>
+                        !("id" in f) || f.id === undefined || f.id === null,
+                    );
+                    const updatedParam = fieldsParam.filter(
+                      (f) => typeof f.id === "number",
+                    );
+
+                    const createdCount = createdParam.length;
+                    const updatedCount = updatedParam.length;
+
+                    const resultFieldNames =
                       (
                         resultObj.fields as { name?: string; label?: string }[]
                       )?.map((f) => f.name || f.label || "Unknown field") || [];
-                    if (fieldNames.length > 0) {
+
+                    const parts: string[] = [];
+                    if (updatedCount > 0) {
+                      const suffix = updatedCount === 1 ? "" : "s";
+                      const names = updatedParam.map(
+                        (f) => f.name || f.label || "Unknown field",
+                      );
+                      parts.push(
+                        `Updated ${updatedCount} field${suffix}: ${names.join(
+                          ", ",
+                        )}`,
+                      );
+                    }
+                    if (createdCount > 0) {
+                      const suffix = createdCount === 1 ? "" : "s";
+                      const names = createdParam.map(
+                        (f) => f.name || f.label || "Unknown field",
+                      );
+                      // If names are empty (unlikely), fall back to result names
+                      parts.push(
+                        names.length > 0
+                          ? `Created ${createdCount} field${suffix}: ${names.join(
+                              ", ",
+                            )}`
+                          : `Created ${createdCount} field${suffix}: ${resultFieldNames.join(
+                              ", ",
+                            )}`,
+                      );
+                    }
+                    if (parts.length === 0) {
+                      const total =
+                        resultObj.fields?.length || resultObj.ids?.length || 0;
+                      const suffix = total === 1 ? "" : "s";
                       await processor.sendText(
-                        `\nCreated ${fieldCount} field${
-                          fieldCount === 1 ? "" : "s"
-                        }: ${fieldNames.join(", ")}`,
+                        `\nSaved ${total} field${suffix}`,
                       );
                     } else {
-                      await processor.sendText(
-                        `\nCreated ${fieldCount} field${
-                          fieldCount === 1 ? "" : "s"
-                        }`,
-                      );
+                      await processor.sendText(`\n${parts.join("; ")}`);
                     }
                   } else if (toolName === "deleteField") {
                     const deletedName =
@@ -1025,6 +1072,19 @@ VALID FIELD TYPES: Address, AutoComplete, Checkbox, Currency, Date, DateTime, De
                       if (parts.length > 0)
                         selectedProcessIds = parts as number[];
                     }
+                  }
+
+                  // If no explicit selection context was provided, STOP to avoid unintended view updates
+                  if (
+                    selectedViewIds.length === 0 &&
+                    selectedStageIds.length === 0 &&
+                    selectedProcessIds.length === 0
+                  ) {
+                    console.log(
+                      "Existing workflow - fields updated with no selections; stopping to avoid unintended view changes",
+                    );
+                    done = true;
+                    break;
                   }
 
                   console.log(

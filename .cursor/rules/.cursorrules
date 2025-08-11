@@ -294,7 +294,6 @@ The system prompt (`src/app/lib/databasePrompt.ts`) now includes a structured th
 #### Implementation Guidelines
 
 - **System Prompt**: Include structured thinking patterns in `databaseSystemPrompt`
-- **Example Responses**: Demonstrate the thinking pattern in `exampleDatabaseResponse`
 - **Real-time Display**: Combine with streaming to show reasoning as it happens
 - **Consistent Pattern**: Use the same thinking structure across all AI interactions
 

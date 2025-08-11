@@ -66,6 +66,16 @@ interface ChatInterfaceProps {
 // Function to format content based on its type
 function normalizeMarkdown(original: string): string {
   let content = original;
+  // Normalize section headings like *Reasoning, *Plan, *Next Action to markdown headings
+  content = content.replace(
+    /(^|\n)\*?\s*Reasoning\s*(\n|$)/gi,
+    "$1\n### Reasoning\n",
+  );
+  content = content.replace(/(^|\n)\*?\s*Plan\s*(\n|$)/gi, "$1\n### Plan\n");
+  content = content.replace(
+    /(^|\n)\*?\s*Next Action\s*(\n|$)/gi,
+    "$1\n### Next Action\n",
+  );
   // Ensure headings like "...text### Heading" start on a new block line
   content = content.replace(/([^\n])\s*(#{1,6})\s+/g, (match, prev, hashes) => {
     return `${prev}\n\n${hashes} `;
@@ -256,23 +266,73 @@ export default function ChatInterface({
   };
 
   const markdownComponents: Components = {
+    h3({ children }) {
+      const text = String(React.Children.toArray(children).join(" "))
+        .trim()
+        .toLowerCase();
+      const isSpecialHeading = ["reasoning", "plan", "next action"].includes(
+        text,
+      );
+      const className = isSpecialHeading
+        ? "text-xl md:text-2xl font-extrabold text-gray-900 dark:text-gray-100 mb-2 mt-3"
+        : "text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3";
+      return (
+        <h3 className={className}>
+          <strong>{children}</strong>
+        </h3>
+      );
+    },
     code({ className, children }) {
       const match = /language-(\w+)/.exec(className || "");
       const isInline = !match;
 
       return isInline ? (
-        <code className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">
+        <code
+          className="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm font-sans"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+        >
           {children}
         </code>
       ) : (
-        <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto">
-          <code className={className}>{children}</code>
+        <pre
+          className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto font-sans"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+        >
+          <code
+            className={className}
+            style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+          >
+            {children}
+          </code>
         </pre>
+      );
+    },
+    em({ children }) {
+      return (
+        <em
+          className="italic font-sans"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+        >
+          {children}
+        </em>
+      );
+    },
+    strong({ children }) {
+      return (
+        <strong
+          className="font-bold font-sans"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+        >
+          {children}
+        </strong>
       );
     },
     pre({ children }) {
       return (
-        <pre className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto">
+        <pre
+          className="bg-gray-100 dark:bg-gray-800 p-2 rounded text-sm overflow-x-auto font-sans"
+          style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+        >
           {children}
         </pre>
       );
@@ -341,7 +401,10 @@ export default function ChatInterface({
                   : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               }`}
             >
-              <div className="prose prose-sm dark:prose-invert max-w-none">
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none font-sans"
+                style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkBreaks]}
                   components={markdownComponents}

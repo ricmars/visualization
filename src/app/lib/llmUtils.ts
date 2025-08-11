@@ -93,20 +93,61 @@ export function createStreamProcessor(
         } else if (toolName === "saveView") {
           userMessage = `Saved '${resultObj.name || "Unknown"}'`;
         } else if (toolName === "saveFields") {
-          const fieldCount =
-            resultObj.fields?.length || resultObj.ids?.length || 0;
-          const fieldNames =
+          // Determine created vs updated from params (presence of id in fields)
+          const paramsObj = params as any;
+          const fieldsParam: Array<{
+            id?: number;
+            name?: string;
+            label?: string;
+          }> = Array.isArray(paramsObj?.fields) ? paramsObj.fields : [];
+
+          const createdParamNames = fieldsParam
+            .filter((f) => !("id" in f) || f.id === undefined || f.id === null)
+            .map((f) => f.name || f.label || "Unknown field");
+          const updatedParamNames = fieldsParam
+            .filter((f) => typeof f.id === "number")
+            .map((f) => f.name || f.label || "Unknown field");
+
+          const createdCount = createdParamNames.length;
+          const updatedCount = updatedParamNames.length;
+
+          // Prefer names from the result if available (to reflect actual DB names)
+          const resultFieldNames =
             (resultObj.fields as { name?: string; label?: string }[])?.map(
               (f) => f.name || f.label || "Unknown field",
             ) || [];
-          if (fieldNames.length > 0) {
-            userMessage = `Created ${fieldCount} field${
-              fieldCount === 1 ? "" : "s"
-            }: ${fieldNames.join(", ")}`;
+
+          // Build user-friendly message
+          const parts: string[] = [];
+          if (updatedCount > 0) {
+            const suffix = updatedCount === 1 ? "" : "s";
+            const names =
+              updatedParamNames.length > 0
+                ? updatedParamNames
+                : resultFieldNames;
+            parts.push(
+              `Updated ${updatedCount} field${suffix}: ${names.join(", ")}`,
+            );
+          }
+          if (createdCount > 0) {
+            const suffix = createdCount === 1 ? "" : "s";
+            // If mixed, avoid repeating all names again; otherwise show result names
+            const names =
+              createdParamNames.length > 0
+                ? createdParamNames
+                : resultFieldNames;
+            parts.push(
+              `Created ${createdCount} field${suffix}: ${names.join(", ")}`,
+            );
+          }
+          if (parts.length === 0) {
+            // Fallback if we couldn't infer from params
+            const total =
+              resultObj.fields?.length || resultObj.ids?.length || 0;
+            const suffix = total === 1 ? "" : "s";
+            userMessage = `Saved ${total} field${suffix}`;
           } else {
-            userMessage = `Created ${fieldCount} field${
-              fieldCount === 1 ? "" : "s"
-            }`;
+            userMessage = parts.join("; ");
           }
         } else if (toolName === "deleteField") {
           const deletedName = (resultObj as any).deletedName || "Unknown field";

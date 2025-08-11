@@ -2243,7 +2243,8 @@ export default function WorkflowPage() {
             (f) => f.name,
           );
           console.log("Extracted field names:", fieldNames);
-          return `Created ${fieldCount} field${
+          // Neutral wording on UI fallback; server will already send precise Created/Updated message
+          return `Saved ${fieldCount} field${
             fieldCount === 1 ? "" : "s"
           }: ${fieldNames.join(", ")}`;
         }
