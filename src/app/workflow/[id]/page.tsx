@@ -4,7 +4,17 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
 import WorkflowDiagram from "../../components/WorkflowDiagram";
 import WorkflowLifecycleView from "../../components/WorkflowLifecycleView";
-import ChatInterface, { ChatMessage } from "../../components/ChatInterface";
+import { ChatMessage } from "../../components/ChatInterface";
+import FreeFormSelectionOverlay from "./components/FreeFormSelectionOverlay";
+import QuickChatOverlay from "./components/QuickChatOverlay";
+import ResizeSeparator from "./components/ResizeSeparator";
+import ChatPanelTabs from "./components/ChatPanelTabs";
+import ChatPanelContent from "./components/ChatPanelContent";
+import usePersistentTab from "./hooks/usePersistentTab";
+import { useChatPanel } from "./hooks/useChatPanel";
+import { useFreeFormSelection } from "./hooks/useFreeFormSelection";
+import useQuickSelectionSummary from "./hooks/useQuickSelectionSummary";
+import usePreviewIframe from "./hooks/usePreviewIframe";
 import { Service } from "../../services/service";
 import {
   Field,
@@ -31,13 +41,7 @@ import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import ViewsPanel from "../../components/ViewsPanel";
 import FieldsList from "../../components/FieldsList";
-import {
-  FaPencilAlt,
-  FaChevronLeft,
-  FaChevronRight,
-  FaGripVertical,
-  FaMagic,
-} from "react-icons/fa";
+import { FaPencilAlt } from "react-icons/fa";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
 import { DB_TABLES, DB_COLUMNS } from "../../types/database";
@@ -46,7 +50,6 @@ import {
   addFieldToViewModel,
 } from "../../lib/modelUtils";
 import { fetchWithBaseUrl } from "../../lib/fetchWithBaseUrl";
-import ChangesPanel from "../../components/ChangesPanel";
 import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
@@ -187,18 +190,29 @@ export default function WorkflowPage() {
   const [activeStep, setActiveStep] = useState<string>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [chatPanelWidth, setChatPanelWidth] = useState(500);
-  const [isChatPanelExpanded, setIsChatPanelExpanded] = useState(true);
+  const {
+    chatPanelWidth,
+    isChatPanelExpanded,
+    onResizeMouseDown,
+    handleToggleChatPanel,
+  } = useChatPanel({
+    minWidth: CHAT_MIN_WIDTH,
+    maxWidth: CHAT_MAX_WIDTH,
+    widthStorageKey: CHAT_PANEL_WIDTH_STORAGE_KEY,
+    expandedStorageKey: CHAT_PANEL_EXPANDED_STORAGE_KEY,
+    initialWidth: 500,
+    initialExpanded: true,
+  });
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
     "flat",
   );
-  const [activeTab, setActiveTab] = useState<
+  const [activeTab, setActiveTab] = usePersistentTab<
     "workflow" | "fields" | "views" | "chat" | "history"
-  >("workflow");
-  const [activePanelTab, setActivePanelTab] = useState<"chat" | "history">(
-    "chat",
-  );
+  >(ACTIVE_TAB_STORAGE_KEY, "workflow");
+  const [activePanelTab, setActivePanelTab] = usePersistentTab<
+    "chat" | "history"
+  >(ACTIVE_PANEL_TAB_STORAGE_KEY, "chat");
   const [isAddFieldModalOpen, setIsAddFieldModalOpen] = useState(false);
   const [editingField, setEditingField] = useState<Field | null>(null);
   const [checkpoints, setCheckpoints] = useState<WorkflowCheckpoint[]>([]);
@@ -212,39 +226,27 @@ export default function WorkflowPage() {
   const [newProcessName, setNewProcessName] = useState("");
 
   // Free Form selection & quick chat state
-  const [isFreeFormSelecting, setIsFreeFormSelecting] = useState(false);
-  const [selectionStart, setSelectionStart] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [selectionRect, setSelectionRect] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const [selectedFieldIds, setSelectedFieldIds] = useState<number[]>([]);
-  const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
-  const [selectedStageIds, setSelectedStageIds] = useState<number[]>([]);
-  const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
-  const [selectedStepIds, setSelectedStepIds] = useState<number[]>([]);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [quickChatText, setQuickChatText] = useState("");
-  const [quickOverlayPosition, setQuickOverlayPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const quickInputRef = useRef<HTMLInputElement>(null);
-
-  // 3. All useRef hooks
-  const addFieldButtonRef = useRef<HTMLButtonElement>(null);
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-  const isResizingRef = useRef(false);
-  const resizeStartXRef = useRef(0);
-  const resizeStartWidthRef = useRef(0);
-  const lastExpandedWidthRef = useRef<number>(chatPanelWidth);
-
-  // 4. useMemo hook
+  const {
+    isFreeFormSelecting,
+    selectionRect,
+    selectedFieldIds,
+    selectedViewIds,
+    selectedStageIds,
+    selectedProcessIds,
+    selectedStepIds,
+    quickOverlayPosition,
+    beginFreeFormSelection,
+    onSelectionMouseDown,
+    onSelectionMouseMove,
+    onSelectionMouseUp,
+  } = useFreeFormSelection({
+    activeTab,
+    selectedView,
+    onOpenQuickChat: () => setIsQuickChatOpen(true),
+  });
+  // Workflow model memo used across UI
   const workflowModel: WorkflowState = useMemo(() => {
     if (!model) {
       return { stages: [] };
@@ -258,18 +260,16 @@ export default function WorkflowPage() {
   // Function to generate the model data structure for preview
   const generateModelData = useCallback(
     (currentFields: Field[], currentStages: Stage[]) => {
-      const tmpStages = [];
-      /* Iterate over currentStages - iterate over processes and steps - processes is not needed */
+      const tmpStages = [] as any[];
       for (const stage of currentStages) {
-        const tmpSteps = [];
+        const tmpSteps = [] as any[];
         for (const process of stage.processes) {
           for (const step of process.steps) {
-            // Populate from view model when available: map fieldId -> field.name and boolean required
             if (
               step.type === "Collect information" &&
-              typeof step.viewId === "number"
+              typeof (step as any).viewId === "number"
             ) {
-              const view = views.find((v) => v.id === step.viewId);
+              const view = views.find((v) => v.id === (step as any).viewId);
               if (view) {
                 try {
                   const viewModel =
@@ -289,7 +289,6 @@ export default function WorkflowPage() {
                         };
                       })
                       .filter((f: any) => f !== null);
-
                     tmpSteps.push({
                       ...step,
                       fields: stepFields as Array<{
@@ -299,21 +298,16 @@ export default function WorkflowPage() {
                     });
                     continue;
                   }
-                } catch (_e) {
-                  // fall through
+                } catch {
+                  // ignore JSON errors
                 }
               }
             }
-            // Default: push step without altering fields
             tmpSteps.push(step);
           }
         }
-        tmpStages.push({
-          ...stage,
-          steps: tmpSteps,
-        });
+        tmpStages.push({ ...stage, steps: tmpSteps });
       }
-      // Map fields to include sample values from sampleValue
       const fieldsWithValues: Field[] = currentFields.map((f: any) => {
         const dv = f?.sampleValue;
         let value: any = undefined;
@@ -352,242 +346,29 @@ export default function WorkflowPage() {
     [selectedCase?.name, views],
   );
 
+  // Quick selection summary string for QuickChat overlay
+  const quickSelectionSummary = useQuickSelectionSummary({
+    stages: workflowModel.stages,
+    selectedStageIds,
+    selectedProcessIds,
+    selectedStepIds,
+    selectedFieldIds,
+    selectedViewIds,
+  });
+  const quickInputRef = useRef<HTMLInputElement>(null);
+
+  // 3. All useRef hooks
+  const addFieldButtonRef = useRef<HTMLButtonElement>(null);
+  const { containerRef: previewContainerRef } = usePreviewIframe({
+    isPreviewMode,
+    generateModel: () => generateModelData(fields, workflowModel.stages),
+  });
+  // Resizing refs handled by useChatPanel
+
   // 5. All useEffect hooks
-  // Load saved tab from localStorage after initial render
-  useEffect(() => {
-    const savedTab = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) as
-      | "workflow"
-      | "fields"
-      | "views"
-      | "chat"
-      | "history";
-    if (savedTab) {
-      setActiveTab(savedTab);
-    }
+  // (Replaced by usePersistentTab and useChatPanel)
 
-    const savedPanelTab = localStorage.getItem(ACTIVE_PANEL_TAB_STORAGE_KEY) as
-      | "chat"
-      | "history";
-    if (savedPanelTab) {
-      setActivePanelTab(savedPanelTab);
-    }
-
-    // Load chat panel preferences
-    const savedWidthRaw = localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
-    const savedExpandedRaw = localStorage.getItem(
-      CHAT_PANEL_EXPANDED_STORAGE_KEY,
-    );
-    if (savedWidthRaw) {
-      const parsed = parseInt(savedWidthRaw, 10);
-      if (!Number.isNaN(parsed)) {
-        const clamped = Math.min(
-          Math.max(parsed, CHAT_MIN_WIDTH),
-          CHAT_MAX_WIDTH,
-        );
-        setChatPanelWidth(clamped);
-        lastExpandedWidthRef.current = clamped;
-      }
-    }
-    if (savedExpandedRaw !== null) {
-      setIsChatPanelExpanded(savedExpandedRaw === "true");
-    }
-  }, []);
-
-  // Save tab to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab);
-  }, [activeTab]);
-
-  // Save panel tab to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem(ACTIVE_PANEL_TAB_STORAGE_KEY, activePanelTab);
-  }, [activePanelTab]);
-
-  // Persist chat panel width/expanded
-  useEffect(() => {
-    localStorage.setItem(CHAT_PANEL_WIDTH_STORAGE_KEY, String(chatPanelWidth));
-  }, [chatPanelWidth]);
-  useEffect(() => {
-    localStorage.setItem(
-      CHAT_PANEL_EXPANDED_STORAGE_KEY,
-      String(isChatPanelExpanded),
-    );
-  }, [isChatPanelExpanded]);
-
-  // Resize handlers
-  const handleToggleChatPanel = useCallback(() => {
-    if (isChatPanelExpanded) {
-      lastExpandedWidthRef.current = chatPanelWidth;
-      setIsChatPanelExpanded(false);
-    } else {
-      const restore = lastExpandedWidthRef.current || CHAT_MIN_WIDTH;
-      setChatPanelWidth(
-        Math.min(Math.max(restore, CHAT_MIN_WIDTH), CHAT_MAX_WIDTH),
-      );
-      setIsChatPanelExpanded(true);
-    }
-  }, [isChatPanelExpanded, chatPanelWidth]);
-
-  // Helpers for free-form selection
-  const beginFreeFormSelection = useCallback(() => {
-    setSelectedFieldIds([]);
-    setSelectedViewIds([]);
-    setSelectedStageIds([]);
-    setSelectedProcessIds([]);
-    setSelectionStart(null);
-    setSelectionRect(null);
-    setIsFreeFormSelecting(true);
-  }, []);
-
-  const onSelectionMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      // Only left button
-      if (e.button !== 0) return;
-      setSelectionStart({ x: e.clientX, y: e.clientY });
-      setSelectionRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 });
-    },
-    [],
-  );
-
-  const onSelectionMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!selectionStart) return;
-      const x1 = Math.min(selectionStart.x, e.clientX);
-      const y1 = Math.min(selectionStart.y, e.clientY);
-      const x2 = Math.max(selectionStart.x, e.clientX);
-      const y2 = Math.max(selectionStart.y, e.clientY);
-      setSelectionRect({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
-    },
-    [selectionStart],
-  );
-
-  const rectsIntersect = (
-    a: { x: number; y: number; width: number; height: number },
-    b: { x: number; y: number; width: number; height: number },
-  ) => {
-    return (
-      a.x < b.x + b.width &&
-      a.x + a.width > b.x &&
-      a.y < b.y + b.height &&
-      a.y + a.height > b.y
-    );
-  };
-
-  const onSelectionMouseUp = useCallback(() => {
-    if (!selectionRect) {
-      setIsFreeFormSelecting(false);
-      return;
-    }
-    // Find all items marked with data-fieldid, data-viewid, data-stageid, data-processid, or data-stepid that intersect selectionRect
-    const nodes = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        "[data-fieldid], [data-viewid], [data-stageid], [data-processid], [data-stepid]",
-      ),
-    );
-    const pickedFieldIds = new Set<number>();
-    const pickedViewIds = new Set<number>();
-    const pickedStageIds = new Set<number>();
-    const pickedProcessIds = new Set<number>();
-    const pickedStepIds = new Set<number>();
-    // Track bounding box for selected nodes
-    let minX = Number.POSITIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    nodes.forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      const r = {
-        x: rect.left,
-        y: rect.top,
-        width: rect.width,
-        height: rect.height,
-      };
-      if (rectsIntersect(selectionRect, r)) {
-        const idStr = (el as any).dataset.fieldid;
-        const idNum = idStr ? parseInt(idStr, 10) : NaN;
-        if (!Number.isNaN(idNum)) pickedFieldIds.add(idNum);
-        const vStr = (el as any).dataset.viewid;
-        const vNum = vStr ? parseInt(vStr, 10) : NaN;
-        if (!Number.isNaN(vNum)) pickedViewIds.add(vNum);
-        const sStr = (el as any).dataset.stageid;
-        const sNum = sStr ? parseInt(sStr, 10) : NaN;
-        if (!Number.isNaN(sNum)) pickedStageIds.add(sNum);
-        const pStr = (el as any).dataset.processid;
-        const pNum = pStr ? parseInt(pStr, 10) : NaN;
-        if (!Number.isNaN(pNum)) pickedProcessIds.add(pNum);
-        const stpStr = (el as any).dataset.stepid;
-        const stpNum = stpStr ? parseInt(stpStr, 10) : NaN;
-        if (!Number.isNaN(stpNum)) pickedStepIds.add(stpNum);
-        // Expand bounding box
-        minX = Math.min(minX, r.x);
-        minY = Math.min(minY, r.y);
-        maxX = Math.max(maxX, r.x + r.width);
-        maxY = Math.max(maxY, r.y + r.height);
-      }
-    });
-    const ids = Array.from(pickedFieldIds.values());
-    const vIds = Array.from(pickedViewIds.values());
-    const stIds = Array.from(pickedStageIds.values());
-    const prIds = Array.from(pickedProcessIds.values());
-    const stepIds = Array.from(pickedStepIds.values());
-    // If user is on Views tab and a view is selected, ensure it is included
-    let augmentedVIds = vIds;
-    if (activeTab === "views" && selectedView) {
-      let currentViewId: number | null = null;
-      if (selectedView.startsWith("db-")) {
-        const parsed = parseInt(selectedView.substring(3), 10);
-        if (!Number.isNaN(parsed)) currentViewId = parsed;
-      } else {
-        const parsed = parseInt(selectedView, 10);
-        if (!Number.isNaN(parsed)) currentViewId = parsed;
-      }
-      if (currentViewId !== null && !augmentedVIds.includes(currentViewId)) {
-        augmentedVIds = [...augmentedVIds, currentViewId];
-      }
-    }
-    setSelectedFieldIds(ids);
-    setSelectedViewIds(augmentedVIds);
-    setSelectedStageIds(stIds);
-    setSelectedProcessIds(prIds);
-    setSelectedStepIds(stepIds);
-    // Compute overlay anchor position near the selection (top-right with clamping)
-    let overlayX = selectionRect.x + selectionRect.width + 8;
-    let overlayY = selectionRect.y - 8; // slightly above
-    if (
-      (ids.length > 0 ||
-        vIds.length > 0 ||
-        stIds.length > 0 ||
-        prIds.length > 0 ||
-        stepIds.length > 0) &&
-      isFinite(minX) &&
-      isFinite(minY) &&
-      isFinite(maxX)
-    ) {
-      overlayX = maxX + 8;
-      overlayY = minY - 8;
-    }
-    // Clamp within viewport with a conservative width assumption
-    const assumedWidth = 320;
-    const margin = 8;
-    const viewportW = window.innerWidth;
-    const viewportH = window.innerHeight;
-    if (overlayX + assumedWidth > viewportW - margin) {
-      // place to the left of selection
-      const leftCandidate =
-        ids.length > 0 && isFinite(minX)
-          ? minX - assumedWidth - 8
-          : selectionRect.x - assumedWidth - 8;
-      overlayX = Math.max(margin, leftCandidate);
-    }
-    // Clamp Y
-    overlayY = Math.max(margin, Math.min(overlayY, viewportH - margin - 120));
-    setQuickOverlayPosition({ x: overlayX, y: overlayY });
-    setIsFreeFormSelecting(false);
-    setSelectionStart(null);
-    setSelectionRect(null);
-    // Open quick chat if we have any ids; still allow opening with none
-    setIsQuickChatOpen(true);
-  }, [activeTab, selectedView, selectionRect]);
+  // Resize handlers are provided by useChatPanel
 
   const sendQuickChat = useCallback(async () => {
     if (!quickChatText.trim()) return;
@@ -656,46 +437,7 @@ export default function WorkflowPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fields, views, selectedFieldIds, selectedViewIds, quickChatText]);
 
-  const onResizeMouseDown = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      isResizingRef.current = true;
-      resizeStartXRef.current = e.clientX;
-      resizeStartWidthRef.current = chatPanelWidth;
-      // Prevent text selection while dragging
-      document.body.style.userSelect = "none";
-    },
-    [chatPanelWidth],
-  );
-
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isResizingRef.current) return;
-      const dx = e.clientX - resizeStartXRef.current;
-      // Handle is at the left edge of the right panel; moving right shrinks the panel
-      const nextWidth = resizeStartWidthRef.current - dx;
-      const clamped = Math.min(
-        Math.max(nextWidth, CHAT_MIN_WIDTH),
-        CHAT_MAX_WIDTH,
-      );
-      setChatPanelWidth(clamped);
-      lastExpandedWidthRef.current = clamped;
-      if (!isChatPanelExpanded) {
-        setIsChatPanelExpanded(true);
-      }
-    };
-    const onMouseUp = () => {
-      if (isResizingRef.current) {
-        isResizingRef.current = false;
-        document.body.style.userSelect = "";
-      }
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [setChatPanelWidth, setIsChatPanelExpanded, isChatPanelExpanded]);
+  // Resizing mouse handlers are provided by useChatPanel
 
   // Load checkpoints from sessionStorage
   useEffect(() => {
@@ -717,60 +459,7 @@ export default function WorkflowPage() {
     }
   }, [checkpoints, id]);
 
-  // Effect to send model updates to iframe when the model is updated
-  useEffect(() => {
-    const handleModelUpdate = () => {
-      if (isPreviewMode && previewContainerRef.current) {
-        const iframe = previewContainerRef.current.querySelector("iframe");
-        if (iframe) {
-          const model = generateModelData(fields, workflowModel.stages);
-          iframe.contentWindow?.postMessage(model, "*");
-        }
-      }
-    };
-
-    // Add custom event listener
-    window.addEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
-
-    return () => {
-      window.removeEventListener(MODEL_UPDATED_EVENT, handleModelUpdate);
-    };
-  }, [isPreviewMode, generateModelData, fields, workflowModel.stages]);
-
-  // Effect to manage iframe creation and cleanup
-  useEffect(() => {
-    let iframe: HTMLIFrameElement | null = null;
-    // Capture the ref value at the start of the effect
-    const container = previewContainerRef.current;
-
-    if (isPreviewMode && container) {
-      iframe = container.querySelector("iframe");
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.src =
-          "https://blueprint2024-8b147.web.app/blueprint-preview.html";
-        iframe.className = "w-full h-full border-0";
-        iframe.title = "Blueprint Preview";
-
-        // Once the iframe loads, send the model data
-        iframe.onload = () => {
-          if (iframe) {
-            const model = generateModelData(fields, workflowModel.stages);
-            iframe.contentWindow?.postMessage(model, "*");
-          }
-        };
-
-        container.appendChild(iframe);
-      }
-    }
-
-    // Cleanup function to remove iframe when preview mode is disabled
-    return () => {
-      if (container && iframe) {
-        container.removeChild(iframe);
-      }
-    };
-  }, [isPreviewMode, fields, workflowModel.stages, generateModelData]); // Add missing dependencies
+  // Iframe lifecycle handled by usePreviewIframe
 
   // Define fetchCase before using it in useEffect
   const fetchCase = useCallback(async () => {
@@ -874,24 +563,7 @@ export default function WorkflowPage() {
     loadWorkflow();
   }, [id, fetchCase, loadWorkflow]);
 
-  // Handle iframe creation
-  useEffect(() => {
-    const container = previewContainerRef.current;
-    if (!container) return;
-
-    const iframe = document.createElement("iframe");
-    iframe.src = `/preview/${id}`;
-    iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    iframe.style.border = "none";
-    container.appendChild(iframe);
-
-    return () => {
-      if (container) {
-        container.removeChild(iframe);
-      }
-    };
-  }, [id]);
+  // Legacy preview iframe creation handled by usePreviewIframe
 
   if (loading) {
     return (
@@ -3208,36 +2880,14 @@ export default function WorkflowPage() {
       </div>
 
       {/* Separator & Chat Panel */}
-      {/* Resize Separator with centered toggle button */}
-      <div
-        className="relative w-[6px] bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 cursor-col-resize"
+      <ResizeSeparator
         onMouseDown={onResizeMouseDown}
-        aria-label="Resize chat panel"
-        title="Drag to resize"
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleToggleChatPanel();
-          }}
-          className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-white dark:bg-gray-900 shadow ring-1 ring-gray-300 dark:ring-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-          aria-label={
-            isChatPanelExpanded ? "Collapse chat panel" : "Expand chat panel"
-          }
-          title={isChatPanelExpanded ? "Collapse" : "Expand"}
-        >
-          {isChatPanelExpanded ? (
-            <FaChevronRight className="h-4 w-4" />
-          ) : (
-            <FaChevronLeft className="h-4 w-4" />
-          )}
-        </button>
-        {/* Grip indicator */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">
-          <FaGripVertical className="h-3 w-3" />
-        </div>
-      </div>
+        onToggle={(e) => {
+          e.stopPropagation();
+          handleToggleChatPanel();
+        }}
+        isExpanded={isChatPanelExpanded}
+      />
 
       {/* Chat Panel */}
       <motion.div
@@ -3254,74 +2904,20 @@ export default function WorkflowPage() {
         }}
       >
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Chat Panel Tabs */}
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <div className="flex">
-              <button
-                onClick={() => setActivePanelTab("chat")}
-                className={`flex-1 px-4 py-2 text-sm font-medium ${
-                  activePanelTab === "chat"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setActivePanelTab("history")}
-                className={`flex-1 px-4 py-2 text-sm font-medium ${
-                  activePanelTab === "history"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                History
-              </button>
-            </div>
-          </div>
+          <ChatPanelTabs
+            active={activePanelTab}
+            onChange={(tab) => setActivePanelTab(tab)}
+          />
 
-          {/* Chat Panel Content */}
-          <div className="flex-1 overflow-hidden flex flex-col">
-            {activePanelTab === "chat" ? (
-              <>
-                {/* Chat Header */}
-                <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    Chat
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={beginFreeFormSelection}
-                      className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg border bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-900/20 dark:border-purple-700 dark:text-purple-300"
-                      title="AI quick action"
-                    >
-                      <FaMagic className="w-3.5 h-3.5" />
-                      AI quick action
-                    </button>
-                    <button
-                      onClick={handleClearChat}
-                      className="px-3 py-1 text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-red-200 dark:hover:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 active:bg-red-50 dark:active:bg-red-900/20 transition-all duration-200 ease-in-out bg-white dark:bg-gray-900"
-                      title="Clear chat history"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                </div>
-                {/* Chat Interface */}
-                <div className="flex-1 overflow-hidden">
-                  <ChatInterface
-                    messages={messages}
-                    onSendMessage={handleSendMessage}
-                    isProcessing={isProcessing}
-                    isLoading={false}
-                    caseid={parseInt(id)}
-                  />
-                </div>
-              </>
-            ) : (
-              <ChangesPanel caseid={parseInt(id)} />
-            )}
-          </div>
+          <ChatPanelContent
+            activeTab={activePanelTab}
+            messages={messages}
+            onSendMessage={handleSendMessage}
+            isProcessing={isProcessing}
+            caseId={parseInt(id)}
+            onQuickAction={beginFreeFormSelection}
+            onClearChat={handleClearChat}
+          />
         </div>
       </motion.div>
 
@@ -3381,131 +2977,25 @@ export default function WorkflowPage() {
 
       {/* Free Form selection overlay */}
       {isFreeFormSelecting && (
-        <div
-          className="fixed inset-0 z-[60] cursor-crosshair"
+        <FreeFormSelectionOverlay
+          selectionRect={selectionRect}
           onMouseDown={onSelectionMouseDown}
           onMouseMove={onSelectionMouseMove}
           onMouseUp={onSelectionMouseUp}
-        >
-          {/* Dim background to indicate selection mode */}
-          <div className="absolute inset-0 bg-black/10 dark:bg-white/10 pointer-events-none" />
-          {selectionRect && (
-            <div
-              className="absolute border-2 border-blue-500 bg-blue-500/10"
-              style={{
-                left: selectionRect.x,
-                top: selectionRect.y,
-                width: selectionRect.width,
-                height: selectionRect.height,
-              }}
-            />
-          )}
-        </div>
+        />
       )}
 
       {/* Quick Chat floating overlay (non-blocking) */}
       {isQuickChatOpen && quickOverlayPosition && (
-        <div
-          className="fixed z-[70]"
-          style={{ left: quickOverlayPosition.x, top: quickOverlayPosition.y }}
-        >
-          <div className="w-[360px] rounded-xl shadow-2xl ring-1 ring-purple-400/40 border border-purple-300/60 dark:border-purple-700/60 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm p-3">
-            <div className="flex items-center gap-2">
-              <div className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-purple-600 text-white shadow">
-                <FaMagic className="w-3.5 h-3.5" />
-              </div>
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {(() => {
-                  const stageCount = selectedStageIds.length;
-                  const processCount = selectedProcessIds.length;
-                  const stepCount = selectedStepIds.length;
-                  const fieldCount = selectedFieldIds.length;
-                  // Collect view IDs explicitly selected and those implied by selected steps
-                  const impliedViewIds = new Set<number>();
-                  for (const stage of workflowModel.stages) {
-                    for (const process of stage.processes) {
-                      for (const step of process.steps) {
-                        const stepIdNum = step.id as number;
-                        const maybeViewId = (step as any).viewId as
-                          | number
-                          | undefined;
-                        if (
-                          selectedStepIds.includes(stepIdNum) &&
-                          typeof maybeViewId === "number"
-                        ) {
-                          impliedViewIds.add(maybeViewId);
-                        }
-                      }
-                    }
-                  }
-                  const viewIdsUnion = new Set<number>(selectedViewIds);
-                  impliedViewIds.forEach((v) => viewIdsUnion.add(v));
-                  const viewCount = viewIdsUnion.size;
-
-                  const parts: string[] = [];
-                  if (stageCount > 0)
-                    parts.push(
-                      `${stageCount} stage${stageCount === 1 ? "" : "s"}`,
-                    );
-                  if (processCount > 0)
-                    parts.push(
-                      `${processCount} process${
-                        processCount === 1 ? "" : "es"
-                      }`,
-                    );
-                  if (stepCount > 0)
-                    parts.push(
-                      `${stepCount} step${stepCount === 1 ? "" : "s"}`,
-                    );
-                  if (fieldCount > 0)
-                    parts.push(
-                      `${fieldCount} field${fieldCount === 1 ? "" : "s"}`,
-                    );
-
-                  let suffix = "";
-                  if (stepCount > 0 && viewCount > 0) {
-                    suffix = ` including ${viewCount} view${
-                      viewCount === 1 ? "" : "s"
-                    }`;
-                  } else if (stepCount === 0 && viewCount > 0) {
-                    parts.push(
-                      `${viewCount} view${viewCount === 1 ? "" : "s"}`,
-                    );
-                  }
-
-                  if (parts.length === 0) return "No items selected";
-                  if (parts.length === 1)
-                    return `${parts[0]} selected${suffix}`;
-                  if (parts.length === 2)
-                    return `${parts[0]} and ${parts[1]} selected${suffix}`;
-                  return `${parts.slice(0, -1).join(", ")} and ${
-                    parts[parts.length - 1]
-                  } selected${suffix}`;
-                })()}
-              </div>
-            </div>
-            <div className="mt-1 text-xs text-purple-800 dark:text-purple-300">
-              AI quick action — type and press Enter. Esc to close.
-            </div>
-            <input
-              ref={quickInputRef}
-              className="mt-2 w-full rounded-md border border-purple-300/70 dark:border-purple-700/60 bg-white dark:bg-gray-900 px-2 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              placeholder="Quick edit..."
-              value={quickChatText}
-              onChange={(e) => setQuickChatText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void sendQuickChat();
-                }
-                if (e.key === "Escape") {
-                  setIsQuickChatOpen(false);
-                }
-              }}
-              autoFocus
-            />
-          </div>
-        </div>
+        <QuickChatOverlay
+          position={quickOverlayPosition}
+          selectionSummary={quickSelectionSummary}
+          inputRef={quickInputRef as React.RefObject<HTMLInputElement | null>}
+          value={quickChatText}
+          onChange={setQuickChatText}
+          onEnter={() => void sendQuickChat()}
+          onEscape={() => setIsQuickChatOpen(false)}
+        />
       )}
     </div>
   );
