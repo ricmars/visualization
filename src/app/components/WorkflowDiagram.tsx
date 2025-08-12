@@ -783,6 +783,13 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                             : "border-gray-200 dark:border-gray-700 hover:border-blue-500/30 dark:hover:border-blue-500/30"
                                                         }
                                                       `}
+                                                          data-stepid={step.id}
+                                                          data-processid={
+                                                            process.id
+                                                          }
+                                                          data-stageid={
+                                                            stage.id
+                                                          }
                                                           data-viewid={
                                                             step.type ===
                                                               "Collect information" &&

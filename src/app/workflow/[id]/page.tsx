@@ -227,6 +227,7 @@ export default function WorkflowPage() {
   const [selectedViewIds, setSelectedViewIds] = useState<number[]>([]);
   const [selectedStageIds, setSelectedStageIds] = useState<number[]>([]);
   const [selectedProcessIds, setSelectedProcessIds] = useState<number[]>([]);
+  const [selectedStepIds, setSelectedStepIds] = useState<number[]>([]);
   const [isQuickChatOpen, setIsQuickChatOpen] = useState(false);
   const [quickChatText, setQuickChatText] = useState("");
   const [quickOverlayPosition, setQuickOverlayPosition] = useState<{
@@ -477,16 +478,17 @@ export default function WorkflowPage() {
       setIsFreeFormSelecting(false);
       return;
     }
-    // Find all items marked with data-fieldid, data-viewid, data-stageid, or data-processid that intersect selectionRect
+    // Find all items marked with data-fieldid, data-viewid, data-stageid, data-processid, or data-stepid that intersect selectionRect
     const nodes = Array.from(
       document.querySelectorAll<HTMLElement>(
-        "[data-fieldid], [data-viewid], [data-stageid], [data-processid]",
+        "[data-fieldid], [data-viewid], [data-stageid], [data-processid], [data-stepid]",
       ),
     );
     const pickedFieldIds = new Set<number>();
     const pickedViewIds = new Set<number>();
     const pickedStageIds = new Set<number>();
     const pickedProcessIds = new Set<number>();
+    const pickedStepIds = new Set<number>();
     // Track bounding box for selected nodes
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
@@ -513,6 +515,9 @@ export default function WorkflowPage() {
         const pStr = (el as any).dataset.processid;
         const pNum = pStr ? parseInt(pStr, 10) : NaN;
         if (!Number.isNaN(pNum)) pickedProcessIds.add(pNum);
+        const stpStr = (el as any).dataset.stepid;
+        const stpNum = stpStr ? parseInt(stpStr, 10) : NaN;
+        if (!Number.isNaN(stpNum)) pickedStepIds.add(stpNum);
         // Expand bounding box
         minX = Math.min(minX, r.x);
         minY = Math.min(minY, r.y);
@@ -524,6 +529,7 @@ export default function WorkflowPage() {
     const vIds = Array.from(pickedViewIds.values());
     const stIds = Array.from(pickedStageIds.values());
     const prIds = Array.from(pickedProcessIds.values());
+    const stepIds = Array.from(pickedStepIds.values());
     // If user is on Views tab and a view is selected, ensure it is included
     let augmentedVIds = vIds;
     if (activeTab === "views" && selectedView) {
@@ -543,6 +549,7 @@ export default function WorkflowPage() {
     setSelectedViewIds(augmentedVIds);
     setSelectedStageIds(stIds);
     setSelectedProcessIds(prIds);
+    setSelectedStepIds(stepIds);
     // Compute overlay anchor position near the selection (top-right with clamping)
     let overlayX = selectionRect.x + selectionRect.width + 8;
     let overlayY = selectionRect.y - 8; // slightly above
@@ -550,7 +557,8 @@ export default function WorkflowPage() {
       (ids.length > 0 ||
         vIds.length > 0 ||
         stIds.length > 0 ||
-        prIds.length > 0) &&
+        prIds.length > 0 ||
+        stepIds.length > 0) &&
       isFinite(minX) &&
       isFinite(minY) &&
       isFinite(maxX)
@@ -608,6 +616,18 @@ export default function WorkflowPage() {
         }
       }
     }
+    // Map selected step ids to names
+    const stepMap: { ids: number[]; names: string[] } = { ids: [], names: [] };
+    for (const stage of workflowModel.stages) {
+      for (const process of stage.processes) {
+        for (const step of process.steps) {
+          if (selectedStepIds.includes(step.id as number)) {
+            stepMap.ids.push(step.id as number);
+            stepMap.names.push(step.name);
+          }
+        }
+      }
+    }
     const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
       selectedFieldIds,
     )}\nSelected fieldNames=${JSON.stringify(
@@ -622,7 +642,11 @@ export default function WorkflowPage() {
       stageNames,
     )}\nSelected processIds=${JSON.stringify(
       processMap.ids,
-    )}\nSelected processNames=${JSON.stringify(processMap.names)}\n`;
+    )}\nSelected processNames=${JSON.stringify(
+      processMap.names,
+    )}\nSelected stepIds=${JSON.stringify(
+      stepMap.ids,
+    )}\nSelected stepNames=${JSON.stringify(stepMap.names)}\n`;
     const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
     // Close modal immediately before sending to avoid waiting for LLM stream
     setIsQuickChatOpen(false);
@@ -3379,17 +3403,73 @@ export default function WorkflowPage() {
                 <FaMagic className="w-3.5 h-3.5" />
               </div>
               <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {selectedFieldIds.length + selectedViewIds.length > 0
-                  ? `Selected ${selectedFieldIds.length} field${
-                      selectedFieldIds.length === 1 ? "" : "s"
-                    }${
-                      selectedViewIds.length > 0
-                        ? ` and ${selectedViewIds.length} view${
-                            selectedViewIds.length === 1 ? "" : "s"
-                          }`
-                        : ""
-                    }`
-                  : "No items selected"}
+                {(() => {
+                  const stageCount = selectedStageIds.length;
+                  const processCount = selectedProcessIds.length;
+                  const stepCount = selectedStepIds.length;
+                  const fieldCount = selectedFieldIds.length;
+                  // Collect view IDs explicitly selected and those implied by selected steps
+                  const impliedViewIds = new Set<number>();
+                  for (const stage of workflowModel.stages) {
+                    for (const process of stage.processes) {
+                      for (const step of process.steps) {
+                        const stepIdNum = step.id as number;
+                        const maybeViewId = (step as any).viewId as
+                          | number
+                          | undefined;
+                        if (
+                          selectedStepIds.includes(stepIdNum) &&
+                          typeof maybeViewId === "number"
+                        ) {
+                          impliedViewIds.add(maybeViewId);
+                        }
+                      }
+                    }
+                  }
+                  const viewIdsUnion = new Set<number>(selectedViewIds);
+                  impliedViewIds.forEach((v) => viewIdsUnion.add(v));
+                  const viewCount = viewIdsUnion.size;
+
+                  const parts: string[] = [];
+                  if (stageCount > 0)
+                    parts.push(
+                      `${stageCount} stage${stageCount === 1 ? "" : "s"}`,
+                    );
+                  if (processCount > 0)
+                    parts.push(
+                      `${processCount} process${
+                        processCount === 1 ? "" : "es"
+                      }`,
+                    );
+                  if (stepCount > 0)
+                    parts.push(
+                      `${stepCount} step${stepCount === 1 ? "" : "s"}`,
+                    );
+                  if (fieldCount > 0)
+                    parts.push(
+                      `${fieldCount} field${fieldCount === 1 ? "" : "s"}`,
+                    );
+
+                  let suffix = "";
+                  if (stepCount > 0 && viewCount > 0) {
+                    suffix = ` including ${viewCount} view${
+                      viewCount === 1 ? "" : "s"
+                    }`;
+                  } else if (stepCount === 0 && viewCount > 0) {
+                    parts.push(
+                      `$${viewCount} view${viewCount === 1 ? "" : "s"}`,
+                    );
+                  }
+
+                  if (parts.length === 0) return "No items selected";
+                  if (parts.length === 1)
+                    return `${parts[0]} selected${suffix}`;
+                  if (parts.length === 2)
+                    return `${parts[0]} and ${parts[1]} selected${suffix}`;
+                  return `${parts.slice(0, -1).join(", ")} and ${
+                    parts[parts.length - 1]
+                  } selected${suffix}`;
+                })()}
               </div>
             </div>
             <div className="mt-1 text-xs text-purple-800 dark:text-purple-300">
