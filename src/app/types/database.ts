@@ -1,4 +1,4 @@
-import { fieldTypes, FieldType } from "./fields";
+import { fieldTypes, FieldType } from "../utils/fieldTypes";
 import { ruleTypeRegistry } from "./ruleTypeRegistry";
 
 // Database column names

@@ -1,4 +1,4 @@
-import { FieldType } from "../types/fields";
+import { FieldType } from "../utils/fieldTypes";
 
 // Define proper types for tool parameters and results
 export interface ToolParams {

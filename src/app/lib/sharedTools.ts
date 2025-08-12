@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { DB_TABLES } from "../types/database";
 import { stepTypes } from "../utils/stepTypes";
-import { fieldTypes, FieldType } from "../types/fields";
+import { fieldTypes, FieldType } from "../utils/fieldTypes";
 import {
   LLMTool,
   SaveCaseParams,
@@ -363,7 +363,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes, including setting defaultValue, marking a field as primary, toggling required, renaming labels, changing order, and updating options. You MUST provide a type-appropriate defaultValue for Checkbox ('false' or 'true'), Integer/Decimal/Percentage/Currency ('0'), Date/DateTime (ISO string), and Dropdown/RadioButtons/Status (one of the options). For free-text-like fields, include defaultValue only if a sensible default is explicitly requested; otherwise omit it. Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (defaultValue, primary, required, label, order, options, type). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {
@@ -380,7 +380,9 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 name: { type: "string", description: "Field name" },
                 type: {
                   type: "string",
-                  description: "Field type (Text, Email, Date, etc.)",
+                  enum: [...fieldTypes],
+                  description:
+                    "Field type. Must be one of the allowed field types.",
                 },
                 caseid: {
                   type: "integer",

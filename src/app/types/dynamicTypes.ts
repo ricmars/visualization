@@ -1,5 +1,5 @@
 import { ruleTypeRegistry } from "./ruleTypeRegistry";
-import { FieldType } from "./fields";
+import { FieldType } from "../utils/fieldTypes";
 
 // Dynamic type generation from rule type registry
 // This ensures all types are defined in a single place and are consistent

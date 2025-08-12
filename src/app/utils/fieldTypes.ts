@@ -1,4 +1,35 @@
-import { FieldType } from "../types/fields";
+// Source of truth for field types (aligned with stepTypes.ts pattern)
+export const fieldTypes = [
+  "Address",
+  "AutoComplete",
+  "Checkbox",
+  "Currency",
+  "Date",
+  "DateTime",
+  "Decimal",
+  "Dropdown",
+  "Email",
+  "Integer",
+  "Location",
+  "ReferenceValues",
+  "DataReferenceSingle",
+  "DataReferenceMulti",
+  "CaseReferenceSingle",
+  "CaseReferenceMulti",
+  "Percentage",
+  "Phone",
+  "RadioButtons",
+  "RichText",
+  "Status",
+  "Text",
+  "TextArea",
+  "Time",
+  "URL",
+  "UserReference",
+] as const;
+
+// Type derived from the tuple
+export type FieldType = (typeof fieldTypes)[number];
 
 // Mapping of technical field types to user-friendly display names
 export const fieldTypeToDisplayName: Record<FieldType, string> = {
@@ -31,8 +62,8 @@ export const fieldTypeToDisplayName: Record<FieldType, string> = {
 };
 
 // Get all possible values from the fieldTypes array
-export const getAllFieldTypes = (): FieldType[] => {
-  return Object.keys(fieldTypeToDisplayName) as FieldType[];
+export const getAllFieldTypes = (): readonly FieldType[] => {
+  return fieldTypes;
 };
 
 // Function to get the display name for a field type
