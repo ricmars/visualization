@@ -82,10 +82,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           id: caseData.id,
           name: caseData.name,
           description: caseData.description,
-          model:
-            typeof caseData.model === "string"
-              ? JSON.parse(caseData.model)
-              : { stages: [] },
+          model: caseData.model ?? { stages: [] },
         };
       },
     },
@@ -327,14 +324,14 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
         console.log("saveCase UPDATE query values:", [
           name,
           description,
-          JSON.stringify(cleanedModel),
+          cleanedModel,
           id,
         ]);
 
         const result = await pool.query(query, [
           name,
           description,
-          JSON.stringify(cleanedModel),
+          cleanedModel,
           id,
         ]);
         if (result.rowCount === 0) {
@@ -364,10 +361,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           id: caseData.id ?? id,
           name: caseData.name ?? name,
           description: caseData.description ?? description,
-          model:
-            typeof caseData.model === "string"
-              ? JSON.parse(caseData.model)
-              : cleanedModel ?? null,
+          model: caseData.model ?? cleanedModel ?? null,
         };
       },
     },
@@ -924,16 +918,11 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           console.log("saveView UPDATE query values:", [
             name,
             caseid,
-            JSON.stringify(model),
+            model,
             id,
           ]);
 
-          const result = await pool.query(query, [
-            name,
-            caseid,
-            JSON.stringify(model),
-            id,
-          ]);
+          const result = await pool.query(query, [name, caseid, model, id]);
           if (result.rowCount === 0) {
             console.error(`saveView ERROR: No view found with id ${id}`);
             throw new Error(`No view found with id ${id}`);
@@ -975,17 +964,9 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             RETURNING id, name, caseid, model
           `;
           console.log("saveView INSERT query:", query);
-          console.log("saveView INSERT query values:", [
-            name,
-            caseid,
-            JSON.stringify(model),
-          ]);
+          console.log("saveView INSERT query values:", [name, caseid, model]);
 
-          const result = await pool.query(query, [
-            name,
-            caseid,
-            JSON.stringify(model),
-          ]);
+          const result = await pool.query(query, [name, caseid, model]);
           const viewData = result.rows[0];
 
           console.log("saveView INSERT successful:");

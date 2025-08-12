@@ -78,7 +78,7 @@ interface DatabaseCase {
   id: number;
   name: string;
   description: string;
-  model: string;
+  model: any;
 }
 
 interface WorkflowState {
@@ -95,7 +95,7 @@ interface ComposedModel {
 interface View {
   id: number;
   name: string;
-  model: string;
+  model: any;
   caseid: number;
 }
 
@@ -151,8 +151,8 @@ async function fetchCaseData(caseid: string): Promise<ComposedModel> {
       throw new Error("Case not found");
     }
 
-    // Parse the model from the case data
-    const parsedModel = JSON.parse(selectedCase.model);
+    // Use jsonb model directly
+    const parsedModel = selectedCase.model;
 
     // Validate that all stages, processes, and steps have IDs
     const stagesWithIds = validateModelIds(parsedModel.stages || []);
@@ -272,7 +272,10 @@ export default function WorkflowPage() {
               const view = views.find((v) => v.id === step.viewId);
               if (view) {
                 try {
-                  const viewModel = JSON.parse(view.model);
+                  const viewModel =
+                    typeof view.model === "string"
+                      ? JSON.parse(view.model)
+                      : view.model;
                   if (Array.isArray(viewModel.fields)) {
                     const stepFields = viewModel.fields
                       .map((ref: { fieldId: number; required?: boolean }) => {
@@ -923,7 +926,7 @@ export default function WorkflowPage() {
       });
 
       const updatedModel = {
-        ...JSON.parse(selectedCase.model),
+        ...(selectedCase.model || {}),
         stages: updatedStages,
         name: selectedCase.name,
       };
@@ -933,7 +936,7 @@ export default function WorkflowPage() {
       const requestBody = {
         name: selectedCase.name,
         description: selectedCase.description,
-        model: JSON.stringify(updatedModel),
+        model: updatedModel,
       };
 
       const response = await fetch(requestUrl, {
@@ -956,7 +959,7 @@ export default function WorkflowPage() {
       // Update the case and model state
       setSelectedCase({
         ...selectedCase,
-        model: JSON.stringify(updatedModel),
+        model: updatedModel,
       });
       setModel((prev) =>
         prev
@@ -1231,7 +1234,7 @@ export default function WorkflowPage() {
       }
 
       // Update the case model to remove the field from all steps
-      const currentModel = JSON.parse(selectedCase.model);
+      const currentModel = selectedCase.model || {};
       const updatedModel = {
         ...currentModel,
         fields: (currentModel.fields || []).filter(
@@ -1264,7 +1267,7 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             name: selectedCase.name,
             description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
+            model: updatedModel,
           }),
         },
       );
@@ -1333,7 +1336,8 @@ export default function WorkflowPage() {
       // Parse the existing view model
       let viewModel;
       try {
-        viewModel = JSON.parse(view.model);
+        viewModel =
+          typeof view.model === "string" ? JSON.parse(view.model) : view.model;
       } catch (_error) {
         viewModel = { fields: [] };
       }
@@ -1411,7 +1415,7 @@ export default function WorkflowPage() {
       const requestBody = {
         name: selectedCase.name,
         description: selectedCase.description,
-        model: JSON.stringify(updatedModel),
+        model: updatedModel,
       };
 
       const response = await fetch(requestUrl, {
@@ -1430,7 +1434,7 @@ export default function WorkflowPage() {
       const _responseData = await response.json();
       setSelectedCase({
         ...selectedCase,
-        model: JSON.stringify(updatedModel),
+        model: updatedModel,
       });
       setModel((prev) =>
         prev
@@ -1480,7 +1484,7 @@ export default function WorkflowPage() {
       const requestBody = {
         name: selectedCase.name,
         description: selectedCase.description,
-        model: JSON.stringify(updatedModel),
+        model: updatedModel,
       };
 
       console.log("=== Making Database Update Request ===");
@@ -1605,7 +1609,7 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             name: selectedCase.name,
             description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
+            model: updatedModel,
           }),
         },
       );
@@ -1710,7 +1714,7 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             name: selectedCase.name,
             description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
+            model: updatedModel,
           }),
         },
       );
@@ -1804,7 +1808,7 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             name: selectedCase.name,
             description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
+            model: updatedModel,
           }),
         },
       );
@@ -1889,7 +1893,7 @@ export default function WorkflowPage() {
           body: JSON.stringify({
             name: selectedCase.name,
             description: selectedCase.description,
-            model: JSON.stringify(updatedModel),
+            model: updatedModel,
           }),
         },
       );
@@ -2333,7 +2337,7 @@ export default function WorkflowPage() {
         prev
           ? {
               ...prev,
-              model: JSON.stringify(checkpoint.model),
+              model: checkpoint.model,
             }
           : null,
       );
@@ -2353,12 +2357,12 @@ export default function WorkflowPage() {
     if (!selectedCase) return;
 
     // Parse the model string into an object
-    const model = JSON.parse(selectedCase.model);
+    const model = selectedCase.model;
 
     const requestBody = {
       name: data.name,
       description: data.description,
-      model: JSON.stringify(model),
+      model,
     };
 
     try {
@@ -2478,7 +2482,8 @@ export default function WorkflowPage() {
       // Parse the existing view model
       let viewModel;
       try {
-        viewModel = JSON.parse(view.model);
+        viewModel =
+          typeof view.model === "string" ? JSON.parse(view.model) : view.model;
       } catch (_error) {
         viewModel = { fields: [] };
       }
@@ -2655,7 +2660,7 @@ export default function WorkflowPage() {
               id: selectedCase.id,
               name: selectedCase.name,
               description: selectedCase.description,
-              model: JSON.stringify(updatedModel),
+              model: updatedModel,
             },
           }),
         },

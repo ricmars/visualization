@@ -47,8 +47,8 @@ export const caseRuleType: RuleTypeDefinition = {
       },
       {
         name: "model",
-        type: "string",
-        description: "JSON string containing the workflow structure",
+        type: "ViewModel",
+        description: "JSON model containing the workflow structure",
       },
     ],
   },
@@ -77,7 +77,7 @@ export const caseRuleType: RuleTypeDefinition = {
       },
       {
         name: "model",
-        type: "TEXT",
+        type: "JSONB",
         nullable: true,
         description: "JSON workflow model",
       },

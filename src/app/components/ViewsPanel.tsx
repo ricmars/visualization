@@ -35,7 +35,7 @@ interface ViewsPanelProps {
 interface View {
   id: number;
   name: string;
-  model: string;
+  model: unknown;
   caseid: number;
 }
 
@@ -160,7 +160,10 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     );
     if (databaseView && databaseView.viewData) {
       try {
-        const viewModel = JSON.parse(databaseView.viewData.model);
+        const viewModel =
+          typeof databaseView.viewData.model === "string"
+            ? JSON.parse(databaseView.viewData.model as any)
+            : databaseView.viewData.model || {};
         if (viewModel.fields && Array.isArray(viewModel.fields)) {
           // Map fieldIds to actual field objects
           const viewFields: Field[] = [];
@@ -248,7 +251,10 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
     );
     if (databaseView && databaseView.viewData) {
       try {
-        const viewModel = JSON.parse(databaseView.viewData.model);
+        const viewModel =
+          typeof databaseView.viewData.model === "string"
+            ? JSON.parse(databaseView.viewData.model as any)
+            : databaseView.viewData.model || {};
         if (viewModel.fields && Array.isArray(viewModel.fields)) {
           const fieldIds: number[] = [];
           viewModel.fields.forEach((fieldRef: { fieldId: number }) => {
