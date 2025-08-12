@@ -15,7 +15,11 @@ import { useChatPanel } from "./hooks/useChatPanel";
 import { useFreeFormSelection } from "./hooks/useFreeFormSelection";
 import useQuickSelectionSummary from "./hooks/useQuickSelectionSummary";
 import usePreviewIframe from "./hooks/usePreviewIframe";
+import useStepsUpdate from "./hooks/useStepsUpdate";
+import useFieldMutations from "./hooks/useFieldMutations";
+import useWorkflowMutations from "./hooks/useWorkflowMutations";
 import { composeQuickChatMessage } from "./utils/composeQuickChatMessage";
+import processToolResponse from "./utils/processToolResponse";
 import { Service } from "../../services/service";
 import {
   Field,
@@ -25,8 +29,9 @@ import {
   Step,
   WorkflowModel,
 } from "../../types";
-import { StepType } from "../../utils/stepTypes";
+// import { StepType } from "../../utils/stepTypes";
 import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
+import { validateModelIds } from "./utils/validateModelIds";
 
 // Initialize rule types on module load
 registerRuleTypes();
@@ -45,6 +50,10 @@ import FieldsList from "../../components/FieldsList";
 //
 import WorkflowTopBar from "./components/WorkflowTopBar";
 import WorkflowToolbar from "./components/WorkflowToolbar";
+import WorkflowTabs from "./components/WorkflowTabs";
+import FieldsHeader from "./components/FieldsHeader";
+import LoadingScreen from "./components/LoadingScreen";
+import ErrorScreen from "./components/ErrorScreen";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
 import { DB_TABLES, DB_COLUMNS } from "../../types/database";
@@ -104,41 +113,7 @@ interface View {
   caseid: number;
 }
 
-// Helper function to validate that all stages, processes, and steps have IDs
-function validateModelIds(stages: Partial<Stage>[]): Stage[] {
-  return stages.map((stage, stageIndex) => {
-    if (!stage.id) {
-      throw new Error(`Stage at index ${stageIndex} is missing an ID`);
-    }
-
-    return {
-      ...stage,
-      processes: (stage.processes || []).map(
-        (process: Partial<Process>, processIndex: number) => {
-          if (!process.id) {
-            throw new Error(
-              `Process at index ${processIndex} in stage "${stage.name}" is missing an ID`,
-            );
-          }
-
-          return {
-            ...process,
-            steps: (process.steps || []).map(
-              (step: Partial<Step>, stepIndex: number) => {
-                if (!step.id) {
-                  throw new Error(
-                    `Step at index ${stepIndex} in process "${process.name}" of stage "${stage.name}" is missing an ID`,
-                  );
-                }
-                return step as Step;
-              },
-            ),
-          } as Process;
-        },
-      ),
-    } as Stage;
-  });
-}
+// validateModelIds extracted to ./utils/validateModelIds
 
 async function fetchCaseData(caseid: string): Promise<ComposedModel> {
   try {
@@ -522,6 +497,57 @@ export default function WorkflowPage() {
     }
   }, [id]);
 
+  // Checkpoint helper must be defined before hooks that depend on it
+  const addCheckpoint = (description: string, model: WorkflowModel) => {
+    const newCheckpoint: WorkflowCheckpoint = {
+      id: parseInt(uuidv4().replace(/-/g, ""), 16),
+      timestamp: new Date().toISOString(),
+      description,
+      model,
+    };
+
+    setCheckpoints((prev) => {
+      const updated = [newCheckpoint, ...prev].slice(0, MAX_CHECKPOINTS);
+      return updated;
+    });
+  };
+
+  // Hooks that must always run every render (before any early returns)
+  const { handleStepsUpdate } = useStepsUpdate({
+    selectedCase,
+    setSelectedCase: (next) => setSelectedCase(next as any),
+    setModel,
+    eventName: MODEL_UPDATED_EVENT,
+  });
+
+  const { handleAddField, handleUpdateField, handleDeleteField } =
+    useFieldMutations({
+      selectedCase,
+      fields,
+      setFields,
+      setModel,
+      setSelectedCase: (next) => setSelectedCase(next as any),
+      caseId: id,
+      eventName: MODEL_UPDATED_EVENT,
+      fetchCaseData,
+    });
+
+  const {
+    handleAddStep,
+    handleDeleteStep,
+    handleDeleteProcess,
+    handleDeleteStage,
+  } = useWorkflowMutations({
+    selectedCase,
+    workflowStages: workflowModel.stages,
+    setSelectedCase: (next) => setSelectedCase(next as any),
+    setModel,
+    setViews,
+    addCheckpoint,
+    caseId: id,
+    eventName: MODEL_UPDATED_EVENT,
+  });
+
   // Load workflow data
   useEffect(() => {
     fetchCase();
@@ -531,25 +557,11 @@ export default function WorkflowPage() {
   // Legacy preview iframe creation handled by usePreviewIframe
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="text-red-500 mb-4">{error}</div>
-        <a
-          href="/"
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        >
-          Back to Home
-        </a>
-      </div>
-    );
+    return <ErrorScreen message={error} />;
   }
 
   if (!model) {
@@ -570,401 +582,11 @@ export default function WorkflowPage() {
     setActiveStep(stepId);
   };
 
-  const handleStepsUpdate = async (updatedStages: Stage[]) => {
-    if (!selectedCase) return;
+  // Handlers are provided by hooks declared above
 
-    try {
-      console.log("=== Starting Steps Update ===");
-      console.log("Case ID:", selectedCase.id);
-      console.log("Updated Stages:", {
-        count: updatedStages.length,
-        stages: updatedStages.map((s) => ({
-          name: s.name,
-          processes: s.processes.length,
-          steps: s.processes.reduce((acc, p) => acc + p.steps.length, 0),
-        })),
-      });
+  // handleUpdateField provided by useFieldMutations
 
-      const updatedModel = {
-        ...(selectedCase.model || {}),
-        stages: updatedStages,
-        name: selectedCase.name,
-      };
-
-      // Direct database call - database layer will handle checkpoints
-      const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
-      const requestBody = {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        model: updatedModel,
-      };
-
-      const response = await fetch(requestUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          `Failed to update case: ${response.status} ${errorText}`,
-        );
-      }
-
-      const _responseData = await response.json();
-
-      // Update the case and model state
-      setSelectedCase({
-        ...selectedCase,
-        model: updatedModel,
-      });
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedModel.stages,
-            }
-          : null,
-      );
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("=== Error in Steps Update ===");
-      console.error("Error:", error);
-      throw error;
-    }
-  };
-
-  const handleAddField = async (field: {
-    label: string;
-    type: Field["type"];
-    options?: string[];
-    required?: boolean;
-    primary?: boolean;
-    sampleValue?: string;
-  }): Promise<string> => {
-    if (!selectedCase) return "";
-
-    // Generate the actual field name
-    const fieldName = field.label.toLowerCase().replace(/\s+/g, "_");
-
-    try {
-      const fieldData = {
-        name: fieldName,
-        type: field.type,
-        label: field.label,
-        required: field.required ?? false,
-        primary: field.primary ?? false,
-        caseid: selectedCase.id,
-        description: field.label,
-        order: 0,
-        options: field.options ?? [],
-        sampleValue: field.sampleValue,
-      };
-
-      console.log("Creating field with data:", fieldData);
-
-      const response = await fetch(`/api/database?table=${DB_TABLES.FIELDS}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          table: DB_TABLES.FIELDS,
-          data: {
-            name: fieldData.name,
-            type: fieldData.type,
-            primary: fieldData.primary,
-            caseid: fieldData.caseid,
-            label: fieldData.label,
-            description: fieldData.description,
-            order: fieldData.order,
-            options: fieldData.options,
-            required: fieldData.required,
-            sampleValue: fieldData.sampleValue,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("=== Field Creation Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        console.error("Request Data:", {
-          table: DB_TABLES.FIELDS,
-          data: fieldData,
-        });
-        throw new Error("Failed to add field");
-      }
-
-      // Optimistically insert the created field into local state so UI updates immediately
-      const createResult = await response.json();
-      const createdField = createResult?.data;
-      if (createdField) {
-        setFields((prev) => [...prev, createdField]);
-      }
-
-      // Refresh the fields state from server to ensure consistency
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-      );
-      if (fieldsResponse.ok) {
-        const fieldsData = await fieldsResponse.json();
-        setFields(fieldsData.data);
-      }
-
-      // Refresh the model
-      const composedModel = await fetchCaseData(id);
-      setModel(composedModel);
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-
-      return fieldName;
-    } catch (error) {
-      console.error("Error adding field:", error);
-      alert("Failed to add field. Please try again.");
-      throw error;
-    }
-  };
-
-  const handleUpdateField = async (updates: Partial<Field>) => {
-    if (!selectedCase) {
-      console.error("Missing required data for field update:", {
-        selectedCase: null,
-      });
-      return;
-    }
-
-    // Prefer an explicit id from updates; otherwise, fallback to current editingField
-    const targetFieldId = updates.id ?? editingField?.id;
-    const targetField =
-      fields.find((f) => f.id === targetFieldId) || editingField || null;
-
-    if (!targetField || !targetField.id) {
-      console.error("Missing required data for field update:", {
-        selectedCase: selectedCase
-          ? { id: selectedCase.id, name: selectedCase.name }
-          : null,
-        editingField: targetField
-          ? {
-              id: targetField.id,
-              name: targetField.name,
-              label: targetField.label,
-              type: targetField.type,
-            }
-          : null,
-      });
-      return;
-    }
-
-    try {
-      // Prepare the request body
-      const requestBody = {
-        table: DB_TABLES.FIELDS,
-        data: {
-          id: targetField.id,
-          name: targetField.name,
-          label: updates.label || targetField.label,
-          type: updates.type || targetField.type,
-          primary: updates.primary ?? targetField.primary,
-          caseid: selectedCase.id,
-          options: (() => {
-            // If updates.options is provided, use it directly
-            if (updates.options !== undefined) {
-              console.log("Using updates.options:", updates.options);
-              return updates.options;
-            }
-
-            // Otherwise, process the existing options
-            if (targetField.options) {
-              if (Array.isArray(targetField.options)) {
-                console.log(
-                  "Using existing array options:",
-                  targetField.options,
-                );
-                return targetField.options;
-              } else {
-                try {
-                  const parsed = JSON.parse(targetField.options);
-                  console.log("Parsed existing options:", parsed);
-                  return parsed;
-                } catch (error) {
-                  console.error("Failed to parse options:", error);
-                  return [];
-                }
-              }
-            }
-
-            console.log("No options found, using empty array");
-            return [];
-          })(),
-          required: updates.required ?? targetField.required,
-          order: updates.order ?? targetField.order ?? 0,
-          description:
-            updates.description ||
-            targetField.description ||
-            "Field description",
-          sampleValue:
-            (updates as any).sampleValue !== undefined
-              ? (updates as any).sampleValue
-              : (targetField as any).sampleValue ?? null,
-        },
-      };
-
-      // Debug logging for field updates
-      console.log("=== Field Update Request Body ===");
-      console.log("Options type:", typeof requestBody.data.options);
-      console.log("Options is array:", Array.isArray(requestBody.data.options));
-
-      // First update the field in the fields table
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.FIELDS}&id=${targetField.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("=== Field Update Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        throw new Error(
-          `Failed to update field: ${response.status} ${errorText}`,
-        );
-      }
-
-      // Refresh the model to get updated fields
-      const composedModel = await fetchCaseData(id);
-      setModel(composedModel);
-
-      // Refresh the fields state to update the UI
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-      );
-      if (fieldsResponse.ok) {
-        const fieldsData = await fieldsResponse.json();
-        setFields(fieldsData.data);
-      }
-
-      setEditingField(null);
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error updating field:", error);
-      alert("Failed to update field. Please try again.");
-    }
-  };
-
-  const handleDeleteField = async (field: Field) => {
-    if (!selectedCase || !field.id) return;
-
-    try {
-      // Delete the field from the fields table
-      // The deleteField tool will automatically remove the field from all views
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.FIELDS}&id=${field.id}`,
-        {
-          method: "DELETE",
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("=== Field Deletion Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        throw new Error(
-          `Failed to delete field: ${response.status} ${errorText}`,
-        );
-      }
-
-      // Update the case model to remove the field from all steps
-      const currentModel = selectedCase.model || {};
-      const updatedModel = {
-        ...currentModel,
-        fields: (currentModel.fields || []).filter(
-          (f: Field) => f.id !== field.id,
-        ),
-        stages: currentModel.stages.map((stage: Stage) => ({
-          ...stage,
-          processes: stage.processes.map((process: Process) => ({
-            ...process,
-            steps: process.steps.map((step: Step) => ({
-              ...step,
-              fields:
-                step.fields?.filter((f: FieldReference) => {
-                  const referencedField = fields.find(
-                    (fieldObj) => fieldObj.id === f.fieldId,
-                  );
-                  return referencedField?.name !== field.name;
-                }) || [],
-            })),
-          })),
-        })),
-      };
-
-      // Update the case in the database
-      const updateResponse = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: updatedModel,
-          }),
-        },
-      );
-
-      if (!updateResponse.ok) {
-        throw new Error(`Failed to update case: ${updateResponse.status}`);
-      }
-
-      const { data: updatedCase } = await updateResponse.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
-
-      // Refresh the fields state to get updated fields
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-      );
-      if (fieldsResponse.ok) {
-        const fieldsData = await fieldsResponse.json();
-        setFields(fieldsData.data);
-      }
-
-      // Refresh the views state to get updated views
-      const viewsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-      );
-      if (viewsResponse.ok) {
-        const viewsData = await viewsResponse.json();
-        setViews(viewsData.data);
-      }
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error deleting field:", error);
-      alert("Failed to delete field. Please try again.");
-    }
-  };
+  // handleDeleteField provided by useFieldMutations
 
   const handleRemoveFieldFromView = async (field: Field) => {
     if (!selectedCase || !field.id || !selectedView) return;
@@ -1191,399 +813,13 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleAddStep = async (
-    stageId: number,
-    processId: number,
-    stepName: string,
-    stepType: StepType,
-  ) => {
-    if (!selectedCase) return;
+  // handleAddStep provided by useWorkflowMutations
 
-    try {
-      // 1) If the step collects information, create a corresponding view first
-      let createdViewId: number | undefined;
-      if (stepType === "Collect information") {
-        const createViewResponse = await fetch(
-          `/api/database?table=${DB_TABLES.VIEWS}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: stepName,
-              caseid: selectedCase.id,
-              model: {
-                fields: [],
-                layout: { type: "form", columns: 1 },
-              },
-            }),
-          },
-        );
-        if (!createViewResponse.ok) {
-          throw new Error(
-            `Failed to create view: ${createViewResponse.status}`,
-          );
-        }
-        const { data: createdView } = await createViewResponse.json();
-        createdViewId = createdView?.id;
-      }
+  // handleDeleteStep provided by useWorkflowMutations
 
-      // 2) Create the step, linking the new viewId when applicable
-      const newStep: Step = {
-        id: Date.now(),
-        name: stepName,
-        type: stepType,
-        fields: [],
-        ...(createdViewId ? { viewId: createdViewId } : {}),
-      };
+  // handleDeleteProcess provided by useWorkflowMutations
 
-      const updatedStages = workflowModel.stages.map((stage) =>
-        stage.id === stageId
-          ? {
-              ...stage,
-              processes: stage.processes.map((process) =>
-                process.id === processId
-                  ? {
-                      ...process,
-                      steps: [...process.steps, newStep],
-                    }
-                  : process,
-              ),
-            }
-          : stage,
-      );
-
-      const updatedModel: ComposedModel = {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        stages: updatedStages,
-      };
-
-      addCheckpoint(`Added step: ${stepName}`, updatedModel);
-
-      // 3) Persist the updated case with the new step (containing viewId if created)
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: updatedModel,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to add step: ${response.status}`);
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
-
-      // 4) Refresh views so the Views tab reflects the newly created view
-      try {
-        const viewsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
-        );
-        if (viewsResponse.ok) {
-          const viewsData = await viewsResponse.json();
-          setViews(viewsData.data);
-        }
-      } catch (_e) {
-        // Best-effort refresh; ignore failures here
-      }
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error adding step:", error);
-      throw error;
-    }
-  };
-
-  const handleDeleteStep = async (
-    stageId: number,
-    processId: number,
-    stepId: number,
-  ) => {
-    if (!selectedCase) return;
-
-    // Find the step being deleted to cascade delete its associated view (if any)
-    let viewIdToDelete: number | undefined;
-    try {
-      const stage = workflowModel.stages.find((s) => s.id === stageId);
-      const process = stage?.processes.find((p) => p.id === processId);
-      const step = process?.steps.find((st) => st.id === stepId);
-      if (step && typeof (step as any).viewId === "number") {
-        viewIdToDelete = (step as any).viewId as number;
-      }
-    } catch (_e) {
-      // Best-effort discovery; proceed regardless
-    }
-
-    const updatedStages = workflowModel.stages.map((stage) =>
-      stage.id === stageId
-        ? {
-            ...stage,
-            processes: stage.processes.map((process) =>
-              process.id === processId
-                ? {
-                    ...process,
-                    steps: process.steps.filter((step) => step.id !== stepId),
-                  }
-                : process,
-            ),
-          }
-        : stage,
-    );
-
-    const updatedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: updatedStages,
-    };
-
-    addCheckpoint("Deleted step", updatedModel);
-
-    try {
-      // If the step had a linked view, delete it from the database first
-      if (typeof viewIdToDelete === "number") {
-        try {
-          const deleteResp = await fetch(
-            `/api/database?table=${DB_TABLES.VIEWS}&id=${viewIdToDelete}`,
-            { method: "DELETE" },
-          );
-          if (!deleteResp.ok) {
-            const errText = await deleteResp.text();
-            console.warn(
-              `Failed to delete linked view ${viewIdToDelete}: ${deleteResp.status} ${errText}`,
-            );
-          }
-        } catch (e) {
-          console.warn("Error deleting linked view for step:", e);
-        }
-      }
-
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: updatedModel,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete step: ${response.status}`);
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
-
-      // Refresh views to reflect any deleted linked views
-      try {
-        const viewsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-        );
-        if (viewsResponse.ok) {
-          const viewsData = await viewsResponse.json();
-          setViews(viewsData.data);
-        }
-      } catch (_e) {
-        // ignore
-      }
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error deleting step:", error);
-      throw error;
-    }
-  };
-
-  const handleDeleteProcess = async (stageId: number, processId: number) => {
-    if (!selectedCase) return;
-
-    // Gather all view IDs linked to steps within this process for cascade deletion
-    let viewIdsToDelete: number[] = [];
-    try {
-      const stage = workflowModel.stages.find((s) => s.id === stageId);
-      const process = stage?.processes.find((p) => p.id === processId);
-      if (process) {
-        viewIdsToDelete = (process.steps || [])
-          .map((st) => (st as any).viewId as number | undefined)
-          .filter((vid): vid is number => typeof vid === "number");
-      }
-    } catch (_e) {
-      // Best-effort
-    }
-
-    const updatedStages = workflowModel.stages.map((stage) =>
-      stage.id === stageId
-        ? {
-            ...stage,
-            processes: stage.processes.filter(
-              (process) => process.id !== processId,
-            ),
-          }
-        : stage,
-    );
-
-    const updatedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: updatedStages,
-    };
-
-    addCheckpoint("Deleted process", updatedModel);
-
-    try {
-      // Best-effort delete of any linked views in parallel
-      if (viewIdsToDelete.length > 0) {
-        try {
-          await Promise.allSettled(
-            viewIdsToDelete.map((vid) =>
-              fetch(`/api/database?table=${DB_TABLES.VIEWS}&id=${vid}`, {
-                method: "DELETE",
-              }),
-            ),
-          );
-        } catch (_e) {
-          // ignore
-        }
-      }
-
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: updatedModel,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete process: ${response.status}`);
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
-
-      // Refresh views after cascade deletions
-      try {
-        const viewsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-        );
-        if (viewsResponse.ok) {
-          const viewsData = await viewsResponse.json();
-          setViews(viewsData.data);
-        }
-      } catch (_e) {}
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error deleting process:", error);
-      throw error;
-    }
-  };
-
-  const handleDeleteStage = async (stageId: number) => {
-    if (!selectedCase) return;
-
-    // Gather all view IDs from all steps within this stage for cascade deletion
-    let viewIdsToDelete: number[] = [];
-    try {
-      const stage = workflowModel.stages.find((s) => s.id === stageId);
-      if (stage) {
-        for (const proc of stage.processes || []) {
-          const ids = (proc.steps || [])
-            .map((st) => (st as any).viewId as number | undefined)
-            .filter((vid): vid is number => typeof vid === "number");
-          viewIdsToDelete.push(...ids);
-        }
-      }
-    } catch (_e) {
-      // ignore
-    }
-
-    const updatedStages = workflowModel.stages.filter(
-      (stage) => stage.id !== stageId,
-    );
-
-    const updatedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: updatedStages,
-    };
-
-    addCheckpoint("Deleted stage", updatedModel);
-
-    try {
-      // Best-effort delete of any linked views in parallel
-      if (viewIdsToDelete.length > 0) {
-        try {
-          await Promise.allSettled(
-            viewIdsToDelete.map((vid) =>
-              fetch(`/api/database?table=${DB_TABLES.VIEWS}&id=${vid}`, {
-                method: "DELETE",
-              }),
-            ),
-          );
-        } catch (_e) {}
-      }
-
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: selectedCase.name,
-            description: selectedCase.description,
-            model: updatedModel,
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete stage: ${response.status}`);
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel(updatedModel);
-
-      // Refresh views after cascade deletions
-      try {
-        const viewsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-        );
-        if (viewsResponse.ok) {
-          const viewsData = await viewsResponse.json();
-          setViews(viewsData.data);
-        }
-      } catch (_e) {}
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error deleting stage:", error);
-      throw error;
-    }
-  };
+  // handleDeleteStage provided by useWorkflowMutations
 
   const handleSendMessage = async (message: string) => {
     let aiMessageId: string; // Declare at function scope
@@ -1878,128 +1114,7 @@ export default function WorkflowPage() {
     }
   };
 
-  const addCheckpoint = (description: string, model: WorkflowModel) => {
-    const newCheckpoint: WorkflowCheckpoint = {
-      id: parseInt(uuidv4().replace(/-/g, ""), 16),
-      timestamp: new Date().toISOString(),
-      description,
-      model,
-    };
-
-    setCheckpoints((prev) => {
-      const updated = [newCheckpoint, ...prev].slice(0, MAX_CHECKPOINTS);
-      return updated;
-    });
-  };
-
-  // Helper function to process tool response messages into readable format
-  // Examples:
-  // Input: '{"id":183,"name":"KitchenSize","type":"Text","caseid":1,"primary":false,"required":false,"label":"Kitchen Size","description":"","order":1,"options":"[]","sampleValue":null}'
-  // Output: 'Updated field 'KitchenSize' of type Text'
-  //
-  // Input: '{"id":1,"name":"testView","caseid":1,"model":"{\"fields\":[],\"layout\":{\"type\":\"form\",\"columns\":1}}"}'
-  // Output: 'Updated view 'testView''
-  //
-  // Input: '[{"id":1,"name":"field1"},{"id":2,"name":"field2"}]'
-  // Output: 'Found 2 items'
-  const processToolResponse = (text: string): string => {
-    try {
-      const jsonData = JSON.parse(text);
-      if (typeof jsonData === "object" && jsonData !== null) {
-        // Debug logging for saveFields responses
-        if (
-          jsonData.ids &&
-          Array.isArray(jsonData.ids) &&
-          jsonData.fields &&
-          Array.isArray(jsonData.fields)
-        ) {
-          console.log("Processing saveFields response:", jsonData);
-          console.log(
-            "Field names:",
-            jsonData.fields.map((f: { name: string }) => f.name),
-          );
-        }
-
-        // Handle saveFields response format (has both ids and fields arrays)
-        if (
-          jsonData.ids &&
-          Array.isArray(jsonData.ids) &&
-          jsonData.fields &&
-          Array.isArray(jsonData.fields)
-        ) {
-          const fieldCount = jsonData.fields.length;
-          const fieldNames = (jsonData.fields as FieldWithType[]).map(
-            (f) => f.name,
-          );
-          console.log("Extracted field names:", fieldNames);
-          // Neutral wording on UI fallback; server will already send precise Created/Updated message
-          return `Saved ${fieldCount} field${
-            fieldCount === 1 ? "" : "s"
-          }: ${fieldNames.join(", ")}`;
-        }
-        // Create readable messages based on the tool result
-        if (jsonData.name && jsonData.type && jsonData.id) {
-          // This looks like a field result
-          // Since we can't determine create vs update from the response alone,
-          // use a generic message that works for both cases
-          return `Field '${jsonData.name}' of type ${jsonData.type} saved successfully`;
-        } else if (jsonData.name && jsonData.caseid && jsonData.model) {
-          // This looks like a view result
-          return `View '${jsonData.name}' saved successfully`;
-        } else if (jsonData.name && jsonData.description && jsonData.model) {
-          // This looks like a case result
-          return `Workflow '${jsonData.name}' saved successfully`;
-        } else if (jsonData.message) {
-          // Use the message if available
-          return jsonData.message;
-        } else if (jsonData.id && jsonData.name) {
-          // Generic object with id and name
-          return `Saved '${jsonData.name}'`;
-        } else if (Array.isArray(jsonData)) {
-          // Array response (like from listFields or listViews)
-          if (jsonData.length === 0) {
-            return "No items found";
-          } else {
-            return `Found ${jsonData.length} item${
-              jsonData.length === 1 ? "" : "s"
-            }`;
-          }
-        } else if (
-          jsonData.success &&
-          jsonData.deletedId &&
-          jsonData.deletedName &&
-          jsonData.type
-        ) {
-          // Delete operation response with name and type
-          const itemType =
-            jsonData.type === "field"
-              ? "field"
-              : jsonData.type === "view"
-              ? "view"
-              : "item";
-
-          if (jsonData.type === "field" && jsonData.updatedViewsCount) {
-            return `Deleted ${itemType} '${
-              jsonData.deletedName
-            }' (removed from ${jsonData.updatedViewsCount} view${
-              jsonData.updatedViewsCount === 1 ? "" : "s"
-            })`;
-          } else {
-            return `Deleted ${itemType} '${jsonData.deletedName}'`;
-          }
-        } else if (jsonData.success && jsonData.deletedId) {
-          // Fallback for delete operations without name
-          return `Item with ID ${jsonData.deletedId} deleted successfully`;
-        } else if (jsonData.error) {
-          // Error response
-          return `Error: ${jsonData.error}`;
-        }
-      }
-    } catch (_e) {
-      // Not JSON, use as is
-    }
-    return text;
-  };
+  // workflow mutation handlers provided by hook called earlier
 
   const _handleRestoreCheckpoint = (checkpoint: WorkflowCheckpoint) => {
     if (
@@ -2603,40 +1718,10 @@ export default function WorkflowPage() {
 
         {/* Tabs - Only show when not in preview mode */}
         {!isPreviewMode && (
-          <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
-            <div className="flex">
-              <button
-                onClick={() => setActiveTab("workflow")}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === "workflow"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                Workflow
-              </button>
-              <button
-                onClick={() => setActiveTab("fields")}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === "fields"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                Fields
-              </button>
-              <button
-                onClick={() => setActiveTab("views")}
-                className={`px-4 py-2 text-sm font-medium ${
-                  activeTab === "views"
-                    ? "text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400"
-                    : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-                }`}
-              >
-                Views
-              </button>
-            </div>
-          </div>
+          <WorkflowTabs
+            active={activeTab as any}
+            onChange={setActiveTab as any}
+          />
         )}
 
         {/* Main Content Area */}
@@ -2718,18 +1803,12 @@ export default function WorkflowPage() {
               )}
               {activeTab === "fields" && (
                 <div className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                      Fields
-                    </h2>
-                    <button
-                      ref={addFieldButtonRef}
-                      onClick={() => setIsAddFieldModalOpen(true)}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                    >
-                      Add Field
-                    </button>
-                  </div>
+                  <FieldsHeader
+                    onAddField={() => setIsAddFieldModalOpen(true)}
+                    buttonRef={
+                      addFieldButtonRef as React.RefObject<HTMLButtonElement>
+                    }
+                  />
                   <FieldsList
                     fields={fields}
                     onReorderFields={handleFieldsListReorder}

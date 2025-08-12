@@ -543,15 +543,27 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       }
     }
 
-    // 2) Reorder the view fields to match the provided order
+    // 2) Reorder the view fields to place the newly added fields at the end,
+    //    while preserving existing fields (append behavior expected by users)
     if (onViewFieldsReorder) {
-      onViewFieldsReorder(`db-${viewId}`, fieldIds);
+      // Merge current order with new ids, keeping uniqueness and preserving existing order
+      const currentOrder = (selectedStep.fields || []).map((f) => f.fieldId);
+      const mergedOrder = Array.from(
+        new Set<number>([...currentOrder, ...fieldIds]),
+      );
+      onViewFieldsReorder(`db-${viewId}`, mergedOrder);
     }
 
-    // Optimistically update local modal state
+    // Optimistically update local modal state by appending new fields (no replacement)
+    const existingById = new Map(
+      (selectedStep.fields || []).map((f) => [f.fieldId, f]),
+    );
+    const appended = fieldIds
+      .filter((id) => !existingById.has(id))
+      .map((id) => ({ fieldId: id, required: false }));
     setSelectedStep({
       ...selectedStep,
-      fields: fieldIds.map((id) => ({ fieldId: id, required: false })),
+      fields: [...(selectedStep.fields || []), ...appended],
     });
   };
 
