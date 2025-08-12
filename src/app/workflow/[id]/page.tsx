@@ -15,6 +15,7 @@ import { useChatPanel } from "./hooks/useChatPanel";
 import { useFreeFormSelection } from "./hooks/useFreeFormSelection";
 import useQuickSelectionSummary from "./hooks/useQuickSelectionSummary";
 import usePreviewIframe from "./hooks/usePreviewIframe";
+import { composeQuickChatMessage } from "./utils/composeQuickChatMessage";
 import { Service } from "../../services/service";
 import {
   Field,
@@ -41,7 +42,9 @@ import { motion } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import ViewsPanel from "../../components/ViewsPanel";
 import FieldsList from "../../components/FieldsList";
-import { FaPencilAlt } from "react-icons/fa";
+//
+import WorkflowTopBar from "./components/WorkflowTopBar";
+import WorkflowToolbar from "./components/WorkflowToolbar";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
 import { DB_TABLES, DB_COLUMNS } from "../../types/database";
@@ -372,70 +375,32 @@ export default function WorkflowPage() {
 
   const sendQuickChat = useCallback(async () => {
     if (!quickChatText.trim()) return;
-    const chosenFields = fields.filter((f) =>
-      selectedFieldIds.includes(f.id as number),
-    );
-    const fieldNames = chosenFields.map((f) => f.name);
-    const chosenViews = views.filter((v) =>
-      selectedViewIds.includes(v.id as number),
-    );
-    const viewNames = chosenViews.map((v) => v.name);
-    // Map selected stage and process ids to names from current workflow model
-    const chosenStages = workflowModel.stages.filter((s) =>
-      selectedStageIds.includes(s.id as number),
-    );
-    const stageNames = chosenStages.map((s) => s.name);
-    const processMap: { ids: number[]; names: string[] } = {
-      ids: [],
-      names: [],
-    };
-    for (const stage of workflowModel.stages) {
-      for (const process of stage.processes) {
-        if (selectedProcessIds.includes(process.id as number)) {
-          processMap.ids.push(process.id as number);
-          processMap.names.push(process.name);
-        }
-      }
-    }
-    // Map selected step ids to names
-    const stepMap: { ids: number[]; names: string[] } = { ids: [], names: [] };
-    for (const stage of workflowModel.stages) {
-      for (const process of stage.processes) {
-        for (const step of process.steps) {
-          if (selectedStepIds.includes(step.id as number)) {
-            stepMap.ids.push(step.id as number);
-            stepMap.names.push(step.name);
-          }
-        }
-      }
-    }
-    const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
-      selectedFieldIds,
-    )}\nSelected fieldNames=${JSON.stringify(
-      fieldNames,
-    )}\nSelected viewIds=${JSON.stringify(
-      selectedViewIds,
-    )}\nSelected viewNames=${JSON.stringify(
-      viewNames,
-    )}\nSelected stageIds=${JSON.stringify(
-      selectedStageIds,
-    )}\nSelected stageNames=${JSON.stringify(
-      stageNames,
-    )}\nSelected processIds=${JSON.stringify(
-      processMap.ids,
-    )}\nSelected processNames=${JSON.stringify(
-      processMap.names,
-    )}\nSelected stepIds=${JSON.stringify(
-      stepMap.ids,
-    )}\nSelected stepNames=${JSON.stringify(stepMap.names)}\n`;
-    const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
-    // Close modal immediately before sending to avoid waiting for LLM stream
+    const composedMessage = composeQuickChatMessage({
+      quickChatText,
+      selectedFieldIds: selectedFieldIds as number[],
+      selectedViewIds: selectedViewIds as number[],
+      selectedStageIds: selectedStageIds as number[],
+      selectedProcessIds: selectedProcessIds as number[],
+      selectedStepIds: selectedStepIds as number[],
+      fields: fields.map((f) => ({ id: f.id as number, name: f.name })),
+      views: views.map((v) => ({ id: v.id as number, name: v.name })),
+      stages: workflowModel.stages as any,
+    });
     setIsQuickChatOpen(false);
     setQuickChatText("");
-    // Fire-and-forget so UI is responsive; errors are logged in handler
     void handleSendMessage(composedMessage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fields, views, selectedFieldIds, selectedViewIds, quickChatText]);
+  }, [
+    fields,
+    views,
+    workflowModel.stages,
+    selectedFieldIds,
+    selectedViewIds,
+    selectedStageIds,
+    selectedProcessIds,
+    selectedStepIds,
+    quickChatText,
+  ]);
 
   // Resizing mouse handlers are provided by useChatPanel
 
@@ -2628,66 +2593,13 @@ export default function WorkflowPage() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header row with title and preview switch */}
-        <div className="flex justify-between items-center p-6 pb-3 pr-[200px]">
-          <div className="flex items-center">
-            <a
-              href="/"
-              className="flex items-center text-gray-600 hover:text-gray-900 mr-4"
-            >
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-              Back
-            </a>
-            <div className="flex items-center">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {selectedCase?.name || "Loading..."}
-              </h1>
-              {selectedCase && (
-                <button
-                  onClick={() => setIsEditWorkflowModalOpen(true)}
-                  className="ml-3 p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                  aria-label="Edit workflow"
-                >
-                  <FaPencilAlt className="w-4 h-4 text-gray-500" />
-                </button>
-              )}
-            </div>
-          </div>
-          <label className="flex items-center cursor-pointer group">
-            <div className="relative">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={isPreviewMode}
-                onChange={() => setIsPreviewMode(!isPreviewMode)}
-              />
-              <div className="block bg-gray-200 dark:bg-gray-700 w-14 h-8 rounded-full transition-colors duration-200 ease-in-out peer-checked:bg-blue-600 dark:peer-checked:bg-blue-500 group-hover:bg-gray-300 dark:group-hover:bg-gray-600 peer-checked:group-hover:bg-blue-700 dark:peer-checked:group-hover:bg-blue-600 peer-focus:ring-2 peer-focus:ring-blue-500 peer-focus:ring-offset-2 dark:peer-focus:ring-offset-gray-900"></div>
-              <div
-                className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-all duration-200 ease-in-out shadow-sm peer-checked:translate-x-6 peer-checked:bg-white group-hover:scale-95`}
-              ></div>
-            </div>
-            <div
-              className={`ml-3 text-sm font-medium transition-colors duration-200 ${
-                isPreviewMode
-                  ? "text-blue-600 dark:text-blue-400"
-                  : "text-gray-700 dark:text-gray-300"
-              }`}
-            >
-              Preview
-            </div>
-          </label>
-        </div>
+        <WorkflowTopBar
+          selectedCaseName={selectedCase?.name}
+          canEdit={Boolean(selectedCase)}
+          onEditWorkflow={() => setIsEditWorkflowModalOpen(true)}
+          isPreviewMode={isPreviewMode}
+          onTogglePreview={() => setIsPreviewMode(!isPreviewMode)}
+        />
 
         {/* Tabs - Only show when not in preview mode */}
         {!isPreviewMode && (
@@ -2735,38 +2647,11 @@ export default function WorkflowPage() {
             <>
               {activeTab === "workflow" && (
                 <>
-                  <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                        <button
-                          onClick={() => setWorkflowView("flat")}
-                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                            workflowView === "flat"
-                              ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                          }`}
-                        >
-                          Flat View
-                        </button>
-                        <button
-                          onClick={() => setWorkflowView("lifecycle")}
-                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                            workflowView === "lifecycle"
-                              ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                              : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                          }`}
-                        >
-                          Lifecycle View
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setIsAddStageModalOpen(true)}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-                    >
-                      Add Stage
-                    </button>
-                  </div>
+                  <WorkflowToolbar
+                    workflowView={workflowView}
+                    onSetView={setWorkflowView}
+                    onAddStage={() => setIsAddStageModalOpen(true)}
+                  />
                   {workflowView === "flat" ? (
                     <WorkflowDiagram
                       stages={workflowModel.stages}
