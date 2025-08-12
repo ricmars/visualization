@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StepType } from "../types";
+import { StepType } from "../utils/stepTypes";
 import { getAllStepTypes, getStepTypeDisplayName } from "../utils/stepTypes";
 
 interface EditModalProps {

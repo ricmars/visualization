@@ -5,14 +5,8 @@ import {
   Draggable,
   DropResult,
 } from "@hello-pangea/dnd";
-import {
-  Stage,
-  Field,
-  StepType,
-  FieldReference,
-  Process,
-  Step,
-} from "../types";
+import { Stage, Field, FieldReference, Process, Step } from "../types";
+import { StepType } from "../utils/stepTypes";
 import AddStepModal from "./AddStepModal";
 import EditModal from "./EditModal";
 import {
@@ -125,7 +119,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     stepId: number;
     name: string;
     fields: FieldReference[];
-    type: string;
+    type: StepType;
     viewId?: number;
   } | null>(null);
 
@@ -173,7 +167,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     });
   }, [isConfigModalOpen, selectedStep, views, fields]);
 
-  const getStepIcon = (stepType: string) => {
+  const getStepIcon = (stepType: StepType) => {
     // Map step types to appropriate icons
     switch (stepType) {
       case "Collect information":
@@ -804,8 +798,8 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                             </div>
                                                             <span className="text-lg">
                                                               {getStepIcon(
-                                                                step.type ||
-                                                                  "Automation",
+                                                                (step.type ??
+                                                                  "Automation") as StepType,
                                                               )}
                                                             </span>
                                                             <span className="flex-1 font-medium text-sm text-gray-700 dark:text-gray-200">

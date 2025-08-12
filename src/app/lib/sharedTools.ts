@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { DB_TABLES } from "../types/database";
+import { stepTypes } from "../utils/stepTypes";
 import { fieldTypes, FieldType } from "../types/fields";
 import {
   LLMTool,
@@ -133,8 +134,9 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                                 id: { type: "integer", description: "Step ID" },
                                 type: {
                                   type: "string",
+                                  enum: [...stepTypes],
                                   description:
-                                    "Step type (e.g., 'Collect information', 'Approve/Reject', 'Decision', 'Automation', 'Review', 'Process')",
+                                    "Step type. Must be one of the allowed step types.",
                                 },
                                 name: {
                                   type: "string",

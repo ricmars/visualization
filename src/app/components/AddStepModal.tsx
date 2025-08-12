@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StepType } from "../types";
+import { StepType } from "../utils/stepTypes";
 import { motion, AnimatePresence } from "framer-motion";
 import { getAllStepTypes, getStepTypeDisplayName } from "../utils/stepTypes";
 

@@ -1,4 +1,5 @@
 import { FieldType } from "./types/fields";
+import type { StepType } from "./utils/stepTypes";
 import { CaseRecord, FieldRecord } from "./types/dynamicTypes";
 
 /* Interface definition */
@@ -45,17 +46,6 @@ export interface Stage {
   moveDirection?: "up" | "down";
   isNew?: boolean;
 }
-
-export type StepType =
-  | "Collect information"
-  | "Approve/Reject"
-  | "Automation"
-  | "Create Case"
-  | "Decision"
-  | "Generate Document"
-  | "Generative AI"
-  | "Robotic Automation"
-  | "Send Notification";
 
 export interface Message {
   id: number;

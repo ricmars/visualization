@@ -13,8 +13,8 @@ import {
   Process,
   Step,
   WorkflowModel,
-  StepType,
 } from "../../types";
+import { StepType } from "../../utils/stepTypes";
 import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
 
 // Initialize rule types on module load

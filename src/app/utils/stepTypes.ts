@@ -1,7 +1,5 @@
-import { StepType } from "../types";
-
-// All possible step types in array format for iteration
-export const stepTypes: StepType[] = [
+// All possible step types in array format (source of truth)
+export const stepTypes = [
   "Collect information",
   "Approve/Reject",
   "Automation",
@@ -11,7 +9,10 @@ export const stepTypes: StepType[] = [
   "Generative AI",
   "Robotic Automation",
   "Send Notification",
-];
+] as const;
+
+// Type derived from the stepTypes tuple
+export type StepType = (typeof stepTypes)[number];
 
 // Mapping of step types to user-friendly display names
 export const stepTypeToDisplayName: Record<StepType, string> = {
@@ -27,7 +28,7 @@ export const stepTypeToDisplayName: Record<StepType, string> = {
 };
 
 // Get all possible step types
-export const getAllStepTypes = (): StepType[] => {
+export const getAllStepTypes = (): readonly StepType[] => {
   return stepTypes;
 };
 
