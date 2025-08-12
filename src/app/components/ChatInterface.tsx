@@ -66,12 +66,14 @@ interface ChatInterfaceProps {
 // Function to format content based on its type
 function normalizeMarkdown(original: string): string {
   let content = original;
+  // Normalize line endings to \n
+  content = content.replace(/\r\n?/g, "\n");
   // Normalize headings and colon/bullet variants in one pass
   // Matches line starts like: "Analyze", "Reasoning", "Plan", "Next Action"
   // with optional leading bullet and optional trailing colon
   // Remove any empty heading lines like "#" or "##" with no text
   content = content.replace(/(^|\n)\s*#{1,6}\s*(?=\n|$)/g, "$1");
-  // Ensure headings like "...text### Heading" start on a new block line
+  // Ensure headings start at the beginning of a line with a blank line before
   content = content.replace(/([^\n])\s*(#{1,6})\s+/g, (match, prev, hashes) => {
     return `${prev}\n\n${hashes} `;
   });
@@ -262,10 +264,12 @@ export default function ChatInterface({
 
   const markdownComponents: Components = {
     h1({ children }) {
+      const text = String(React.Children.toArray(children).join(" ")).trim();
+      if (!text) return null;
       return (
-        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-gray-100 mb-3 mt-4">
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
           {children}
-        </h1>
+        </h2>
       );
     },
     h2({ children }) {
