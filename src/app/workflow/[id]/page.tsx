@@ -42,6 +42,10 @@ import {
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
 import { DB_TABLES, DB_COLUMNS } from "../../types/database";
+import {
+  removeFieldFromViewModel,
+  addFieldToViewModel,
+} from "../../lib/modelUtils";
 import { fetchWithBaseUrl } from "../../lib/fetchWithBaseUrl";
 import ChangesPanel from "../../components/ChangesPanel";
 import AddStageModal from "../../components/AddStageModal";
@@ -1334,14 +1338,14 @@ export default function WorkflowPage() {
         viewModel = { fields: [] };
       }
 
-      // Remove the field from the view's fields array
-      const originalFieldCount = viewModel.fields?.length || 0;
-      viewModel.fields = (viewModel.fields || []).filter(
-        (fieldRef: { fieldId: number }) => fieldRef.fieldId !== field.id,
+      // Remove the field using shared util
+      const { viewModel: updatedModel, removed } = removeFieldFromViewModel(
+        viewModel,
+        field.id,
       );
 
       // Only update if the field was actually removed
-      if (viewModel.fields.length < originalFieldCount) {
+      if (removed) {
         // Update the view in the database
         const response = await fetch(
           `/api/database?table=${DB_TABLES.VIEWS}&id=${view.id}`,
@@ -1354,7 +1358,7 @@ export default function WorkflowPage() {
               name: view.name,
               caseid: selectedCase.id,
               model: {
-                fields: viewModel.fields,
+                fields: updatedModel.fields,
                 layout: {
                   type: "form",
                   columns: 1,
@@ -2526,20 +2530,14 @@ export default function WorkflowPage() {
         }
       }
 
-      // Add new fields that aren't already in the view
-      const newFields = resolvedFieldIds
-        .filter((fieldId) => fieldId && !existingFieldIds.has(fieldId))
-        .map((fieldId) => ({
-          fieldId,
+      // Add new fields that aren't already in the view using shared util
+      let updatedViewModel = { ...viewModel };
+      for (const fid of resolvedFieldIds) {
+        const res = addFieldToViewModel(updatedViewModel, fid, {
           required: false,
-          order: (viewModel.fields?.length || 0) + 1,
-        }));
-
-      // Update the view model
-      const updatedViewModel = {
-        ...viewModel,
-        fields: [...(viewModel.fields || []), ...newFields],
-      };
+        });
+        updatedViewModel = res.viewModel;
+      }
 
       // Update the view in the database
       const response = await fetch(

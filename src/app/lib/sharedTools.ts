@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { DB_TABLES } from "../types/database";
+import { removeViewReferencesFromCaseModel } from "./modelUtils";
 import { stepTypes } from "../utils/stepTypes";
 import { fieldTypes, FieldType } from "../utils/fieldTypes";
 import {
@@ -1086,7 +1087,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "deleteView",
       description:
-        "Permanently deletes a view. This action is NOT recoverable. Use ONLY when the user explicitly requests deletion. If there is any ambiguity, ask the user to confirm before proceeding.",
+        "Permanently deletes a view and removes any references to it (viewId) from the parent case's workflow model. This action is NOT recoverable. Use ONLY when the user explicitly requests deletion. If there is any ambiguity, ask the user to confirm before proceeding.",
       parameters: {
         type: "object",
         properties: {
@@ -1101,14 +1102,57 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
 
         const { id } = params;
 
-        // First, get the view name before deleting
-        const getViewQuery = `SELECT name FROM "${DB_TABLES.VIEWS}" WHERE id = $1`;
+        // First, get the view name and parent case before deleting
+        const getViewQuery = `SELECT name, caseid FROM "${DB_TABLES.VIEWS}" WHERE id = $1`;
         const getViewResult = await pool.query(getViewQuery, [id]);
         if (getViewResult.rowCount === 0) {
           console.error(`deleteView ERROR: No view found with id ${id}`);
           throw new Error(`No view found with id ${id}`);
         }
         const viewName = getViewResult.rows[0].name;
+        const parentCaseId = getViewResult.rows[0].caseid as number;
+
+        // Attempt to clear references to this view from the parent case model
+        let updatedStepsCount = 0;
+        if (parentCaseId) {
+          try {
+            const getCaseQuery = `SELECT id, model FROM "${DB_TABLES.CASES}" WHERE id = $1`;
+            const caseResult = await pool.query(getCaseQuery, [parentCaseId]);
+            if ((caseResult.rowCount ?? 0) > 0) {
+              const caseRow = caseResult.rows[0];
+              let model: any = {};
+              try {
+                model =
+                  typeof caseRow.model === "string"
+                    ? JSON.parse(caseRow.model)
+                    : caseRow.model || {};
+              } catch (e) {
+                console.warn(
+                  `deleteView: Failed to parse case model for case ${parentCaseId}; proceeding without model cleanup`,
+                  e,
+                );
+                model = {};
+              }
+
+              if (model && Array.isArray(model.stages)) {
+                const cleanup = removeViewReferencesFromCaseModel(model, id);
+                updatedStepsCount = cleanup.updatedStepsCount;
+                if (updatedStepsCount > 0) {
+                  const updateCaseQuery = `UPDATE "${DB_TABLES.CASES}" SET model = $1 WHERE id = $2`;
+                  await pool.query(updateCaseQuery, [
+                    JSON.stringify(cleanup.model),
+                    parentCaseId,
+                  ]);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(
+              `deleteView: Non-fatal error while updating case model for case ${parentCaseId}:`,
+              e,
+            );
+          }
+        }
 
         const query = `DELETE FROM "${DB_TABLES.VIEWS}" WHERE id = $1`;
         console.log("deleteView query:", query);
@@ -1126,6 +1170,8 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           deletedId: id,
           deletedName: viewName,
           type: "view",
+          updatedCaseId: parentCaseId ?? null,
+          updatedStepsCount,
         };
       },
     },

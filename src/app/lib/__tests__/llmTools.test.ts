@@ -1058,12 +1058,49 @@ describe("llmTools", () => {
 
   describe("deleteView", () => {
     it("should delete a view successfully", async () => {
-      // Mock the SELECT query to get view name
+      // Mock the SELECT query to get view name and caseid
       mockQuery.mockResolvedValueOnce({
-        rows: [{ name: "Test View" }],
+        rows: [{ name: "Test View", caseid: 10 }],
         rowCount: 1,
       });
-      // Mock the DELETE query
+      // Mock load case for model cleanup
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            model: JSON.stringify({
+              stages: [
+                {
+                  processes: [
+                    {
+                      steps: [
+                        {
+                          id: 1,
+                          type: "Collect information",
+                          name: "S1",
+                          order: 1,
+                          viewId: 1,
+                        },
+                        {
+                          id: 2,
+                          type: "Collect information",
+                          name: "S2",
+                          order: 2,
+                          viewId: 99,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            }),
+          },
+        ],
+        rowCount: 1,
+      });
+      // Mock case update after cleanup
+      mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+      // Mock the DELETE query for the view itself
       mockQuery.mockResolvedValueOnce({ rowCount: 1 });
 
       const deleteViewTool = databaseTools.find(
@@ -1074,8 +1111,16 @@ describe("llmTools", () => {
       const result = await (deleteViewTool!.execute as any)({ id: 1 });
 
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT name FROM "Views"'),
+        expect.stringContaining('SELECT name, caseid FROM "Views"'),
         [1],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT id, model FROM "Cases"'),
+        [10],
+      );
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "Cases" SET model = $1 WHERE id = $2'),
+        [expect.any(String), 10],
       );
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "Views"'),
@@ -1086,6 +1131,8 @@ describe("llmTools", () => {
         deletedId: 1,
         deletedName: "Test View",
         type: "view",
+        updatedCaseId: 10,
+        updatedStepsCount: 1,
       });
     });
 
