@@ -413,8 +413,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 },
                 sampleValue: {
                   type: "string",
-                  description:
-                    "Sample value for previews (not a default). Required for all fields.",
+                  description: "Sample value for live preview.",
                 },
               },
               required: ["name", "type", "caseid", "label", "sampleValue"],
