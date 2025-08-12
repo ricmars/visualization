@@ -2483,11 +2483,6 @@ export default function WorkflowPage() {
         viewModel = { fields: [] };
       }
 
-      // Get existing field IDs in the view
-      const existingFieldIds = new Set(
-        viewModel.fields?.map((f: { fieldId: number }) => f.fieldId) || [],
-      );
-
       // Resolve field IDs for the provided names, using local cache first, then DB fallback
       const resolvedFieldIds: number[] = [];
       const unresolvedNames: string[] = [];

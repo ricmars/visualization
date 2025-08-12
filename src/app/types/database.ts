@@ -41,13 +41,6 @@ export function getTableName(ruleTypeId: string): string {
   return ruleType.databaseSchema.tableName;
 }
 
-// Step types mapping
-export const STEP_TYPES = {
-  COLLECT_INFORMATION: "collect_information",
-  DECISION: "decision",
-  NOTIFICATION: "notification",
-} as const;
-
 // Field types mapping - using centralized fieldTypes from fields.ts
 export const FIELD_TYPES = Object.fromEntries(
   fieldTypes.map((type) => [
