@@ -36,7 +36,6 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaGripVertical,
-  FaObjectGroup,
   FaMagic,
 } from "react-icons/fa";
 import AddFieldModal from "../../components/AddFieldModal";
@@ -3257,11 +3256,11 @@ export default function WorkflowPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={beginFreeFormSelection}
-                      className="flex items-center gap-1 px-3 py-1 text-xs text-gray-600 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      title="Free form selection"
+                      className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg border bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-purple-900/20 dark:border-purple-700 dark:text-purple-300"
+                      title="AI quick action"
                     >
-                      <FaObjectGroup className="w-3.5 h-3.5" />
-                      Free Form
+                      <FaMagic className="w-3.5 h-3.5" />
+                      AI quick action
                     </button>
                     <button
                       onClick={handleClearChat}
