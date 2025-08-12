@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { registerRuleTypes } from "../types/ruleTypeDefinitions";
+import { ruleTypeRegistry } from "../types/ruleTypeRegistry";
 
 console.log("Database configuration:");
 console.log("DATABASE_URL:", process.env.DATABASE_URL ? "Set" : "Not set");
@@ -107,14 +108,13 @@ export async function initializeDatabase() {
     // Register all rule types first
     registerRuleTypes();
 
-    // Import DynamicDatabaseService locally to avoid circular dependency
-    const { DynamicDatabaseService } = require("./dynamicDatabaseService");
-
-    // Create the dynamic database service
-    const dynamicDbService = new DynamicDatabaseService(pool);
-
-    // Initialize tables for all registered rule types
-    await dynamicDbService.initializeTables();
+    // Initialize tables for all registered rule types directly from rule type registry
+    const ruleTypes = ruleTypeRegistry.getAll();
+    for (const ruleType of ruleTypes) {
+      const migration = ruleTypeRegistry.generateDatabaseMigration(ruleType.id);
+      await pool.query(migration);
+      console.log(`✅ Initialized table for ${ruleType.name}`);
+    }
 
     // Create undo_log table for checkpoint functionality (this is not a rule type, so it stays hardcoded)
     await pool.query(`
