@@ -224,6 +224,10 @@ ${contextLine}`;
           timestamp: number;
           duration?: number;
         }> = [];
+        // When we ask the model for a post-condition confirmation, we set this
+        // so the next assistant message (without tool calls) is treated as final
+        // instead of being nudged to use tools again.
+        let awaitingPostCheckConfirmation = false;
 
         // Context management: Remove duplicates and keep only essential messages
         const trimMessages = () => {
@@ -476,6 +480,17 @@ ${contextLine}`;
               console.log(
                 `Model finished without tool calls (reason: ${finishReason})`,
               );
+              // If we were expecting a short confirmation after a post-condition check,
+              // treat this as the final answer and stop without nudging.
+              if (awaitingPostCheckConfirmation) {
+                // Only send the full content if we haven't already streamed it
+                if (fullContent && !didStreamContent) {
+                  await processor.sendText(fullContent);
+                }
+                awaitingPostCheckConfirmation = false;
+                done = true;
+                break;
+              }
               if (!nudgedToUseTools) {
                 messages.push({
                   role: "user" as const,
@@ -830,6 +845,8 @@ ${contextLine}`;
                   role: "user",
                   content: `Latest tool results JSON: ${lastToolResults}`,
                 });
+                // We're now expecting a short confirmation, so avoid nudging on the next turn
+                awaitingPostCheckConfirmation = true;
                 // Loop continues; next iteration will either call more tools or end with a short confirmation
               }
 

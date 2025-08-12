@@ -2114,6 +2114,8 @@ export default function WorkflowPage() {
                       lowerText.includes("deleted") ||
                       lowerText.includes("removed") ||
                       lowerText.includes("operation completed successfully") ||
+                      lowerText.includes("updated") ||
+                      lowerText.includes("all constraints satisfied") ||
                       (lowerText.includes("workflow") &&
                         lowerText.includes("saved successfully"))
                     ) {
