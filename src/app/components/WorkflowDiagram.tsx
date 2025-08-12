@@ -29,7 +29,7 @@ import AddProcessModal from "./AddProcessModal";
 interface WorkflowDiagramProps {
   stages: Stage[];
   fields: Field[];
-  views: { id: number; name: string; model: string; caseid: number }[];
+  views: { id: number; name: string; model: unknown; caseid: number }[];
   onStepSelect: (stageId: number, processId: number, stepId: number) => void;
   activeStage?: number;
   activeProcess?: number;
@@ -102,6 +102,16 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   onAddFieldsToView,
   onViewFieldsReorder,
 }) => {
+  const parseViewModel = (model: unknown): any => {
+    if (typeof model === "string") {
+      try {
+        return JSON.parse(model);
+      } catch {
+        return {};
+      }
+    }
+    return model ?? {};
+  };
   const [_isDragging, setIsDragging] = useState(false);
   const [_isAddProcessModalOpen, setIsAddProcessModalOpen] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<number | null>(null);
@@ -132,9 +142,9 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
 
     let parsedFields: Array<{ fieldId: number; required: boolean }> = [];
     try {
-      const viewModel = JSON.parse(view.model || "{}");
-      if (Array.isArray(viewModel.fields)) {
-        parsedFields = viewModel.fields
+      const viewModel = parseViewModel(view.model);
+      if (Array.isArray((viewModel as any).fields)) {
+        parsedFields = (viewModel as any).fields
           .map((f: { fieldId: number; required?: boolean }) => ({
             fieldId: Number(f.fieldId),
             required: !!f.required,
@@ -372,10 +382,10 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       console.log("[DEBUG] Found view:", view);
       if (view) {
         try {
-          const viewModel = JSON.parse(view.model);
+          const viewModel = parseViewModel(view.model);
           console.log("[DEBUG] Parsed view model:", viewModel);
-          if (Array.isArray(viewModel.fields)) {
-            stepFields = viewModel.fields
+          if (Array.isArray((viewModel as any).fields)) {
+            stepFields = (viewModel as any).fields
               .map(
                 (fieldRef: {
                   fieldId: number;
@@ -508,9 +518,9 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     let existingViewFieldIds: number[] = [];
     if (view) {
       try {
-        const viewModel = JSON.parse(view.model || "{}");
-        if (Array.isArray(viewModel.fields)) {
-          existingViewFieldIds = viewModel.fields
+        const viewModel = parseViewModel(view.model);
+        if (Array.isArray((viewModel as any).fields)) {
+          existingViewFieldIds = (viewModel as any).fields
             .map((f: { fieldId: number }) => f.fieldId)
             .filter((id: number) => typeof id === "number");
         }

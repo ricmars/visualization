@@ -92,10 +92,31 @@ export const caseRuleType: RuleTypeDefinition = {
 
   hooks: {
     beforeCreate: async (data) => {
-      // Validate that model is valid JSON if provided
-      if (data.model) {
+      // Normalize model to an object for JSONB storage
+      if (data.model === undefined || data.model === null) {
+        data.model = { stages: [] };
+        return data;
+      }
+
+      if (typeof data.model === "string") {
         try {
-          JSON.parse(data.model);
+          data.model = JSON.parse(data.model);
+        } catch {
+          throw new Error("Invalid JSON in model field");
+        }
+      }
+
+      return data;
+    },
+
+    beforeUpdate: async (data) => {
+      // Normalize model for updates as well
+      if (data.model === undefined || data.model === null) {
+        return data;
+      }
+      if (typeof data.model === "string") {
+        try {
+          data.model = JSON.parse(data.model);
         } catch {
           throw new Error("Invalid JSON in model field");
         }
