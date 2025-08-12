@@ -40,7 +40,7 @@ export interface SaveFieldsParams extends ToolParams {
     description?: string;
     order?: number;
     options?: unknown[];
-    defaultValue?: unknown;
+    sampleValue: unknown;
   }>;
 }
 

@@ -310,9 +310,9 @@ export default function WorkflowPage() {
           steps: tmpSteps,
         });
       }
-      // Map fields to include sample values from defaultValue
+      // Map fields to include sample values from sampleValue
       const fieldsWithValues: Field[] = currentFields.map((f: any) => {
-        const dv = f?.defaultValue;
+        const dv = f?.sampleValue;
         let value: any = undefined;
         if (dv !== undefined && dv !== null) {
           if (typeof dv === "string") {
@@ -982,7 +982,7 @@ export default function WorkflowPage() {
     options?: string[];
     required?: boolean;
     primary?: boolean;
-    defaultValue?: string;
+    sampleValue?: string;
   }): Promise<string> => {
     if (!selectedCase) return "";
 
@@ -1000,7 +1000,7 @@ export default function WorkflowPage() {
         description: field.label,
         order: 0,
         options: field.options ?? [],
-        defaultValue: field.defaultValue,
+        sampleValue: field.sampleValue,
       };
 
       console.log("Creating field with data:", fieldData);
@@ -1022,7 +1022,7 @@ export default function WorkflowPage() {
             order: fieldData.order,
             options: fieldData.options,
             required: fieldData.required,
-            defaultValue: fieldData.defaultValue,
+            sampleValue: fieldData.sampleValue,
           },
         }),
       });
@@ -1148,10 +1148,10 @@ export default function WorkflowPage() {
             updates.description ||
             targetField.description ||
             "Field description",
-          defaultValue:
-            (updates as any).defaultValue !== undefined
-              ? (updates as any).defaultValue
-              : (targetField as any).defaultValue ?? null,
+          sampleValue:
+            (updates as any).sampleValue !== undefined
+              ? (updates as any).sampleValue
+              : (targetField as any).sampleValue ?? null,
         },
       };
 
@@ -2216,7 +2216,7 @@ export default function WorkflowPage() {
 
   // Helper function to process tool response messages into readable format
   // Examples:
-  // Input: '{"id":183,"name":"KitchenSize","type":"Text","caseid":1,"primary":false,"required":false,"label":"Kitchen Size","description":"","order":1,"options":"[]","defaultValue":null}'
+  // Input: '{"id":183,"name":"KitchenSize","type":"Text","caseid":1,"primary":false,"required":false,"label":"Kitchen Size","description":"","order":1,"options":"[]","sampleValue":null}'
   // Output: 'Updated field 'KitchenSize' of type Text'
   //
   // Input: '{"id":1,"name":"testView","caseid":1,"model":"{\"fields\":[],\"layout\":{\"type\":\"form\",\"columns\":1}}"}'

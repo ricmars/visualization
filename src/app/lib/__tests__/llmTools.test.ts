@@ -60,7 +60,7 @@ jest.mock("../db", () => ({
   },
 }));
 
-const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
+const mockQuery = pool.query as unknown as jest.Mock<any, any>;
 
 describe("llmTools", () => {
   let databaseTools: LLMTool[];
@@ -601,6 +601,7 @@ describe("llmTools", () => {
             caseid: 1,
             label: "Field 1",
             description: "Test Description 1",
+            sampleValue: "",
           },
           {
             name: "field2",
@@ -611,6 +612,7 @@ describe("llmTools", () => {
             primary: true,
             required: true,
             order: 1,
+            sampleValue: "",
           },
         ],
       });
@@ -700,7 +702,7 @@ describe("llmTools", () => {
             description: "Existing Description",
             order: 0,
             options: "[]",
-            defaultValue: null,
+            sampleValue: null,
           },
         ],
       });
@@ -741,6 +743,7 @@ describe("llmTools", () => {
             caseid: 1,
             label: "Existing Field",
             description: "Existing Description",
+            sampleValue: "",
           },
           {
             name: "newField",
@@ -749,6 +752,7 @@ describe("llmTools", () => {
             label: "New Field",
             description: "New Description",
             order: 1,
+            sampleValue: "",
           },
         ],
       });

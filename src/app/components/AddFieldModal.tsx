@@ -13,7 +13,7 @@ interface AddFieldModalProps {
     options?: string[];
     required: boolean;
     primary?: boolean;
-    defaultValue?: string;
+    sampleValue: string;
   }) => Promise<void>;
   buttonRef?: React.RefObject<HTMLButtonElement>;
   existingFields?: Field[];
@@ -40,7 +40,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
   const [required, setRequired] = useState(false);
   const [isPrimary, setIsPrimary] = useState(false);
   const [options, setOptions] = useState("");
-  const [defaultValue, setDefaultValue] = useState<string>("");
+  const [sampleValue, setSampleValue] = useState<string>("");
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -114,7 +114,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
         required,
         primary: isPrimary,
         options: parsedOptions,
-        defaultValue: defaultValue || undefined,
+        sampleValue: sampleValue,
       });
     }
     setLabel("");
@@ -122,7 +122,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
     setRequired(false);
     setIsPrimary(false);
     setOptions("");
-    setDefaultValue("");
+    setSampleValue("");
     setSelectedFieldIds([]);
     setError("");
     onClose();
@@ -374,14 +374,14 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        Default value (sample value)
+                        Sample value
                       </label>
                       <input
                         type="text"
-                        value={defaultValue}
-                        onChange={(e) => setDefaultValue(e.target.value)}
+                        value={sampleValue}
+                        onChange={(e) => setSampleValue(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
-                        placeholder="Enter default value"
+                        placeholder="Enter sample value"
                       />
                     </div>
                   </>

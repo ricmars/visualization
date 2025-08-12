@@ -37,7 +37,7 @@ type GenerateInterfaceFromTemplate<T extends string> = T extends "case"
       order: number;
       options: string[];
       required: boolean;
-      defaultValue?: unknown;
+      sampleValue?: unknown;
     }
   : T extends "view"
   ? {

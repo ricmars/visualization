@@ -364,7 +364,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (defaultValue, primary, required, label, order, options, type). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (sampleValue, primary, required, label, order, options, type). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {
@@ -411,13 +411,13 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                   type: "boolean",
                   description: "Whether this is a primary field",
                 },
-                defaultValue: {
+                sampleValue: {
                   type: "string",
                   description:
-                    "Default value for the field. REQUIRED for Checkbox ('false'/'true'), Integer/Decimal/Percentage/Currency ('0'), Date/DateTime (ISO string), Dropdown/RadioButtons/Status (one option). Optional for free-text-like fields if no sensible default exists.",
+                    "Sample value for previews (not a default). Required for all fields.",
                 },
               },
-              required: ["name", "type", "caseid", "label"],
+              required: ["name", "type", "caseid", "label", "sampleValue"],
             },
             description: "Array of fields to create or update",
           },
@@ -449,7 +449,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           options: unknown;
           required: boolean;
           primary: boolean;
-          defaultValue?: unknown;
+          sampleValue?: unknown;
         }> = [];
 
         // Process each field
@@ -465,7 +465,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             options,
             required,
             primary,
-            defaultValue,
+            sampleValue,
           } = field;
 
           // Validation
@@ -473,6 +473,9 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           if (!type) throw new Error("Field type is required for saveFields");
           if (!caseid) throw new Error("Case ID is required for saveFields");
           if (!label) throw new Error("Field label is required for saveFields");
+          if (sampleValue === undefined) {
+            throw new Error("sampleValue is required for saveFields");
+          }
 
           // Validate field type
           if (!fieldTypes.includes(type as FieldType)) {
@@ -490,7 +493,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             existingFieldResult.rowCount &&
             existingFieldResult.rowCount > 0
           ) {
-            // Update the existing field (matched by name + case) to persist incoming changes like defaultValue
+            // Update the existing field (matched by name + case) to persist incoming changes like sampleValue
             const existingFieldId = existingFieldResult.rows[0].id;
             const fullFieldQuery = `SELECT * FROM "${DB_TABLES.FIELDS}" WHERE id = $1`;
             const fullFieldResult = await pool.query(fullFieldQuery, [
@@ -515,18 +518,18 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 (typeof existingRow.options === "string"
                   ? existingRow.options
                   : JSON.stringify(existingRow.options ?? []));
-            const normalizedDefaultValue =
-              defaultValue === undefined || defaultValue === null
-                ? existingRow.defaultValue ?? null
-                : typeof defaultValue === "string"
-                ? defaultValue
-                : JSON.stringify(defaultValue);
+            const normalizedSampleValue =
+              sampleValue === undefined || sampleValue === null
+                ? existingRow.sampleValue ?? null
+                : typeof sampleValue === "string"
+                ? sampleValue
+                : JSON.stringify(sampleValue);
 
             const updateExistingQuery = `
               UPDATE "${DB_TABLES.FIELDS}"
-              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "defaultValue" = $10
+              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "sampleValue" = $10
               WHERE id = $11
-              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "sampleValue"
             `;
             const updateExistingValues = [
               name,
@@ -538,7 +541,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               normalizedOptions,
               nextRequired,
               nextPrimary,
-              normalizedDefaultValue,
+              normalizedSampleValue,
               existingFieldId,
             ];
             console.log(
@@ -578,7 +581,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                   })(),
               required: fieldData.required ?? nextRequired,
               primary: fieldData.primary ?? nextPrimary,
-              defaultValue: fieldData.defaultValue ?? normalizedDefaultValue,
+              sampleValue: fieldData.sampleValue ?? normalizedSampleValue,
             });
             continue;
           }
@@ -587,21 +590,21 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             // Update existing field
             const query = `
               UPDATE "${DB_TABLES.FIELDS}"
-              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "defaultValue" = $10
+              SET name = $1, type = $2, caseid = $3, label = $4, description = $5, "order" = $6, options = $7, required = $8, "primary" = $9, "sampleValue" = $10
               WHERE id = $11
-              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "sampleValue"
             `;
             console.log("saveFields UPDATE query:", query);
-            // Normalize options & defaultValue for DB storage
+            // Normalize options & sampleValue for DB storage
             const normalizedOptions = Array.isArray(options)
               ? JSON.stringify(options)
               : options ?? "[]";
-            const normalizedDefaultValue =
-              defaultValue === undefined || defaultValue === null
+            const normalizedSampleValue =
+              sampleValue === undefined || sampleValue === null
                 ? null
-                : typeof defaultValue === "string"
-                ? defaultValue
-                : JSON.stringify(defaultValue);
+                : typeof sampleValue === "string"
+                ? sampleValue
+                : JSON.stringify(sampleValue);
             console.log("saveFields UPDATE query values:", [
               name,
               type,
@@ -612,7 +615,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               normalizedOptions,
               required ?? false,
               primary ?? false,
-              normalizedDefaultValue,
+              normalizedSampleValue,
               id,
             ]);
 
@@ -626,7 +629,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               normalizedOptions,
               required ?? false,
               primary ?? false,
-              normalizedDefaultValue,
+              normalizedSampleValue,
               id,
             ]);
             if (result.rowCount === 0) {
@@ -665,25 +668,25 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 : [],
               required: fieldData.required ?? required ?? false,
               primary: fieldData.primary ?? primary ?? false,
-              defaultValue: fieldData.defaultValue ?? defaultValue,
+              sampleValue: fieldData.sampleValue ?? sampleValue,
             });
           } else {
             // Create new field
             const query = `
-              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseid, label, description, "order", options, required, "primary", "defaultValue")
+              INSERT INTO "${DB_TABLES.FIELDS}" (name, type, caseid, label, description, "order", options, required, "primary", "sampleValue")
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
+              RETURNING id, name, type, caseid, label, description, "order", options, required, "primary", "sampleValue"
             `;
             console.log("saveFields INSERT query:", query);
             const normalizedOptions = Array.isArray(options)
               ? JSON.stringify(options)
               : options ?? "[]";
-            const normalizedDefaultValue =
-              defaultValue === undefined || defaultValue === null
+            const normalizedSampleValue =
+              sampleValue === undefined || sampleValue === null
                 ? null
-                : typeof defaultValue === "string"
-                ? defaultValue
-                : JSON.stringify(defaultValue);
+                : typeof sampleValue === "string"
+                ? sampleValue
+                : JSON.stringify(sampleValue);
             console.log("saveFields INSERT query values:", [
               name,
               type,
@@ -694,7 +697,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               normalizedOptions,
               required ?? false,
               primary ?? false,
-              normalizedDefaultValue,
+              normalizedSampleValue,
             ]);
 
             const result = await pool.query(query, [
@@ -707,7 +710,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
               normalizedOptions,
               required ?? false,
               primary ?? false,
-              normalizedDefaultValue,
+              normalizedSampleValue,
             ]);
             const fieldData = result.rows[0] || {};
 
@@ -741,7 +744,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 : [],
               required: fieldData.required ?? required ?? false,
               primary: fieldData.primary ?? primary ?? false,
-              defaultValue: fieldData.defaultValue ?? defaultValue,
+              sampleValue: fieldData.sampleValue ?? sampleValue,
             });
           }
         }
@@ -1194,7 +1197,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
         console.log("listFields called at:", new Date().toISOString());
 
         const query = `
-          SELECT id, name, type, caseid, label, description, "order", options, required, "primary", "defaultValue"
+          SELECT id, name, type, caseid, label, description, "order", options, required, "primary", "sampleValue"
           FROM "${DB_TABLES.FIELDS}"
           WHERE caseid = $1
           ORDER BY "order", name
@@ -1214,7 +1217,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           options: row.options,
           required: row.required,
           primary: row.primary,
-          defaultValue: row.defaultValue ?? null,
+          sampleValue: row.sampleValue ?? null,
         }));
 
         console.log("listFields successful:", {

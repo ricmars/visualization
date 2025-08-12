@@ -22,7 +22,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
   const [isPrimary, setIsPrimary] = useState(field.primary || false);
   const [isRequired, setIsRequired] = useState(field.required || false);
   const [options, setOptions] = useState("");
-  const [defaultValue, setDefaultValue] = useState<string>("");
+  const [sampleValue, setSampleValue] = useState<string>("");
   const [error, setError] = useState("");
   const modalRef = useRef<HTMLDivElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -51,17 +51,17 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
             })()
         : [];
       setOptions(parsedOptions.join(", "));
-      // Initialize default value as string for editing
-      const dv: any = (field as any).defaultValue;
+      // Initialize sample value as string for editing
+      const dv: any = (field as any).sampleValue;
       if (dv === null || dv === undefined) {
-        setDefaultValue("");
+        setSampleValue("");
       } else if (typeof dv === "string") {
-        setDefaultValue(dv);
+        setSampleValue(dv);
       } else {
         try {
-          setDefaultValue(JSON.stringify(dv));
+          setSampleValue(JSON.stringify(dv));
         } catch {
-          setDefaultValue(String(dv));
+          setSampleValue(String(dv));
         }
       }
     } else {
@@ -90,7 +90,7 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
       primary: isPrimary,
       required: isRequired,
       options: parsedOptions,
-      defaultValue: defaultValue || undefined,
+      sampleValue: sampleValue,
     });
     setError("");
     onClose();
@@ -272,14 +272,14 @@ const EditFieldModal: React.FC<EditFieldModalProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Default value (sample value)
+                    Sample value
                   </label>
                   <input
                     type="text"
-                    value={defaultValue}
-                    onChange={(e) => setDefaultValue(e.target.value)}
+                    value={sampleValue}
+                    onChange={(e) => setSampleValue(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 transition-colors"
-                    placeholder="Enter default value"
+                    placeholder="Enter sample value"
                   />
                 </div>
               </div>

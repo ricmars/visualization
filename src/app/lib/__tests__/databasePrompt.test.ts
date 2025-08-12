@@ -22,7 +22,6 @@ describe("Database Prompt", () => {
       expect(prompt).toContain("One view per workflow step");
       expect(prompt).toContain("unique viewId");
       expect(prompt).toContain("IDs as integers");
-      expect(prompt).toContain("defaultValue (exact case)");
     });
   });
 

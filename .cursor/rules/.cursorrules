@@ -756,7 +756,6 @@ const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1", {
   - Existing workflow: use saveFields for field-only edits; use saveView for view composition/layout; use saveCase only for structural changes (stages/processes/steps).
 - Conventions:
   - IDs must be integers (never strings).
-  - Use `defaultValue` casing consistently; do not accept `defaultvalue`.
 - What to avoid:
   - No language-specific keyword gates (e.g., searching for “delete” tokens).
   - No grafting of additional instructions into the user prompt; keep guidance in system and tool descriptions.

@@ -175,10 +175,10 @@ export const fieldRuleType: RuleTypeDefinition = {
         description: "Whether field is required",
       },
       {
-        name: "defaultValue",
+        name: "sampleValue",
         type: "unknown",
         optional: true,
-        description: "Default value for this field",
+        description: "Sample value for previews",
       },
     ],
   },
@@ -253,10 +253,10 @@ export const fieldRuleType: RuleTypeDefinition = {
         description: "Whether field is required",
       },
       {
-        name: "defaultValue",
+        name: "sampleValue",
         type: "TEXT",
         nullable: true,
-        description: "Default value",
+        description: "Sample value",
       },
     ],
     foreignKeys: [
@@ -294,13 +294,13 @@ export const fieldRuleType: RuleTypeDefinition = {
       if (Array.isArray(data.options)) {
         data.options = JSON.stringify(data.options);
       }
-      // Normalize defaultValue to a string for TEXT column storage
-      if (data.defaultValue !== undefined && data.defaultValue !== null) {
-        if (typeof data.defaultValue !== "string") {
+      // Normalize sampleValue to a string for TEXT column storage
+      if (data.sampleValue !== undefined && data.sampleValue !== null) {
+        if (typeof data.sampleValue !== "string") {
           try {
-            data.defaultValue = JSON.stringify(data.defaultValue);
+            data.sampleValue = JSON.stringify(data.sampleValue);
           } catch {
-            data.defaultValue = String(data.defaultValue);
+            data.sampleValue = String(data.sampleValue);
           }
         }
       }
@@ -312,13 +312,13 @@ export const fieldRuleType: RuleTypeDefinition = {
       if (Array.isArray(data.options)) {
         data.options = JSON.stringify(data.options);
       }
-      // Normalize defaultValue to a string for TEXT column storage
-      if (data.defaultValue !== undefined && data.defaultValue !== null) {
-        if (typeof data.defaultValue !== "string") {
+      // Normalize sampleValue to a string for TEXT column storage
+      if (data.sampleValue !== undefined && data.sampleValue !== null) {
+        if (typeof data.sampleValue !== "string") {
           try {
-            data.defaultValue = JSON.stringify(data.defaultValue);
+            data.sampleValue = JSON.stringify(data.sampleValue);
           } catch {
-            data.defaultValue = String(data.defaultValue);
+            data.sampleValue = String(data.sampleValue);
           }
         }
       }
