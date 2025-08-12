@@ -82,7 +82,16 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           id: caseData.id,
           name: caseData.name,
           description: caseData.description,
-          model: caseData.model ?? { stages: [] },
+          model:
+            typeof caseData.model === "string"
+              ? (() => {
+                  try {
+                    return JSON.parse(caseData.model);
+                  } catch {
+                    return { stages: [] };
+                  }
+                })()
+              : caseData.model ?? { stages: [] },
         };
       },
     },
@@ -321,17 +330,18 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           RETURNING id, name, description, model
         `;
         console.log("saveCase UPDATE query:", query);
+        const modelJson = JSON.stringify(cleanedModel);
         console.log("saveCase UPDATE query values:", [
           name,
           description,
-          cleanedModel,
+          modelJson,
           id,
         ]);
 
         const result = await pool.query(query, [
           name,
           description,
-          cleanedModel,
+          modelJson,
           id,
         ]);
         if (result.rowCount === 0) {
@@ -361,7 +371,16 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           id: caseData.id ?? id,
           name: caseData.name ?? name,
           description: caseData.description ?? description,
-          model: caseData.model ?? cleanedModel ?? null,
+          model:
+            typeof caseData.model === "string"
+              ? (() => {
+                  try {
+                    return JSON.parse(caseData.model);
+                  } catch {
+                    return cleanedModel ?? null;
+                  }
+                })()
+              : caseData.model ?? cleanedModel ?? null,
         };
       },
     },
@@ -915,14 +934,15 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             RETURNING id, name, caseid, model
           `;
           console.log("saveView UPDATE query:", query);
+          const modelJson = JSON.stringify(model);
           console.log("saveView UPDATE query values:", [
             name,
             caseid,
-            model,
+            modelJson,
             id,
           ]);
 
-          const result = await pool.query(query, [name, caseid, model, id]);
+          const result = await pool.query(query, [name, caseid, modelJson, id]);
           if (result.rowCount === 0) {
             console.error(`saveView ERROR: No view found with id ${id}`);
             throw new Error(`No view found with id ${id}`);
@@ -964,9 +984,14 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
             RETURNING id, name, caseid, model
           `;
           console.log("saveView INSERT query:", query);
-          console.log("saveView INSERT query values:", [name, caseid, model]);
+          const modelJson = JSON.stringify(model);
+          console.log("saveView INSERT query values:", [
+            name,
+            caseid,
+            modelJson,
+          ]);
 
-          const result = await pool.query(query, [name, caseid, model]);
+          const result = await pool.query(query, [name, caseid, modelJson]);
           const viewData = result.rows[0];
 
           console.log("saveView INSERT successful:");

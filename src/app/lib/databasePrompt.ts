@@ -37,6 +37,7 @@ New workflow scaffolding (applies when Context says mode=NEW):
 - Do not stop after creating fields. Finish by saving the complete case model via saveCase.
 
  Views:
+ - One view per workflow step of type "Collect information" only.
  - Only steps of type "Collect information" use a viewId and require an associated view.
  - Non-collect steps MUST NOT set viewId and do not need views.
  - Name views to match their collect step; include only relevant fields for that data entry.
@@ -49,7 +50,7 @@ Constraints:
 - IDs:
   - For existing entities (case, fields, views, existing stages/processes/steps): use IDs exactly as returned; never change them.
   - When creating new stages, processes, or steps in saveCase: you MAY assign new integer IDs that are unique within the current case model if not provided by tools. Do NOT invent IDs for views or fields; use IDs returned from saveView/saveFields.
-  - IDs as integers.
+   - IDs as integers and each collect-information step must reference a unique viewId within the case.
 - Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
 
 Tools are self-documenting. Follow each tool’s description and parameters.`;

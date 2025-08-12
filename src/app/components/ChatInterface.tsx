@@ -66,6 +66,10 @@ interface ChatInterfaceProps {
 // Function to format content based on its type
 function normalizeMarkdown(original: string): string {
   let content = original;
+  // Hide completion control markers from user display
+  content = content.replace(/^\s*\[\[COMPLETED\]\]\s*\n?/i, "");
+  // Also remove any inline occurrences of the marker while preserving line breaks
+  content = content.replace(/[ \t]*\[\[COMPLETED\]\][ \t]*/gi, "");
   // Normalize line endings to \n
   content = content.replace(/\r\n?/g, "\n");
   // Normalize headings and colon/bullet variants in one pass
@@ -114,6 +118,8 @@ function normalizeMarkdown(original: string): string {
       return `${prev}\n\n${next}`;
     },
   );
+
+  // No special newline handling for completion phrase; rely on [[COMPLETED]] marker format
 
   return content;
 }

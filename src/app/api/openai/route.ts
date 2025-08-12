@@ -862,7 +862,7 @@ ${contextLine}`;
                 messages.push({
                   role: "system",
                   content:
-                    "Post-condition check: Verify the user's goal is truly satisfied based on the latest state. If anything is missing or inconsistent, call the appropriate tools to fix it. If everything is correct, reply concisely with 'All constraints satisfied.' Avoid summaries.",
+                    "Post-condition check: Verify the user's goal is truly satisfied based on the latest state. If anything is missing or inconsistent, call the appropriate tools to fix it. If everything is correct, output EXACTLY the following two lines and nothing else:\n\n[[COMPLETED]]\nTask completed successfully.",
                 });
                 messages.push({ role: "user", content: enhancedPrompt });
                 messages.push({

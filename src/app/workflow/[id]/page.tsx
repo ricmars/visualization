@@ -2149,6 +2149,8 @@ export default function WorkflowPage() {
                       lowerText.includes("operation completed successfully") ||
                       lowerText.includes("updated") ||
                       lowerText.includes("all constraints satisfied") ||
+                      lowerText.includes("task completed successfully") ||
+                      lowerText.includes("[[completed]]") ||
                       (lowerText.includes("workflow") &&
                         lowerText.includes("saved successfully"))
                     ) {
@@ -3467,7 +3469,7 @@ export default function WorkflowPage() {
                     }`;
                   } else if (stepCount === 0 && viewCount > 0) {
                     parts.push(
-                      `$${viewCount} view${viewCount === 1 ? "" : "s"}`,
+                      `${viewCount} view${viewCount === 1 ? "" : "s"}`,
                     );
                   }
 
