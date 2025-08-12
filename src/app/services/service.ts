@@ -22,9 +22,13 @@ export class Service {
     return this.currentProvider;
   }
 
-  static async generateResponse(prompt: string, systemContext: string) {
+  static async generateResponse(
+    prompt: string,
+    systemContext: string,
+    history?: ChatMessage[],
+  ) {
     console.log(`Generating response with provider: ${this.currentProvider}`);
-    return await this.generateOpenAIResponse(prompt, systemContext);
+    return await this.generateOpenAIResponse(prompt, systemContext, history);
   }
 
   static async generateResponseWithContext(
@@ -60,6 +64,7 @@ export class Service {
   private static async generateOpenAIResponse(
     prompt: string,
     systemContext: string,
+    history?: ChatMessage[],
   ) {
     console.log("Calling OpenAI API...");
     const response = await fetch("/api/openai", {
@@ -70,6 +75,7 @@ export class Service {
       body: JSON.stringify({
         prompt,
         systemContext,
+        history,
       }),
     });
 

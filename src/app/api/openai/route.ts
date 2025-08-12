@@ -135,7 +135,7 @@ export async function POST(request: Request) {
   const startTime = Date.now();
 
   try {
-    const { prompt, systemContext } = await request.json();
+    const { prompt, systemContext, history } = await request.json();
     console.log("Received request with prompt length:", prompt.length);
     console.log("Prompt preview:", prompt.substring(0, 100) + "...");
     console.log("System context length:", systemContext?.length || 0);
@@ -214,8 +214,32 @@ ${contextLine}`;
         // Function call loop
         let messages: ChatCompletionMessageParam[] = [
           { role: "system", content: enhancedSystemPrompt },
-          { role: "user", content: enhancedPrompt },
         ];
+
+        // If a prior history is provided from the client, include it before continuing
+        if (Array.isArray(history)) {
+          try {
+            for (const item of history) {
+              if (
+                item &&
+                (item.role === "user" || item.role === "assistant") &&
+                typeof item.content === "string"
+              ) {
+                messages.push({ role: item.role, content: item.content });
+              }
+            }
+          } catch (_e) {
+            // If history is malformed, ignore it and fall back to single-turn
+          }
+        }
+
+        // If the last message in history isn't the current user prompt, append it
+        const last = messages[messages.length - 1];
+        const lastContent =
+          typeof last?.content === "string" ? last.content : undefined;
+        if (!(last && last.role === "user" && lastContent === enhancedPrompt)) {
+          messages.push({ role: "user", content: enhancedPrompt });
+        }
         let loopCount = 0;
         let done = false;
         let nudgedToUseTools = false;

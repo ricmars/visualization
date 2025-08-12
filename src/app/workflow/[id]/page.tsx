@@ -1978,6 +1978,15 @@ export default function WorkflowPage() {
         },
       ]);
 
+      // Build conversation history (excluding the just-typed message which we add separately)
+      const history = messages
+        .filter((m) => typeof m.content === "string" && m.content.trim())
+        .map((m) => ({
+          role:
+            m.sender === "user" ? ("user" as const) : ("assistant" as const),
+          content: m.content,
+        }));
+
       const response = await Service.generateResponse(
         message,
         selectedCase
@@ -1990,6 +1999,7 @@ export default function WorkflowPage() {
                 selectedCase.id,
             })
           : "",
+        history,
       );
 
       if (!response.ok) {

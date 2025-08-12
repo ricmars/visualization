@@ -20,7 +20,7 @@ describe("Service provider selection", () => {
       .fn()
       .mockResolvedValue({ ok: true, json: async () => ({}) });
 
-    await Service.generateResponse("prompt", "context");
+    await Service.generateResponse("prompt", "context", []);
     expect(global.fetch).toHaveBeenCalledWith(
       "/api/openai",
       expect.objectContaining({ method: "POST" }),
