@@ -901,6 +901,17 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
           }
         }
 
+        // Soft check: warn if model.fields is empty; only "Collect information" steps should require fields
+        if (
+          !model ||
+          !Array.isArray(model.fields) ||
+          model.fields.length === 0
+        ) {
+          console.warn(
+            "saveView: model.fields is empty; acceptable for non-collect steps. For 'Collect information' steps, ensure fields are added and linked via viewId.",
+          );
+        }
+
         if (id) {
           // Update existing view
           const query = `

@@ -511,208 +511,288 @@ ${contextLine}`;
               // Log context size (no trimming)
               trimMessages();
 
-              // Execute all tool calls in parallel for better performance
-              const toolCallPromises = toolCalls.map(async (toolCall) => {
-                const toolName = toolCall.function.name;
-                const toolArgs = JSON.parse(
-                  toolCall.function.arguments || "{}",
-                );
-                const toolCallStartTime = Date.now();
+              // Deduplicate createCase within the same iteration: allow only the first
+              const dedupedToolCalls: typeof toolCalls = [];
+              let seenCreateCase = false;
+              for (const tc of toolCalls) {
+                const name = tc.function.name;
+                if (name === "createCase") {
+                  if (seenCreateCase) {
+                    // Skip executing duplicate createCase; we'll emit an error tool message below
+                    dedupedToolCalls.push({
+                      ...tc,
+                      function: {
+                        ...tc.function,
+                        name: "__skip_createCase_duplicate__",
+                      },
+                    });
+                    continue;
+                  }
+                  seenCreateCase = true;
+                }
+                dedupedToolCalls.push(tc);
+              }
 
-                /*  console.log(`=== Executing tool: ${toolName} ===`);
+              // Execute all tool calls in parallel for better performance
+              let createdCaseId: number | null = null;
+              const toolCallPromises = dedupedToolCalls.map(
+                async (toolCall) => {
+                  const toolName = toolCall.function.name;
+                  const toolArgs = JSON.parse(
+                    toolCall.function.arguments || "{}",
+                  );
+                  const toolCallStartTime = Date.now();
+
+                  /*  console.log(`=== Executing tool: ${toolName} ===`);
                 console.log(
                   `Tool arguments:`,
                   JSON.stringify(toolArgs, null, 2),
                 );
 */
-                // Track tool call history
-                toolCallHistory.push({
-                  tool: toolName,
-                  timestamp: toolCallStartTime,
-                });
-
-                try {
-                  // No heuristic blocking: rely on tool descriptions for safety and confirmation
-
-                  const tool = filteredTools.find((t) => t.name === toolName);
-                  if (!tool) throw new Error(`Tool ${toolName} not found`);
-
-                  console.log(`Executing tool ${toolName}...`);
-                  // Stream a status update to the client immediately when execution starts
-                  await processor.sendText(`\nExecuting ${toolName}...`);
-                  const toolExecutionStartTime = Date.now();
-                  const result = await tool.execute(toolArgs);
-                  const toolExecutionDuration =
-                    Date.now() - toolExecutionStartTime;
-
-                  // Update tool call history with duration
-                  const lastToolCall =
-                    toolCallHistory[toolCallHistory.length - 1];
-                  if (lastToolCall) {
-                    lastToolCall.duration = toolExecutionDuration;
-                  }
-
-                  console.log(
-                    `Tool ${toolName} executed successfully in ${toolExecutionDuration}ms (${Math.round(
-                      toolExecutionDuration / 1000,
-                    )}s)`,
-                  );
-                  console.log(`Tool result:`, JSON.stringify(result, null, 2));
-
-                  // Don't send raw JSON tool results to the client
-                  // Only send user-friendly messages for specific tools
-                  const resultObj: ToolResult = result as ToolResult;
-                  if (toolName === "saveCase") {
-                    await processor.sendText(
-                      `\nWorkflow '${
-                        resultObj.name || "Unknown"
-                      }' saved successfully`,
-                    );
-                  } else if (toolName === "saveView") {
-                    await processor.sendText(
-                      `\nSaved '${resultObj.name || "Unknown"}'`,
-                    );
-                  } else if (toolName === "saveFields") {
-                    // Determine created vs updated from tool arguments (presence of id in fields)
-                    const fieldsParam: Array<{
-                      id?: number;
-                      name?: string;
-                      label?: string;
-                    }> = Array.isArray(toolArgs?.fields) ? toolArgs.fields : [];
-
-                    const createdParam = fieldsParam.filter(
-                      (f) =>
-                        !("id" in f) || f.id === undefined || f.id === null,
-                    );
-                    const updatedParam = fieldsParam.filter(
-                      (f) => typeof f.id === "number",
-                    );
-
-                    const createdCount = createdParam.length;
-                    const updatedCount = updatedParam.length;
-
-                    const resultFieldNames =
-                      (
-                        resultObj.fields as { name?: string; label?: string }[]
-                      )?.map((f) => f.name || f.label || "Unknown field") || [];
-
-                    const parts: string[] = [];
-                    if (updatedCount > 0) {
-                      const suffix = updatedCount === 1 ? "" : "s";
-                      const names = updatedParam.map(
-                        (f) => f.name || f.label || "Unknown field",
-                      );
-                      parts.push(
-                        `Updated ${updatedCount} field${suffix}: ${names.join(
-                          ", ",
-                        )}`,
-                      );
-                    }
-                    if (createdCount > 0) {
-                      const suffix = createdCount === 1 ? "" : "s";
-                      const names = createdParam.map(
-                        (f) => f.name || f.label || "Unknown field",
-                      );
-                      // If names are empty (unlikely), fall back to result names
-                      parts.push(
-                        names.length > 0
-                          ? `Created ${createdCount} field${suffix}: ${names.join(
-                              ", ",
-                            )}`
-                          : `Created ${createdCount} field${suffix}: ${resultFieldNames.join(
-                              ", ",
-                            )}`,
-                      );
-                    }
-                    if (parts.length === 0) {
-                      const total =
-                        resultObj.fields?.length || resultObj.ids?.length || 0;
-                      const suffix = total === 1 ? "" : "s";
-                      await processor.sendText(
-                        `\nSaved ${total} field${suffix}`,
-                      );
-                    } else {
-                      await processor.sendText(`\n${parts.join("; ")}`);
-                    }
-                  } else if (toolName === "deleteField") {
-                    const deletedName =
-                      (resultObj as any).deletedName || "Unknown field";
-                    const updatedViewsCount =
-                      (resultObj as any).updatedViewsCount || 0;
-                    if (updatedViewsCount > 0) {
-                      await processor.sendText(
-                        `\nDeleted field: ${deletedName} (removed from ${updatedViewsCount} view${
-                          updatedViewsCount === 1 ? "" : "s"
-                        })`,
-                      );
-                    } else {
-                      await processor.sendText(
-                        `\nDeleted field: ${deletedName}`,
-                      );
-                    }
-                  } else if (toolName === "deleteView") {
-                    const deletedName =
-                      (resultObj as any).deletedName || "Unknown view";
-                    await processor.sendText(`\nDeleted view: ${deletedName}`);
-                  } else if (toolName === "deleteCase") {
-                    await processor.sendText(`\nDeleted case successfully`);
-                  } else if (
-                    toolName.startsWith("get") ||
-                    toolName.startsWith("list")
-                  ) {
-                    // Don't send any message for get/list tools - they're read-only operations
-                  } else {
-                    // For other tools, send a generic success message with separation
-                    await processor.sendText(
-                      `\nOperation completed successfully`,
-                    );
-                  }
-
-                  // Add tool result to messages
-                  messages.push({
-                    role: "tool",
-                    content: JSON.stringify(result),
-                    tool_call_id: toolCall.id,
+                  // Track tool call history
+                  toolCallHistory.push({
+                    tool: toolName,
+                    timestamp: toolCallStartTime,
                   });
 
-                  // Log context size (no trimming)
-                  trimMessages();
+                  try {
+                    // No heuristic blocking: rely on tool descriptions for safety and confirmation
 
-                  return { success: true, result };
-                } catch (err) {
-                  const toolExecutionDuration = Date.now() - toolCallStartTime;
-                  console.error(
-                    `Tool ${toolName} failed after ${toolExecutionDuration}ms:`,
-                    err,
-                  );
+                    // If this is a skipped duplicate createCase, emit a synthetic error tool message and return
+                    if (toolName === "__skip_createCase_duplicate__") {
+                      await processor.sendText(
+                        `\nSkipping duplicate createCase call in the same turn.`,
+                      );
+                      messages.push({
+                        role: "tool",
+                        content: JSON.stringify({
+                          error:
+                            "Duplicate createCase call skipped. A case was already created in this turn.",
+                        }),
+                        tool_call_id: toolCall.id,
+                      });
+                      return {
+                        success: false,
+                        error: "duplicate createCase skipped",
+                      };
+                    }
 
-                  // Update tool call history with duration
-                  const lastToolCall =
-                    toolCallHistory[toolCallHistory.length - 1];
-                  if (lastToolCall) {
-                    lastToolCall.duration = toolExecutionDuration;
+                    const tool = filteredTools.find((t) => t.name === toolName);
+                    if (!tool) throw new Error(`Tool ${toolName} not found`);
+
+                    console.log(`Executing tool ${toolName}...`);
+                    // Stream a status update to the client immediately when execution starts
+                    await processor.sendText(`\nExecuting ${toolName}...`);
+                    const toolExecutionStartTime = Date.now();
+                    const result = await tool.execute(toolArgs);
+                    const toolExecutionDuration =
+                      Date.now() - toolExecutionStartTime;
+
+                    // Update tool call history with duration
+                    const lastToolCall =
+                      toolCallHistory[toolCallHistory.length - 1];
+                    if (lastToolCall) {
+                      lastToolCall.duration = toolExecutionDuration;
+                    }
+
+                    console.log(
+                      `Tool ${toolName} executed successfully in ${toolExecutionDuration}ms (${Math.round(
+                        toolExecutionDuration / 1000,
+                      )}s)`,
+                    );
+                    console.log(
+                      `Tool result:`,
+                      JSON.stringify(result, null, 2),
+                    );
+
+                    // Capture newly created case ID to prevent duplicate createCase calls
+                    if (
+                      toolName === "createCase" &&
+                      result &&
+                      (result as any).id
+                    ) {
+                      createdCaseId = Number((result as any).id) || null;
+                    }
+
+                    // Don't send raw JSON tool results to the client
+                    // Only send user-friendly messages for specific tools
+                    const resultObj: ToolResult = result as ToolResult;
+                    if (toolName === "saveCase") {
+                      await processor.sendText(
+                        `\nWorkflow '${
+                          resultObj.name || "Unknown"
+                        }' saved successfully`,
+                      );
+                    } else if (toolName === "saveView") {
+                      await processor.sendText(
+                        `\nSaved '${resultObj.name || "Unknown"}'`,
+                      );
+                    } else if (toolName === "saveFields") {
+                      // Determine created vs updated from tool arguments (presence of id in fields)
+                      const fieldsParam: Array<{
+                        id?: number;
+                        name?: string;
+                        label?: string;
+                      }> = Array.isArray(toolArgs?.fields)
+                        ? toolArgs.fields
+                        : [];
+
+                      const createdParam = fieldsParam.filter(
+                        (f) =>
+                          !("id" in f) || f.id === undefined || f.id === null,
+                      );
+                      const updatedParam = fieldsParam.filter(
+                        (f) => typeof f.id === "number",
+                      );
+
+                      const createdCount = createdParam.length;
+                      const updatedCount = updatedParam.length;
+
+                      const resultFieldNames =
+                        (
+                          resultObj.fields as {
+                            name?: string;
+                            label?: string;
+                          }[]
+                        )?.map((f) => f.name || f.label || "Unknown field") ||
+                        [];
+
+                      const parts: string[] = [];
+                      if (updatedCount > 0) {
+                        const suffix = updatedCount === 1 ? "" : "s";
+                        const names = updatedParam.map(
+                          (f) => f.name || f.label || "Unknown field",
+                        );
+                        parts.push(
+                          `Updated ${updatedCount} field${suffix}: ${names.join(
+                            ", ",
+                          )}`,
+                        );
+                      }
+                      if (createdCount > 0) {
+                        const suffix = createdCount === 1 ? "" : "s";
+                        const names = createdParam.map(
+                          (f) => f.name || f.label || "Unknown field",
+                        );
+                        // If names are empty (unlikely), fall back to result names
+                        parts.push(
+                          names.length > 0
+                            ? `Created ${createdCount} field${suffix}: ${names.join(
+                                ", ",
+                              )}`
+                            : `Created ${createdCount} field${suffix}: ${resultFieldNames.join(
+                                ", ",
+                              )}`,
+                        );
+                      }
+                      if (parts.length === 0) {
+                        const total =
+                          resultObj.fields?.length ||
+                          resultObj.ids?.length ||
+                          0;
+                        const suffix = total === 1 ? "" : "s";
+                        await processor.sendText(
+                          `\nSaved ${total} field${suffix}`,
+                        );
+                      } else {
+                        await processor.sendText(`\n${parts.join("; ")}`);
+                      }
+                    } else if (toolName === "deleteField") {
+                      const deletedName =
+                        (resultObj as any).deletedName || "Unknown field";
+                      const updatedViewsCount =
+                        (resultObj as any).updatedViewsCount || 0;
+                      if (updatedViewsCount > 0) {
+                        await processor.sendText(
+                          `\nDeleted field: ${deletedName} (removed from ${updatedViewsCount} view${
+                            updatedViewsCount === 1 ? "" : "s"
+                          })`,
+                        );
+                      } else {
+                        await processor.sendText(
+                          `\nDeleted field: ${deletedName}`,
+                        );
+                      }
+                    } else if (toolName === "deleteView") {
+                      const deletedName =
+                        (resultObj as any).deletedName || "Unknown view";
+                      await processor.sendText(
+                        `\nDeleted view: ${deletedName}`,
+                      );
+                    } else if (toolName === "deleteCase") {
+                      await processor.sendText(`\nDeleted case successfully`);
+                    } else if (
+                      toolName.startsWith("get") ||
+                      toolName.startsWith("list")
+                    ) {
+                      // Don't send any message for get/list tools - they're read-only operations
+                    } else {
+                      // For other tools, send a generic success message with separation
+                      await processor.sendText(
+                        `\nOperation completed successfully`,
+                      );
+                    }
+
+                    // Add tool result to messages
+                    messages.push({
+                      role: "tool",
+                      content: JSON.stringify(result),
+                      tool_call_id: toolCall.id,
+                    });
+
+                    // Log context size (no trimming)
+                    trimMessages();
+
+                    return { success: true, result };
+                  } catch (err) {
+                    const toolExecutionDuration =
+                      Date.now() - toolCallStartTime;
+                    console.error(
+                      `Tool ${toolName} failed after ${toolExecutionDuration}ms:`,
+                      err,
+                    );
+
+                    // Update tool call history with duration
+                    const lastToolCall =
+                      toolCallHistory[toolCallHistory.length - 1];
+                    if (lastToolCall) {
+                      lastToolCall.duration = toolExecutionDuration;
+                    }
+
+                    await processor.sendText(
+                      `\nError executing ${toolName}: ${err}\n`,
+                    );
+
+                    // Add tool result to messages
+                    messages.push({
+                      role: "tool",
+                      content: JSON.stringify({ error: String(err) }),
+                      tool_call_id: toolCall.id,
+                    });
+
+                    // Log context size (no trimming)
+                    trimMessages();
+
+                    return { success: false, error: err };
                   }
-
-                  await processor.sendText(
-                    `\nError executing ${toolName}: ${err}\n`,
-                  );
-
-                  // Add tool result to messages
-                  messages.push({
-                    role: "tool",
-                    content: JSON.stringify({ error: String(err) }),
-                    tool_call_id: toolCall.id,
-                  });
-
-                  // Log context size (no trimming)
-                  trimMessages();
-
-                  return { success: false, error: err };
-                }
-              });
+                },
+              );
 
               // Wait for all tool calls to complete
               await Promise.all(toolCallPromises);
+
+              // If a new case was created in this iteration, update context to EXISTING and disable createCase for subsequent iterations
+              if (createdCaseId && Number.isInteger(createdCaseId)) {
+                currentCaseId = createdCaseId;
+                // Update filtered tools so createCase cannot be executed again in this session
+                filteredTools = filteredTools.filter(
+                  (t) => t.name !== "createCase",
+                );
+
+                // Inform the model about the updated context and restriction
+                const updatedContextLine = `Context update: caseId=${currentCaseId}; mode=EXISTING. Do NOT call createCase again; continue with saveFields, saveView, and saveCase using this caseId.`;
+                messages.push({ role: "system", content: updatedContextLine });
+              }
 
               // Generic post-condition verification loop:
               // After any mutating tool call (saveCase/saveView/saveFields/delete*), ask the model to self-verify against the user goal.

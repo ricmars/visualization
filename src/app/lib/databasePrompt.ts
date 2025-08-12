@@ -31,14 +31,16 @@ New workflow scaffolding (applies when Context says mode=NEW):
 - Required sequence:
   1) createCase(name, description)
   2) saveFields to create 6–10 sensible fields inferred from the description (IDs are returned by the tool)
-  3) saveView to create 2–4 views for data entry; each view references existing field IDs and includes a simple layout
-  4) saveCase with a full model having at least 4 stages, each with 1–3 steps; use a mix of step types. Any "Collect information" step must set viewId to one of the created views. Use integer IDs and consistent ordering for stages/processes/steps.
+  3) saveView to create one view per "Collect information" step ONLY; each such view MUST include a non-empty model.fields array referencing existing field IDs. Use the IDs returned by saveFields; if unavailable in context, call listFields(caseid) to retrieve them. Choose 3–6 relevant fields per view. Provide a basic layout: use { type: "two-column", columns: 2 } when >3 fields, otherwise { type: "single-column" }. Preserve each field’s required flag where applicable.
+  4) saveCase with a full model having at least 4 stages, each with 1–3 steps; use a mix of step types. Any "Collect information" step must set viewId to one of the created views. Non-collect steps MUST NOT set viewId. Use integer IDs and consistent ordering for stages/processes/steps.
 - If the user provides no specifics, use generic stage names and steps, e.g. stages: "Intake", "Review", "Decision", "Completion"; include steps like "Collect information" (with viewId), "Approve/Reject", "Automation"/"Decision", "Send Notification"/"Generate Document".
 - Do not stop after creating fields. Finish by saving the complete case model via saveCase.
 
-Views:
-- One view per workflow step; each step uses a unique viewId.
-- Name views to match their step; include only relevant fields.
+ Views:
+ - Only steps of type "Collect information" use a viewId and require an associated view.
+ - Non-collect steps MUST NOT set viewId and do not need views.
+ - Name views to match their collect step; include only relevant fields for that data entry.
+ - For collect views, model.fields MUST NOT be empty. If you do not yet have field IDs in context, call listFields(caseid) before saveView.
 
 Samples:
 - sampleValue is for preview/live demo only; it is not applied as a default.
@@ -48,7 +50,6 @@ Constraints:
   - For existing entities (case, fields, views, existing stages/processes/steps): use IDs exactly as returned; never change them.
   - When creating new stages, processes, or steps in saveCase: you MAY assign new integer IDs that are unique within the current case model if not provided by tools. Do NOT invent IDs for views or fields; use IDs returned from saveView/saveFields.
   - IDs as integers.
-- Use sampleValue (exact case), never samplevalue.
 - Never perform deletions (deleteField/deleteView/deleteCase) unless the user explicitly asks for deletion.
 
 Tools are self-documenting. Follow each tool’s description and parameters.`;
