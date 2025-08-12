@@ -69,13 +69,8 @@ function normalizeMarkdown(original: string): string {
   // Normalize headings and colon/bullet variants in one pass
   // Matches line starts like: "Analyze", "Reasoning", "Plan", "Next Action"
   // with optional leading bullet and optional trailing colon
-  content = content.replace(
-    /(^|\n)\s*(?:[-*]\s*)?(Analyze|Reasoning|Plan|Next Action)\s*(?::\s*|(?=\n|$))/gi,
-    (matched, start, label) => {
-      const hasColon = /:\s*$/.test(matched);
-      return `${start}\n### ${label}\n\n${hasColon ? "- " : ""}`;
-    },
-  );
+  // Remove any empty heading lines like "#" or "##" with no text
+  content = content.replace(/(^|\n)\s*#{1,6}\s*(?=\n|$)/g, "$1");
   // Ensure headings like "...text### Heading" start on a new block line
   content = content.replace(/([^\n])\s*(#{1,6})\s+/g, (match, prev, hashes) => {
     return `${prev}\n\n${hashes} `;
@@ -266,19 +261,24 @@ export default function ChatInterface({
   };
 
   const markdownComponents: Components = {
-    h3({ children }) {
-      const text = String(React.Children.toArray(children).join(" "))
-        .trim()
-        .toLowerCase();
-      const isSpecialHeading = ["reasoning", "plan", "next action"].includes(
-        text,
-      );
-      const className = isSpecialHeading
-        ? "text-xl md:text-2xl font-extrabold text-gray-900 dark:text-gray-100 mb-2 mt-3"
-        : "text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3";
+    h1({ children }) {
       return (
-        <h3 className={className}>
-          <strong>{children}</strong>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-gray-100 mb-3 mt-4">
+          {children}
+        </h1>
+      );
+    },
+    h2({ children }) {
+      return (
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
+          {children}
+        </h2>
+      );
+    },
+    h3({ children }) {
+      return (
+        <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
+          {children}
         </h3>
       );
     },
