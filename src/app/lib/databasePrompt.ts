@@ -26,6 +26,16 @@ Tool choice rules (critical):
 - Structural workflow model (create new, or add/remove stages/processes/steps, or finalize) → saveCase only.
 Do not call saveCase for simple edits.
 
+New workflow scaffolding (applies when Context says mode=NEW):
+- Always create a complete starter workflow, not just fields with at least 4 stages, each with 1–3 steps; use a mix of step types. Any "Collect information" step must set viewId to one of the created views. Use integer IDs and consistent ordering for stages/processes/steps.
+- Required sequence:
+  1) createCase(name, description)
+  2) saveFields to create 6–10 sensible fields inferred from the description (IDs are returned by the tool)
+  3) saveView to create 2–4 views for data entry; each view references existing field IDs and includes a simple layout
+  4) saveCase with a full model having at least 4 stages, each with 1–3 steps; use a mix of step types. Any "Collect information" step must set viewId to one of the created views. Use integer IDs and consistent ordering for stages/processes/steps.
+- If the user provides no specifics, use generic stage names and steps, e.g. stages: "Intake", "Review", "Decision", "Completion"; include steps like "Collect information" (with viewId), "Approve/Reject", "Automation"/"Decision", "Send Notification"/"Generate Document".
+- Do not stop after creating fields. Finish by saving the complete case model via saveCase.
+
 Views:
 - One view per workflow step; each step uses a unique viewId.
 - Name views to match their step; include only relevant fields.
