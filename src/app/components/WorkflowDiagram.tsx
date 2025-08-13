@@ -242,6 +242,8 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   };
 
   const handleDragEnd = (result: DropResult) => {
+    // Always clear dragging state when drag ends (even if cancelled)
+    setIsDragging(false);
     if (!result.destination) return;
 
     const { source, destination, type } = result;
@@ -573,8 +575,16 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
     <div className={`p-6 ${_isDragging ? "cursor-grabbing" : ""}`}>
       <div className="max-w-7xl mx-auto">
         <DragDropContext
-          onDragStart={_handleDragStart}
-          onDragEnd={handleDragEnd}
+          onDragStart={() => {
+            _handleDragStart();
+          }}
+          onDragEnd={(result) => {
+            handleDragEnd(result);
+          }}
+          onDragUpdate={() => {
+            // ensure mask state stays consistent during updates
+            if (!_isDragging) setIsDragging(true);
+          }}
         >
           <Droppable droppableId="stages" type="stage" direction="vertical">
             {(provided) => (

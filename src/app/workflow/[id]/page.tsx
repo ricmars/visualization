@@ -19,8 +19,7 @@ import useStepsUpdate from "./hooks/useStepsUpdate";
 import useFieldMutations from "./hooks/useFieldMutations";
 import useWorkflowMutations from "./hooks/useWorkflowMutations";
 import { composeQuickChatMessage } from "./utils/composeQuickChatMessage";
-import processToolResponse from "./utils/processToolResponse";
-import { Service } from "../../services/service";
+import useChatMessaging from "./hooks/useChatMessaging";
 import {
   Field,
   FieldReference,
@@ -341,12 +340,6 @@ export default function WorkflowPage() {
     isPreviewMode,
     generateModel: () => generateModelData(fields, workflowModel.stages),
   });
-  // Resizing refs handled by useChatPanel
-
-  // 5. All useEffect hooks
-  // (Replaced by usePersistentTab and useChatPanel)
-
-  // Resize handlers are provided by useChatPanel
 
   const sendQuickChat = useCallback(async () => {
     if (!quickChatText.trim()) return;
@@ -515,8 +508,8 @@ export default function WorkflowPage() {
   // Hooks that must always run every render (before any early returns)
   const { handleStepsUpdate } = useStepsUpdate({
     selectedCase,
-    setSelectedCase: (next) => setSelectedCase(next as any),
-    setModel,
+    setSelectedCaseAction: (next) => setSelectedCase(next as any),
+    setModelAction: setModel,
     eventName: MODEL_UPDATED_EVENT,
   });
 
@@ -546,6 +539,19 @@ export default function WorkflowPage() {
     addCheckpoint,
     caseId: id,
     eventName: MODEL_UPDATED_EVENT,
+  });
+
+  const { handleSendMessage } = useChatMessaging({
+    messages,
+    setMessagesAction: setMessages,
+    setIsProcessingAction: setIsProcessing,
+    selectedCase,
+    stages: workflowModel.stages,
+    refreshWorkflowDataAction: refreshWorkflowData,
+    setSelectedViewAction: setSelectedView,
+    setActiveStageAction: setActiveStage,
+    setActiveProcessAction: setActiveProcess,
+    setActiveStepAction: setActiveStep,
   });
 
   // Load workflow data
@@ -581,12 +587,6 @@ export default function WorkflowPage() {
     setActiveProcess(processId);
     setActiveStep(stepId);
   };
-
-  // Handlers are provided by hooks declared above
-
-  // handleUpdateField provided by useFieldMutations
-
-  // handleDeleteField provided by useFieldMutations
 
   const handleRemoveFieldFromView = async (field: Field) => {
     if (!selectedCase || !field.id || !selectedView) return;
@@ -813,291 +813,7 @@ export default function WorkflowPage() {
     }
   };
 
-  // handleAddStep provided by useWorkflowMutations
-
-  // handleDeleteStep provided by useWorkflowMutations
-
-  // handleDeleteProcess provided by useWorkflowMutations
-
-  // handleDeleteStage provided by useWorkflowMutations
-
-  const handleSendMessage = async (message: string) => {
-    let aiMessageId: string; // Declare at function scope
-
-    try {
-      setIsProcessing(true);
-
-      // Add user message immediately
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          content: message,
-          sender: "user",
-          timestamp: new Date(),
-        },
-      ]);
-
-      // Add a placeholder AI message that will be updated with the response
-      aiMessageId = uuidv4();
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: aiMessageId,
-          content: "",
-          sender: "assistant",
-          timestamp: new Date(),
-          isThinking: true, // Start with thinking indicator
-        },
-      ]);
-
-      // Build conversation history (excluding the just-typed message which we add separately)
-      const history = messages
-        .filter((m) => typeof m.content === "string" && m.content.trim())
-        .map((m) => ({
-          role:
-            m.sender === "user" ? ("user" as const) : ("assistant" as const),
-          content: m.content,
-        }));
-
-      const response = await Service.generateResponse(
-        message,
-        selectedCase
-          ? JSON.stringify({
-              currentCaseId: selectedCase.id,
-              name: selectedCase.name,
-              stages: workflowModel.stages,
-              instructions:
-                "You are working with an EXISTING workflow. Use saveCase with isNew=false for any modifications. The current case ID is: " +
-                selectedCase.id,
-            })
-          : "",
-        history,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to generate response: ${response.statusText}`);
-      }
-
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body available");
-      }
-
-      const decoder = new TextDecoder();
-      let shouldReloadWorkflow = false;
-      let currentThinkingContent = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-
-                if (data.text) {
-                  // Debug logging for all responses
-                  console.log("Received data.text:", data.text);
-
-                  // Check if this is a tool execution message that should be filtered
-                  const lowerText = data.text.toLowerCase();
-                  const isListTool =
-                    lowerText.includes("listviews") ||
-                    lowerText.includes("listfields");
-
-                  // Filter out verbose JSON responses from list tools, but keep readable messages
-                  // Only filter out raw JSON responses that contain specific field patterns
-                  // Allow through valuable content that contains useful information
-                  const shouldFilter =
-                    isListTool &&
-                    (lowerText.includes('"id":') ||
-                      lowerText.includes('"name":') ||
-                      lowerText.includes('"type":') ||
-                      lowerText.includes('"caseid":') ||
-                      lowerText.includes('"model":') ||
-                      lowerText.includes('"primary":') ||
-                      lowerText.includes('"required":') ||
-                      lowerText.includes('"label":') ||
-                      lowerText.includes('"description":') ||
-                      lowerText.includes('"order":') ||
-                      lowerText.includes('"options":') ||
-                      lowerText.includes('"defaultvalue":')) &&
-                    // Don't filter out content that contains valuable information
-                    !lowerText.includes("workflow") &&
-                    !lowerText.includes("fields created") &&
-                    !lowerText.includes("views created") &&
-                    !lowerText.includes("stages") &&
-                    !lowerText.includes("processes") &&
-                    !lowerText.includes("steps") &&
-                    !lowerText.includes("breakdown") &&
-                    !lowerText.includes("summary");
-
-                  // Also filter out raw JSON tool results that are being displayed to the user
-                  // But allow saveFields responses through (they have both ids and fields arrays)
-                  const isRawJsonToolResult =
-                    data.text.trim().startsWith("{") &&
-                    data.text.trim().endsWith("}") &&
-                    (lowerText.includes('"id":') ||
-                      lowerText.includes('"name":') ||
-                      lowerText.includes('"type":') ||
-                      lowerText.includes('"caseid":') ||
-                      lowerText.includes('"model":') ||
-                      lowerText.includes('"primary":') ||
-                      lowerText.includes('"required":') ||
-                      lowerText.includes('"label":') ||
-                      lowerText.includes('"description":') ||
-                      lowerText.includes('"order":') ||
-                      lowerText.includes('"options":') ||
-                      lowerText.includes('"defaultvalue":')) &&
-                    // Don't filter out saveFields responses (they have both ids and fields arrays)
-                    !(
-                      lowerText.includes('"ids":') &&
-                      lowerText.includes('"fields":')
-                    );
-
-                  if (!shouldFilter && !isRawJsonToolResult) {
-                    console.log(
-                      "Processing response (not filtered):",
-                      data.text,
-                    );
-
-                    // Check if this is a JSON response that should be made more readable
-                    let processedText = data.text;
-
-                    // Try to parse as JSON and create a readable message
-                    processedText = processToolResponse(data.text);
-
-                    // Add debugging for saveField responses
-                    if (
-                      data.text.includes('"type"') &&
-                      data.text.includes('"name"') &&
-                      data.text.includes('"id"')
-                    ) {
-                      console.log("Processing saveField response:", data.text);
-                      console.log("Processed text:", processedText);
-                    }
-
-                    // Accumulate thinking content in the current AI message
-                    currentThinkingContent += processedText;
-
-                    // Update the current AI message with accumulated content
-                    setMessages((prev) =>
-                      prev.map((msg) =>
-                        msg.id === aiMessageId
-                          ? {
-                              ...msg,
-                              content: currentThinkingContent,
-                              isThinking: true,
-                            }
-                          : msg,
-                      ),
-                    );
-                  } else {
-                    console.log("Response filtered out:", data.text);
-                    console.log(
-                      "shouldFilter:",
-                      shouldFilter,
-                      "isRawJsonToolResult:",
-                      isRawJsonToolResult,
-                    );
-                  }
-
-                  // Track if we should reload the workflow
-                  // Check if this is a tool execution message that indicates a tool was executed
-                  if (data.text) {
-                    const lowerText = data.text.toLowerCase();
-                    // Check for tool execution success messages
-                    if (
-                      lowerText.includes("created") ||
-                      lowerText.includes("saved") ||
-                      lowerText.includes("deleted") ||
-                      lowerText.includes("removed") ||
-                      lowerText.includes("operation completed successfully") ||
-                      lowerText.includes("updated") ||
-                      lowerText.includes("all constraints satisfied") ||
-                      lowerText.includes("task completed successfully") ||
-                      lowerText.includes("[[completed]]") ||
-                      (lowerText.includes("workflow") &&
-                        lowerText.includes("saved successfully"))
-                    ) {
-                      shouldReloadWorkflow = true;
-                    }
-                  }
-                }
-
-                if (data.error) {
-                  console.error("Streaming error:", data.error);
-                  setMessages((prev) => [
-                    ...prev,
-                    {
-                      id: uuidv4(),
-                      content: `Error: ${data.error}`,
-                      sender: "assistant",
-                      timestamp: new Date(),
-                    },
-                  ]);
-                }
-
-                if (data.done) {
-                  // Clear the thinking indicator when done
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === aiMessageId
-                        ? { ...msg, isThinking: false }
-                        : msg,
-                    ),
-                  );
-
-                  // Refresh the workflow data if tools were executed
-                  if (shouldReloadWorkflow) {
-                    await refreshWorkflowData();
-                    // Clear selection caches that can cause stale UI
-                    setSelectedView(null);
-                    setActiveStage(undefined);
-                    setActiveProcess(undefined);
-                    setActiveStep(undefined);
-                  }
-                  break;
-                }
-              } catch (_parseError) {
-                console.warn("Failed to parse SSE data:", line);
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-
-      // Clear the thinking indicator on error
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === aiMessageId ? { ...msg, isThinking: false } : msg,
-        ),
-      );
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          content: "Sorry, there was an error processing your request.",
-          sender: "assistant",
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  // handleSendMessage already initialized above to maintain hook order
 
   const handleClearChat = () => {
     setMessages([]);
@@ -1115,29 +831,6 @@ export default function WorkflowPage() {
   };
 
   // workflow mutation handlers provided by hook called earlier
-
-  const _handleRestoreCheckpoint = (checkpoint: WorkflowCheckpoint) => {
-    if (
-      confirm(
-        "Are you sure you want to restore this checkpoint? All changes after this point will be lost.",
-      )
-    ) {
-      setSelectedCase((prev) =>
-        prev
-          ? {
-              ...prev,
-              model: checkpoint.model,
-            }
-          : null,
-      );
-
-      // Remove all checkpoints after the restored one
-      const checkpointIndex = checkpoints.findIndex(
-        (c) => c.id === checkpoint.id,
-      );
-      setCheckpoints((prev) => prev.slice(checkpointIndex));
-    }
-  };
 
   const handleEditWorkflow = async (data: {
     name: string;
@@ -1208,6 +901,13 @@ export default function WorkflowPage() {
     const [removed] = stages.splice(startIndex, 1);
     stages.splice(endIndex, 0, removed);
     const updatedModel = { ...workflowModel, stages };
+    // Optimistic UI update
+    setModel((prev) => (prev ? { ...prev, stages } : prev));
+    setSelectedCase((prev) =>
+      prev
+        ? ({ ...prev, model: { ...(prev.model || {}), stages } } as any)
+        : prev,
+    );
     addCheckpoint("Reordered stages", updatedModel);
     handleStepsUpdate(stages);
   };
@@ -1226,6 +926,16 @@ export default function WorkflowPage() {
       }
       return stage;
     });
+    // Optimistic UI update
+    setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
+    setSelectedCase((prev) =>
+      prev
+        ? ({
+            ...prev,
+            model: { ...(prev.model || {}), stages: updatedStages },
+          } as any)
+        : prev,
+    );
     handleStepsUpdate(updatedStages);
   };
 
@@ -1252,6 +962,16 @@ export default function WorkflowPage() {
       }
       return stage;
     });
+    // Optimistic UI update
+    setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
+    setSelectedCase((prev) =>
+      prev
+        ? ({
+            ...prev,
+            model: { ...(prev.model || {}), stages: updatedStages },
+          } as any)
+        : prev,
+    );
     handleStepsUpdate(updatedStages);
   };
 

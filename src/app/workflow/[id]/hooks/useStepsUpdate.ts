@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { Stage } from "../../../types";
+import { DB_TABLES } from "../../../types/database";
 
 type MinimalCase = {
   id: number;
@@ -18,8 +19,8 @@ type ComposedModel = {
 
 type UseStepsUpdateArgs = {
   selectedCase: MinimalCase | null;
-  setSelectedCase: (next: MinimalCase) => void;
-  setModel: (
+  setSelectedCaseAction: (next: MinimalCase) => void;
+  setModelAction: (
     updater: (prev: ComposedModel | null) => ComposedModel | null,
   ) => void;
   eventName?: string; // defaults to 'model-updated'
@@ -27,8 +28,8 @@ type UseStepsUpdateArgs = {
 
 export default function useStepsUpdate({
   selectedCase,
-  setSelectedCase,
-  setModel,
+  setSelectedCaseAction,
+  setModelAction,
   eventName = "model-updated",
 }: UseStepsUpdateArgs) {
   const handleStepsUpdate = useCallback(
@@ -42,7 +43,7 @@ export default function useStepsUpdate({
           name: selectedCase.name,
         };
 
-        const requestUrl = `/api/database?table=cases&id=${selectedCase.id}`;
+        const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
         const requestBody = {
           name: selectedCase.name,
           description: selectedCase.description,
@@ -64,11 +65,11 @@ export default function useStepsUpdate({
 
         await response.json();
 
-        setSelectedCase({
+        setSelectedCaseAction({
           ...selectedCase,
           model: updatedModel,
         } as MinimalCase);
-        setModel((prev) =>
+        setModelAction((prev) =>
           prev ? { ...prev, stages: updatedModel.stages } : null,
         );
 
@@ -79,7 +80,7 @@ export default function useStepsUpdate({
         throw error;
       }
     },
-    [selectedCase, setSelectedCase, setModel, eventName],
+    [selectedCase, setSelectedCaseAction, setModelAction, eventName],
   );
 
   return { handleStepsUpdate } as const;
