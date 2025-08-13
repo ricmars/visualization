@@ -13,13 +13,25 @@ import ChatPanelContent from "./components/ChatPanelContent";
 import usePersistentTab from "./hooks/usePersistentTab";
 import { useChatPanel } from "./hooks/useChatPanel";
 import { useFreeFormSelection } from "./hooks/useFreeFormSelection";
-import useQuickSelectionSummary from "./hooks/useQuickSelectionSummary";
 import usePreviewIframe from "./hooks/usePreviewIframe";
 import useStepsUpdate from "./hooks/useStepsUpdate";
 import useFieldMutations from "./hooks/useFieldMutations";
 import useWorkflowMutations from "./hooks/useWorkflowMutations";
-import { composeQuickChatMessage } from "./utils/composeQuickChatMessage";
+import { useReorderHandlers } from "./hooks/useReorderHandlers";
 import useChatMessaging from "./hooks/useChatMessaging";
+import { useQuickChat } from "./hooks/useQuickChat";
+import { useViewMutations } from "./hooks/useViewMutations";
+import {
+  ACTIVE_TAB_STORAGE_KEY,
+  ACTIVE_PANEL_TAB_STORAGE_KEY,
+  CHECKPOINTS_STORAGE_KEY,
+  MAX_CHECKPOINTS,
+  MODEL_UPDATED_EVENT,
+  CHAT_PANEL_WIDTH_STORAGE_KEY,
+  CHAT_PANEL_EXPANDED_STORAGE_KEY,
+  CHAT_MIN_WIDTH,
+  CHAT_MAX_WIDTH,
+} from "./utils/constants";
 import {
   Field,
   FieldReference,
@@ -30,7 +42,7 @@ import {
 } from "../../types";
 // import { StepType } from "../../utils/stepTypes";
 import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
-import { validateModelIds } from "./utils/validateModelIds";
+// validateModelIds handled inside useWorkflowData
 import { useWorkflowData } from "./hooks/useWorkflowData";
 
 // Initialize rule types on module load
@@ -52,16 +64,14 @@ import WorkflowTopBar from "./components/WorkflowTopBar";
 import WorkflowToolbar from "./components/WorkflowToolbar";
 import WorkflowTabs from "./components/WorkflowTabs";
 import FieldsHeader from "./components/FieldsHeader";
+import ViewsHeader from "./components/ViewsHeader";
 import LoadingScreen from "./components/LoadingScreen";
 import ErrorScreen from "./components/ErrorScreen";
 import AddFieldModal from "../../components/AddFieldModal";
 import EditFieldModal from "../../components/EditFieldModal";
-import { DB_TABLES, DB_COLUMNS } from "../../types/database";
-import {
-  removeFieldFromViewModel,
-  addFieldToViewModel,
-} from "../../lib/modelUtils";
-import { fetchWithBaseUrl } from "../../lib/fetchWithBaseUrl";
+import { DB_TABLES } from "../../types/database";
+// view model helpers used inside useViewMutations (kept for types, not used here)
+// fetchWithBaseUrl used in hooks/utilities
 import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
@@ -78,22 +88,9 @@ export type FieldWithType = {
   type: string;
 };
 
-const ACTIVE_TAB_STORAGE_KEY = "active_tab";
-const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
-const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
-const MAX_CHECKPOINTS = 10;
-const MODEL_UPDATED_EVENT = "model-updated";
-const CHAT_PANEL_WIDTH_STORAGE_KEY = "chat_panel_width";
-const CHAT_PANEL_EXPANDED_STORAGE_KEY = "chat_panel_expanded";
-const CHAT_MIN_WIDTH = 300;
-const CHAT_MAX_WIDTH = 800;
+// moved to ./utils/constants
 
-interface DatabaseCase {
-  id: number;
-  name: string;
-  description: string;
-  model: any;
-}
+// DatabaseCase type provided by useWorkflowData
 
 interface WorkflowState {
   stages: Stage[];
@@ -109,41 +106,7 @@ interface ComposedModel {
 
 // validateModelIds extracted to ./utils/validateModelIds
 
-async function fetchCaseData(caseid: string): Promise<ComposedModel> {
-  try {
-    // Fetch the case data
-    const caseResponse = await fetchWithBaseUrl(
-      `/api/database?table=${DB_TABLES.CASES}&id=${caseid}`,
-    );
-    if (!caseResponse.ok) {
-      throw new Error(`Failed to fetch case: ${caseResponse.status}`);
-    }
-    const caseData = await caseResponse.json();
-    const selectedCase: DatabaseCase = caseData.data;
-
-    if (!selectedCase) {
-      throw new Error("Case not found");
-    }
-
-    // Use jsonb model directly
-    const parsedModel = selectedCase.model;
-
-    // Validate that all stages, processes, and steps have IDs
-    const stagesWithIds = validateModelIds(parsedModel.stages || []);
-
-    // Compose the complete model
-    const composedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: stagesWithIds,
-    };
-
-    return composedModel;
-  } catch (error) {
-    console.error("Error fetching case data:", error);
-    throw error;
-  }
-}
+// _fetchCaseData provided by useWorkflowData; local helper removed
 
 export default function WorkflowPage() {
   // 1. Router and params hooks
@@ -328,15 +291,7 @@ export default function WorkflowPage() {
   );
 
   // Quick selection summary string for QuickChat overlay
-  const quickSelectionSummary = useQuickSelectionSummary({
-    stages: workflowModel.stages,
-    selectedStageIds,
-    selectedProcessIds,
-    selectedStepIds,
-    selectedFieldIds,
-    selectedViewIds,
-  });
-  const quickInputRef = useRef<HTMLInputElement>(null);
+  // quickInputRef already defined for QuickChatOverlay usage
 
   // 3. All useRef hooks
   const addFieldButtonRef = useRef<HTMLButtonElement>(null);
@@ -345,34 +300,7 @@ export default function WorkflowPage() {
     generateModel: () => generateModelData(fields, workflowModel.stages),
   });
 
-  const sendQuickChat = useCallback(async () => {
-    if (!quickChatText.trim()) return;
-    const composedMessage = composeQuickChatMessage({
-      quickChatText,
-      selectedFieldIds: selectedFieldIds as number[],
-      selectedViewIds: selectedViewIds as number[],
-      selectedStageIds: selectedStageIds as number[],
-      selectedProcessIds: selectedProcessIds as number[],
-      selectedStepIds: selectedStepIds as number[],
-      fields: fields.map((f) => ({ id: f.id as number, name: f.name })),
-      views: views.map((v) => ({ id: v.id as number, name: v.name })),
-      stages: workflowModel.stages as any,
-    });
-    setIsQuickChatOpen(false);
-    setQuickChatText("");
-    void handleSendMessage(composedMessage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fields,
-    views,
-    workflowModel.stages,
-    selectedFieldIds,
-    selectedViewIds,
-    selectedStageIds,
-    selectedProcessIds,
-    selectedStepIds,
-    quickChatText,
-  ]);
+  // replaced by useQuickChat
 
   // Resizing mouse handlers are provided by useChatPanel
 
@@ -439,22 +367,46 @@ export default function WorkflowPage() {
       setSelectedCase: (next) => setSelectedCase(next as any),
       caseId: id,
       eventName: MODEL_UPDATED_EVENT,
-      fetchCaseData,
+      fetchCaseData: _fetchCaseData,
     });
 
   const {
     handleAddStep,
+    handleAddProcess,
     handleDeleteStep,
     handleDeleteProcess,
     handleDeleteStage,
   } = useWorkflowMutations({
     selectedCase,
     workflowStages: workflowModel.stages,
-    setSelectedCase: (next) => setSelectedCase(next as any),
-    setModel,
-    setViews,
-    addCheckpoint,
+    setSelectedCaseAction: (next) => setSelectedCase(next as any),
+    setModelAction: setModel,
+    setViewsAction: setViews,
+    addCheckpointAction: addCheckpoint,
     caseId: id,
+    eventName: MODEL_UPDATED_EVENT,
+  });
+
+  const { handleStageReorder, handleProcessReorder, handleStepReorder } =
+    useReorderHandlers({
+      stages: workflowModel.stages,
+      setModelAction: setModel,
+      setSelectedCaseAction: (next) => setSelectedCase(next as any),
+      handleStepsUpdate,
+      selectedCase,
+    });
+
+  const {
+    handleAddFieldsToView,
+    handleRemoveFieldFromView,
+    handleAddFieldsToStep,
+  } = useViewMutations({
+    selectedCase,
+    fields,
+    views,
+    setViewsAction: setViews,
+    setModelAction: setModel,
+    setSelectedCaseAction: (next) => setSelectedCase(next as any),
     eventName: MODEL_UPDATED_EVENT,
   });
 
@@ -464,6 +416,27 @@ export default function WorkflowPage() {
     setIsProcessingAction: setIsProcessing,
     selectedCase,
     stages: workflowModel.stages,
+    refreshWorkflowDataAction: refreshWorkflowData,
+    setSelectedViewAction: setSelectedView,
+    setActiveStageAction: setActiveStage,
+    setActiveProcessAction: setActiveProcess,
+    setActiveStepAction: setActiveStep,
+  });
+
+  const quickInputRef = useRef<HTMLInputElement>(null);
+  const { quickSelectionSummary, sendQuickChat } = useQuickChat({
+    stages: workflowModel.stages,
+    fields,
+    views,
+    selectedFieldIds: (selectedFieldIds as number[]) || [],
+    selectedViewIds: (selectedViewIds as number[]) || [],
+    selectedStageIds: (selectedStageIds as number[]) || [],
+    selectedProcessIds: (selectedProcessIds as number[]) || [],
+    selectedStepIds: (selectedStepIds as number[]) || [],
+    messages,
+    setMessagesAction: setMessages,
+    setIsProcessingAction: setIsProcessing,
+    selectedCase,
     refreshWorkflowDataAction: refreshWorkflowData,
     setSelectedViewAction: setSelectedView,
     setActiveStageAction: setActiveStage,
@@ -500,93 +473,6 @@ export default function WorkflowPage() {
     setActiveStage(stageId);
     setActiveProcess(processId);
     setActiveStep(stepId);
-  };
-
-  const handleRemoveFieldFromView = async (field: Field) => {
-    if (!selectedCase || !field.id || !selectedView) return;
-
-    try {
-      // Extract the actual view ID from the selectedView
-      // selectedView can be "db-123" for database views or a step ID for workflow steps
-      let viewId: number | undefined;
-
-      if (selectedView.startsWith("db-")) {
-        // It's a database view, extract the ID
-        viewId = parseInt(selectedView.substring(3), 10);
-      } else {
-        // It's a workflow step, we don't need to handle this case here
-        // as workflow steps don't use this function
-        return;
-      }
-
-      if (!viewId || isNaN(viewId)) {
-        throw new Error("Invalid view ID");
-      }
-
-      // Find the view in the views array
-      const view = views.find((v) => v.id === viewId);
-      if (!view) {
-        throw new Error("View not found");
-      }
-
-      // Parse the existing view model
-      let viewModel;
-      try {
-        viewModel =
-          typeof view.model === "string" ? JSON.parse(view.model) : view.model;
-      } catch (_error) {
-        viewModel = { fields: [] };
-      }
-
-      // Remove the field using shared util
-      const { viewModel: updatedModel, removed } = removeFieldFromViewModel(
-        viewModel,
-        field.id,
-      );
-
-      // Only update if the field was actually removed
-      if (removed) {
-        // Update the view in the database
-        const response = await fetch(
-          `/api/database?table=${DB_TABLES.VIEWS}&id=${view.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              name: view.name,
-              caseid: selectedCase.id,
-              model: {
-                fields: updatedModel.fields,
-                layout: {
-                  type: "form",
-                  columns: 1,
-                },
-              },
-            }),
-          },
-        );
-
-        if (!response.ok) {
-          throw new Error("Failed to update view");
-        }
-
-        // Refresh the views state to get updated views
-        const viewsResponse = await fetchWithBaseUrl(
-          `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${selectedCase.id}`,
-        );
-        if (viewsResponse.ok) {
-          const viewsData = await viewsResponse.json();
-          setViews(viewsData.data);
-        }
-
-        console.log(`Removed field ${field.name} from view ${view.name}`);
-      }
-    } catch (error) {
-      console.error("Error removing field from view:", error);
-      alert("Failed to remove field from view. Please try again.");
-    }
   };
 
   const handleAddStage = async (stageData: { name: string }) => {
@@ -650,84 +536,7 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleAddProcess = async (stageId: number, processName: string) => {
-    if (!selectedCase || !model) return;
-
-    const updatedStages = workflowModel.stages.map((stage) =>
-      stage.id === stageId
-        ? {
-            ...stage,
-            processes: [
-              ...stage.processes,
-              {
-                id: Date.now(),
-                name: processName,
-                steps: [],
-              },
-            ],
-          }
-        : stage,
-    );
-    const updatedModel: ComposedModel = {
-      name: selectedCase.name,
-      description: selectedCase.description,
-      stages: updatedStages,
-    };
-    addCheckpoint(`Added process: ${processName}`, updatedModel);
-
-    try {
-      const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
-      const requestBody = {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        model: updatedModel,
-      };
-
-      console.log("=== Making Database Update Request ===");
-      console.log("Request URL:", requestUrl);
-      console.log("Request Method: PUT");
-      console.log("Request Body:", {
-        ...requestBody,
-        model: "Stringified model data (truncated for logging)",
-      });
-
-      const response = await fetch(requestUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("=== Database Update Failed ===");
-        console.error("Status:", response.status);
-        console.error("Status Text:", response.statusText);
-        console.error("Error Response:", errorText);
-        console.error("Request Details:", {
-          url: requestUrl,
-          method: "PUT",
-          body: requestBody,
-        });
-        throw new Error(
-          `Failed to add process: ${response.status} ${errorText}`,
-        );
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-      setModel((prev) =>
-        prev ? { ...prev, stages: updatedModel.stages } : prev,
-      );
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error adding process:", error);
-      throw new Error("Failed to add process");
-    }
-  };
+  // moved into useWorkflowMutations as handleAddProcess
 
   // handleSendMessage already initialized above to maintain hook order
 
@@ -812,83 +621,9 @@ export default function WorkflowPage() {
     }
   };
 
-  const handleStageReorder = (startIndex: number, endIndex: number) => {
-    const stages = [...workflowModel.stages];
-    const [removed] = stages.splice(startIndex, 1);
-    stages.splice(endIndex, 0, removed);
-    const updatedModel = { ...workflowModel, stages };
-    // Optimistic UI update
-    setModel((prev) => (prev ? { ...prev, stages } : prev));
-    if (selectedCase) {
-      setSelectedCase({
-        ...selectedCase,
-        model: { ...(selectedCase.model || {}), stages },
-      } as any);
-    }
-    addCheckpoint("Reordered stages", updatedModel);
-    handleStepsUpdate(stages);
-  };
+  // Handlers provided by useReorderHandlers
 
-  const handleProcessReorder = (
-    stageId: number,
-    startIndex: number,
-    endIndex: number,
-  ) => {
-    const updatedStages = workflowModel.stages.map((stage) => {
-      if (stage.id === stageId) {
-        const processes = [...stage.processes];
-        const [removed] = processes.splice(startIndex, 1);
-        processes.splice(endIndex, 0, removed);
-        return { ...stage, processes };
-      }
-      return stage;
-    });
-    // Optimistic UI update
-    setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
-    if (selectedCase) {
-      setSelectedCase({
-        ...selectedCase,
-        model: { ...(selectedCase.model || {}), stages: updatedStages },
-      } as any);
-    }
-    handleStepsUpdate(updatedStages);
-  };
-
-  const handleStepReorder = (
-    stageId: number,
-    processId: number,
-    startIndex: number,
-    endIndex: number,
-  ) => {
-    const updatedStages = workflowModel.stages.map((stage) => {
-      if (stage.id === stageId) {
-        return {
-          ...stage,
-          processes: stage.processes.map((process) => {
-            if (process.id === processId) {
-              const steps = [...process.steps];
-              const [removed] = steps.splice(startIndex, 1);
-              steps.splice(endIndex, 0, removed);
-              return { ...process, steps };
-            }
-            return process;
-          }),
-        };
-      }
-      return stage;
-    });
-    // Optimistic UI update
-    setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
-    if (selectedCase) {
-      setSelectedCase({
-        ...selectedCase,
-        model: { ...(selectedCase.model || {}), stages: updatedStages },
-      } as any);
-    }
-    handleStepsUpdate(updatedStages);
-  };
-
-  const handleAddFieldsToView = async (
+  /* const handleAddFieldsToView = async (
     viewId: number,
     fieldNames: string[],
   ) => {
@@ -1011,9 +746,9 @@ export default function WorkflowPage() {
       console.error("Error updating view fields:", error);
       alert("Failed to update view fields. Please try again.");
     }
-  };
+  }; */
 
-  const handleAddFieldsToStep = async (
+  /* const handleAddFieldsToStep = async (
     stepId: number,
     fieldNames: string[],
   ) => {
@@ -1111,7 +846,7 @@ export default function WorkflowPage() {
       console.error("Error updating step fields:", error);
       alert("Failed to update step fields. Please try again.");
     }
-  };
+  }; */
 
   const handleFieldsReorder = async (
     selectedViewId: string,
@@ -1451,25 +1186,38 @@ export default function WorkflowPage() {
                 </div>
               )}
               {activeTab === "views" && (
-                <ViewsPanel
-                  stages={workflowModel.stages}
-                  fields={fields}
-                  views={views}
-                  onAddField={handleAddField}
-                  onUpdateField={handleUpdateField}
-                  onDeleteField={handleDeleteField}
-                  onRemoveFieldFromView={handleRemoveFieldFromView}
-                  onAddFieldsToView={handleAddFieldsToView}
-                  onAddFieldsToStep={handleAddFieldsToStep}
-                  onFieldsReorder={(
-                    selectedViewId: string,
-                    fieldIds: number[],
-                  ) => {
-                    handleFieldsReorder(selectedViewId, fieldIds);
-                  }}
-                  onViewSelect={setSelectedView}
-                  selectedView={selectedView}
-                />
+                <>
+                  <ViewsHeader />
+                  <ViewsPanel
+                    stages={workflowModel.stages}
+                    fields={fields}
+                    views={views}
+                    onAddField={handleAddField}
+                    onUpdateField={handleUpdateField}
+                    onDeleteField={handleDeleteField}
+                    onRemoveFieldFromView={(field) =>
+                      void handleRemoveFieldFromView(field, selectedView)
+                    }
+                    onAddFieldsToView={(viewId, fieldNames) =>
+                      void handleAddFieldsToView(viewId, fieldNames)
+                    }
+                    onAddFieldsToStep={(stepId, fieldNames) =>
+                      void handleAddFieldsToStep(
+                        stepId,
+                        fieldNames,
+                        workflowModel.stages,
+                      )
+                    }
+                    onFieldsReorder={(
+                      selectedViewId: string,
+                      fieldIds: number[],
+                    ) => {
+                      handleFieldsReorder(selectedViewId, fieldIds);
+                    }}
+                    onViewSelect={setSelectedView}
+                    selectedView={selectedView}
+                  />
+                </>
               )}
             </>
           )}
@@ -1509,7 +1257,7 @@ export default function WorkflowPage() {
           <ChatPanelContent
             activeTab={activePanelTab}
             messages={messages}
-            onSendMessage={handleSendMessage}
+            onSendMessage={(message) => void handleSendMessage(message)}
             isProcessing={isProcessing}
             caseId={parseInt(id)}
             onQuickAction={beginFreeFormSelection}
@@ -1590,8 +1338,15 @@ export default function WorkflowPage() {
           inputRef={quickInputRef as React.RefObject<HTMLInputElement | null>}
           value={quickChatText}
           onChange={setQuickChatText}
-          onEnter={() => void sendQuickChat()}
-          onEscape={() => setIsQuickChatOpen(false)}
+          onEnter={() => {
+            void sendQuickChat(quickChatText);
+            setIsQuickChatOpen(false);
+            setQuickChatText("");
+          }}
+          onEscape={() => {
+            setIsQuickChatOpen(false);
+            setQuickChatText("");
+          }}
         />
       )}
     </div>

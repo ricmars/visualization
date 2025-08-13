@@ -16,10 +16,10 @@ type MinimalCase = {
 type UseWorkflowMutationsArgs = {
   selectedCase: MinimalCase | null;
   workflowStages: Stage[];
-  setSelectedCase: (next: MinimalCase) => void;
-  setModel: (next: any) => void;
-  setViews: (next: any) => void;
-  addCheckpoint: (description: string, model: any) => void;
+  setSelectedCaseAction: (next: MinimalCase) => void;
+  setModelAction: (next: any) => void;
+  setViewsAction: (next: any) => void;
+  addCheckpointAction: (description: string, model: any) => void;
   caseId: string;
   eventName?: string; // defaults to 'model-updated'
 };
@@ -27,10 +27,10 @@ type UseWorkflowMutationsArgs = {
 export default function useWorkflowMutations({
   selectedCase,
   workflowStages,
-  setSelectedCase,
-  setModel,
-  setViews,
-  addCheckpoint,
+  setSelectedCaseAction,
+  setModelAction,
+  setViewsAction,
+  addCheckpointAction,
   caseId,
   eventName = "model-updated",
 }: UseWorkflowMutationsArgs) {
@@ -93,7 +93,7 @@ export default function useWorkflowMutations({
           description: selectedCase.description,
           stages: updatedStages,
         };
-        addCheckpoint(`Added step: ${stepName}`, updatedModel);
+        addCheckpointAction(`Added step: ${stepName}`, updatedModel);
 
         const response = await fetch(
           `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
@@ -110,8 +110,8 @@ export default function useWorkflowMutations({
         if (!response.ok)
           throw new Error(`Failed to add step: ${response.status}`);
         const { data: updatedCase } = await response.json();
-        setSelectedCase(updatedCase);
-        setModel(updatedModel);
+        setSelectedCaseAction(updatedCase);
+        setModelAction(updatedModel);
 
         try {
           const viewsResponse = await fetchWithBaseUrl(
@@ -119,7 +119,7 @@ export default function useWorkflowMutations({
           );
           if (viewsResponse.ok) {
             const viewsData = await viewsResponse.json();
-            setViews(viewsData.data);
+            setViewsAction(viewsData.data);
           }
         } catch {}
 
@@ -132,10 +132,10 @@ export default function useWorkflowMutations({
     [
       selectedCase,
       workflowStages,
-      setSelectedCase,
-      setModel,
-      setViews,
-      addCheckpoint,
+      setSelectedCaseAction,
+      setModelAction,
+      setViewsAction,
+      addCheckpointAction,
       caseId,
       eventName,
     ],
@@ -175,7 +175,7 @@ export default function useWorkflowMutations({
         description: selectedCase.description,
         stages: updatedStages,
       };
-      addCheckpoint("Deleted step", updatedModel);
+      addCheckpointAction("Deleted step", updatedModel);
 
       try {
         if (typeof viewIdToDelete === "number") {
@@ -210,8 +210,8 @@ export default function useWorkflowMutations({
         if (!response.ok)
           throw new Error(`Failed to delete step: ${response.status}`);
         const { data: updatedCase } = await response.json();
-        setSelectedCase(updatedCase);
-        setModel(updatedModel);
+        setSelectedCaseAction(updatedCase);
+        setModelAction(updatedModel);
 
         try {
           const viewsResponse = await fetchWithBaseUrl(
@@ -219,7 +219,7 @@ export default function useWorkflowMutations({
           );
           if (viewsResponse.ok) {
             const viewsData = await viewsResponse.json();
-            setViews(viewsData.data);
+            setViewsAction(viewsData.data);
           }
         } catch {}
 
@@ -232,10 +232,10 @@ export default function useWorkflowMutations({
     [
       selectedCase,
       workflowStages,
-      setSelectedCase,
-      setModel,
-      setViews,
-      addCheckpoint,
+      setSelectedCaseAction,
+      setModelAction,
+      setViewsAction,
+      addCheckpointAction,
       eventName,
     ],
   );
@@ -267,7 +267,7 @@ export default function useWorkflowMutations({
         description: selectedCase.description,
         stages: updatedStages,
       };
-      addCheckpoint("Deleted process", updatedModel);
+      addCheckpointAction("Deleted process", updatedModel);
 
       try {
         if (viewIdsToDelete.length > 0) {
@@ -297,8 +297,8 @@ export default function useWorkflowMutations({
         if (!response.ok)
           throw new Error(`Failed to delete process: ${response.status}`);
         const { data: updatedCase } = await response.json();
-        setSelectedCase(updatedCase);
-        setModel(updatedModel);
+        setSelectedCaseAction(updatedCase);
+        setModelAction(updatedModel);
 
         try {
           const viewsResponse = await fetchWithBaseUrl(
@@ -306,7 +306,7 @@ export default function useWorkflowMutations({
           );
           if (viewsResponse.ok) {
             const viewsData = await viewsResponse.json();
-            setViews(viewsData.data);
+            setViewsAction(viewsData.data);
           }
         } catch {}
 
@@ -319,10 +319,62 @@ export default function useWorkflowMutations({
     [
       selectedCase,
       workflowStages,
-      setSelectedCase,
-      setModel,
-      setViews,
-      addCheckpoint,
+      setSelectedCaseAction,
+      setModelAction,
+      setViewsAction,
+      addCheckpointAction,
+      eventName,
+    ],
+  );
+
+  const handleAddProcess = useCallback(
+    async (stageId: number, processName: string) => {
+      if (!selectedCase) return;
+      const updatedStages = workflowStages.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              processes: [
+                ...stage.processes,
+                { id: Date.now(), name: processName, steps: [] },
+              ],
+            }
+          : stage,
+      );
+      const updatedModel = {
+        name: selectedCase.name,
+        description: selectedCase.description,
+        stages: updatedStages,
+      };
+      addCheckpointAction(`Added process: ${processName}`, updatedModel);
+      const requestUrl = `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`;
+      const requestBody = {
+        name: selectedCase.name,
+        description: selectedCase.description,
+        model: updatedModel,
+      };
+      const response = await fetch(requestUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to add process: ${response.status} ${errorText}`,
+        );
+      }
+      const { data: updatedCase } = await response.json();
+      setSelectedCaseAction(updatedCase);
+      setModelAction(updatedModel);
+      window.dispatchEvent(new CustomEvent(eventName));
+    },
+    [
+      selectedCase,
+      workflowStages,
+      setSelectedCaseAction,
+      setModelAction,
+      addCheckpointAction,
       eventName,
     ],
   );
@@ -350,7 +402,7 @@ export default function useWorkflowMutations({
         description: selectedCase.description,
         stages: updatedStages,
       };
-      addCheckpoint("Deleted stage", updatedModel);
+      addCheckpointAction("Deleted stage", updatedModel);
 
       try {
         if (viewIdsToDelete.length > 0) {
@@ -380,8 +432,8 @@ export default function useWorkflowMutations({
         if (!response.ok)
           throw new Error(`Failed to delete stage: ${response.status}`);
         const { data: updatedCase } = await response.json();
-        setSelectedCase(updatedCase);
-        setModel(updatedModel);
+        setSelectedCaseAction(updatedCase);
+        setModelAction(updatedModel);
 
         try {
           const viewsResponse = await fetchWithBaseUrl(
@@ -389,7 +441,7 @@ export default function useWorkflowMutations({
           );
           if (viewsResponse.ok) {
             const viewsData = await viewsResponse.json();
-            setViews(viewsData.data);
+            setViewsAction(viewsData.data);
           }
         } catch {}
 
@@ -402,16 +454,17 @@ export default function useWorkflowMutations({
     [
       selectedCase,
       workflowStages,
-      setSelectedCase,
-      setModel,
-      setViews,
-      addCheckpoint,
+      setSelectedCaseAction,
+      setModelAction,
+      setViewsAction,
+      addCheckpointAction,
       eventName,
     ],
   );
 
   return {
     handleAddStep,
+    handleAddProcess,
     handleDeleteStep,
     handleDeleteProcess,
     handleDeleteStage,

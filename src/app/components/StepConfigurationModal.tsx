@@ -53,9 +53,16 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
     return step.fields
       .map((fieldRef) => {
         const field = fields.find((f) => f.id === fieldRef.fieldId);
-        return field ? { ...field, required: fieldRef.required } : null;
+        return field && typeof field.id === "number"
+          ? ({ ...field, required: fieldRef.required } as Field & {
+              required: boolean;
+            })
+          : null;
       })
-      .filter((f): f is Field & { required: boolean } => f !== null);
+      .filter(
+        (f): f is Field & { required: boolean } =>
+          f !== null && f.id !== undefined,
+      );
   }, [step.fields, fields]);
 
   useEffect(() => {

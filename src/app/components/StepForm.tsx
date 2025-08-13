@@ -48,8 +48,8 @@ const StepForm: React.FC<StepFormProps> = ({
             >
               {fields.map((field, index) => (
                 <Draggable
-                  key={`field-${field.name}`}
-                  draggableId={`field-${field.name}`}
+                  key={`field-${field.id}`}
+                  draggableId={`field-${field.id}`}
                   index={index}
                 >
                   {(provided: DraggableProvided) => (

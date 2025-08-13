@@ -1,0 +1,9 @@
+export const ACTIVE_TAB_STORAGE_KEY = "active_tab";
+export const ACTIVE_PANEL_TAB_STORAGE_KEY = "active_panel_tab";
+export const CHECKPOINTS_STORAGE_KEY = "workflow_checkpoints_";
+export const MAX_CHECKPOINTS = 10;
+export const MODEL_UPDATED_EVENT = "model-updated";
+export const CHAT_PANEL_WIDTH_STORAGE_KEY = "chat_panel_width";
+export const CHAT_PANEL_EXPANDED_STORAGE_KEY = "chat_panel_expanded";
+export const CHAT_MIN_WIDTH = 300;
+export const CHAT_MAX_WIDTH = 800;

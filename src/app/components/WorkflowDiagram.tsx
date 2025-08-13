@@ -168,14 +168,18 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       sameLength && currentIds.every((id, i) => id === nextIds[i]);
     if (sameOrder) return;
 
-    setSelectedStep({
-      ...selectedStep,
-      fields: parsedFields.map((f) => ({
-        fieldId: f.fieldId,
-        required: f.required,
-      })),
+    setSelectedStep((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        fields: parsedFields.map((f) => ({
+          fieldId: f.fieldId,
+          required: f.required,
+        })),
+      };
     });
-  }, [isConfigModalOpen, selectedStep, views, fields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfigModalOpen, selectedStep?.viewId, views, fields]);
 
   const getStepIcon = (stepType: StepType) => {
     // Map step types to appropriate icons
@@ -545,28 +549,47 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
       }
     }
 
-    // 2) Reorder the view fields to place the newly added fields at the end,
-    //    while preserving existing fields (append behavior expected by users)
+    // Determine whether this is a reorder (full set provided) or an append (subset provided)
+    const currentOrder = (selectedStep.fields || []).map((f) => f.fieldId);
+    const providedSet = new Set(fieldIds);
+    const isReorderIntent =
+      fieldIds.length === currentOrder.length &&
+      currentOrder.every((id) => providedSet.has(id));
+
+    // 2) Apply ordering to the view model
     if (onViewFieldsReorder) {
-      // Merge current order with new ids, keeping uniqueness and preserving existing order
-      const currentOrder = (selectedStep.fields || []).map((f) => f.fieldId);
-      const mergedOrder = Array.from(
-        new Set<number>([...currentOrder, ...fieldIds]),
-      );
-      onViewFieldsReorder(`db-${viewId}`, mergedOrder);
+      const nextOrder = isReorderIntent
+        ? fieldIds // exact order requested by modal
+        : Array.from(new Set<number>([...currentOrder, ...fieldIds])); // append new at end
+      onViewFieldsReorder(`db-${viewId}`, nextOrder);
     }
 
-    // Optimistically update local modal state by appending new fields (no replacement)
-    const existingById = new Map(
-      (selectedStep.fields || []).map((f) => [f.fieldId, f]),
-    );
-    const appended = fieldIds
-      .filter((id) => !existingById.has(id))
-      .map((id) => ({ fieldId: id, required: false }));
-    setSelectedStep({
-      ...selectedStep,
-      fields: [...(selectedStep.fields || []), ...appended],
-    });
+    // 3) Optimistically update local modal state
+    if (isReorderIntent) {
+      // Reorder existing refs to match provided order, preserving required flags
+      const refById = new Map(
+        (selectedStep.fields || []).map((f) => [f.fieldId, f]),
+      );
+      const reordered = fieldIds.map(
+        (id) => refById.get(id) || { fieldId: id, required: false },
+      );
+      setSelectedStep({
+        ...selectedStep,
+        fields: reordered,
+      });
+    } else {
+      // Append-only behavior for adding existing fields
+      const existingById = new Map(
+        (selectedStep.fields || []).map((f) => [f.fieldId, f]),
+      );
+      const appended = fieldIds
+        .filter((id) => !existingById.has(id))
+        .map((id) => ({ fieldId: id, required: false }));
+      setSelectedStep({
+        ...selectedStep,
+        fields: [...(selectedStep.fields || []), ...appended],
+      });
+    }
   };
 
   // Type guard to check if a field is a Field type
