@@ -31,6 +31,7 @@ import {
 // import { StepType } from "../../utils/stepTypes";
 import { registerRuleTypes } from "../../types/ruleTypeDefinitions";
 import { validateModelIds } from "./utils/validateModelIds";
+import { useWorkflowData } from "./hooks/useWorkflowData";
 
 // Initialize rule types on module load
 registerRuleTypes();
@@ -104,13 +105,7 @@ interface ComposedModel {
   stages: Stage[];
 }
 
-// Local View interface for this component
-interface View {
-  id: number;
-  name: string;
-  model: any;
-  caseid: number;
-}
+// Local View interface no longer needed here (provided by useWorkflowData)
 
 // validateModelIds extracted to ./utils/validateModelIds
 
@@ -156,12 +151,21 @@ export default function WorkflowPage() {
   const id = params?.id as string;
 
   // 2. All useState hooks
-  const [model, setModel] = useState<ComposedModel | null>(null);
-  const [fields, setFields] = useState<Field[]>([]);
-  const [views, setViews] = useState<View[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedCase, setSelectedCase] = useState<DatabaseCase | null>(null);
+  const {
+    model,
+    setModelAction: setModel,
+    fields,
+    setFields,
+    views,
+    setViews,
+    selectedCase,
+    setSelectedCaseAction: setSelectedCase,
+    loading,
+    error,
+    loadWorkflow: _loadWorkflow,
+    refreshWorkflowData,
+    fetchCaseData: _fetchCaseData,
+  } = useWorkflowData(id);
   const [activeStage, setActiveStage] = useState<string>();
   const [activeProcess, setActiveProcess] = useState<string>();
   const [activeStep, setActiveStep] = useState<string>();
@@ -395,100 +399,13 @@ export default function WorkflowPage() {
   // Iframe lifecycle handled by usePreviewIframe
 
   // Define fetchCase before using it in useEffect
-  const fetchCase = useCallback(async () => {
-    try {
-      const response = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.CASES}&id=${id}`,
-      );
-      if (!response.ok) {
-        throw new Error(`Failed to fetch case: ${response.status}`);
-      }
-      const data = await response.json();
-      setSelectedCase(data.data || null);
-    } catch (error) {
-      console.error("Error fetching case:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  // fetchCase handled by useWorkflowData
 
   // Load workflow data function
-  const loadWorkflow = useCallback(async () => {
-    try {
-      setLoading(true);
-      const composedModel = await fetchCaseData(id);
-      setModel(composedModel);
-
-      // Load fields separately
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${id}`,
-      );
-      let fieldsData: Field[] = [];
-      if (fieldsResponse.ok) {
-        const fieldsResult = await fieldsResponse.json();
-        fieldsData = fieldsResult.data;
-        setFields(fieldsData);
-      }
-
-      // Load views separately
-      const viewsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
-      );
-      if (viewsResponse.ok) {
-        const viewsData = await viewsResponse.json();
-        setViews(viewsData.data);
-      }
-
-      setError(null);
-    } catch (err) {
-      console.error("Error loading workflow:", err);
-      setError(err instanceof Error ? err.message : "Failed to load workflow");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  // loadWorkflow handled by useWorkflowData
 
   // Light refresh function for chat completion - updates data without showing loading state
-  const refreshWorkflowData = useCallback(async () => {
-    try {
-      // Refresh the case data
-      const caseResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.CASES}&id=${id}`,
-      );
-      if (caseResponse.ok) {
-        const caseData = await caseResponse.json();
-        setSelectedCase(caseData.data);
-      }
-
-      // Refresh the model
-      const composedModel = await fetchCaseData(id);
-      setModel(composedModel);
-
-      // Refresh fields
-      const fieldsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.FIELDS}&${DB_COLUMNS.CASE_ID}=${id}`,
-      );
-      if (fieldsResponse.ok) {
-        const fieldsResult = await fieldsResponse.json();
-        setFields(fieldsResult.data);
-      }
-
-      // Refresh views
-      const viewsResponse = await fetchWithBaseUrl(
-        `/api/database?table=${DB_TABLES.VIEWS}&${DB_COLUMNS.CASE_ID}=${id}`,
-      );
-      if (viewsResponse.ok) {
-        const viewsData = await viewsResponse.json();
-        setViews(viewsData.data);
-      }
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (err) {
-      console.error("Error refreshing workflow data:", err);
-      // Don't set error state for refresh failures - just log them
-    }
-  }, [id]);
+  // refreshWorkflowData handled by useWorkflowData
 
   // Checkpoint helper must be defined before hooks that depend on it
   const addCheckpoint = (description: string, model: WorkflowModel) => {
@@ -555,10 +472,7 @@ export default function WorkflowPage() {
   });
 
   // Load workflow data
-  useEffect(() => {
-    fetchCase();
-    loadWorkflow();
-  }, [id, fetchCase, loadWorkflow]);
+  // initial load handled inside useWorkflowData
 
   // Legacy preview iframe creation handled by usePreviewIframe
 
@@ -803,7 +717,9 @@ export default function WorkflowPage() {
 
       const { data: updatedCase } = await response.json();
       setSelectedCase(updatedCase);
-      setModel(updatedModel);
+      setModel((prev) =>
+        prev ? { ...prev, stages: updatedModel.stages } : prev,
+      );
 
       // Dispatch model updated event for preview
       window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
@@ -903,11 +819,12 @@ export default function WorkflowPage() {
     const updatedModel = { ...workflowModel, stages };
     // Optimistic UI update
     setModel((prev) => (prev ? { ...prev, stages } : prev));
-    setSelectedCase((prev) =>
-      prev
-        ? ({ ...prev, model: { ...(prev.model || {}), stages } } as any)
-        : prev,
-    );
+    if (selectedCase) {
+      setSelectedCase({
+        ...selectedCase,
+        model: { ...(selectedCase.model || {}), stages },
+      } as any);
+    }
     addCheckpoint("Reordered stages", updatedModel);
     handleStepsUpdate(stages);
   };
@@ -928,14 +845,12 @@ export default function WorkflowPage() {
     });
     // Optimistic UI update
     setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
-    setSelectedCase((prev) =>
-      prev
-        ? ({
-            ...prev,
-            model: { ...(prev.model || {}), stages: updatedStages },
-          } as any)
-        : prev,
-    );
+    if (selectedCase) {
+      setSelectedCase({
+        ...selectedCase,
+        model: { ...(selectedCase.model || {}), stages: updatedStages },
+      } as any);
+    }
     handleStepsUpdate(updatedStages);
   };
 
@@ -964,14 +879,12 @@ export default function WorkflowPage() {
     });
     // Optimistic UI update
     setModel((prev) => (prev ? { ...prev, stages: updatedStages } : prev));
-    setSelectedCase((prev) =>
-      prev
-        ? ({
-            ...prev,
-            model: { ...(prev.model || {}), stages: updatedStages },
-          } as any)
-        : prev,
-    );
+    if (selectedCase) {
+      setSelectedCase({
+        ...selectedCase,
+        model: { ...(selectedCase.model || {}), stages: updatedStages },
+      } as any);
+    }
     handleStepsUpdate(updatedStages);
   };
 
