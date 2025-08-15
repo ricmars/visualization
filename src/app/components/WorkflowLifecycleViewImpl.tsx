@@ -1,6 +1,10 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import Frame from "react-frame-component";
-import { LifeCycle, StageItemProps } from "@pega/cosmos-react-build";
+import {
+  IconTileProps,
+  LifeCycle,
+  StageItemProps,
+} from "@pega/cosmos-react-build";
 import {
   Configuration,
   LiveLog,
@@ -9,6 +13,7 @@ import {
   ModalManager,
 } from "@pega/cosmos-react-core";
 import { Stage } from "../types";
+import { getStepTypeData } from "../utils/stepTypes";
 
 interface WorkflowLifecycleViewProps {
   stages: Stage[];
@@ -83,21 +88,25 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
                 id: process.name,
                 label: process.name,
                 visual: { imgSrc: "" },
-                steps: process.steps.map((step) => ({
-                  status: {
-                    type: "",
+                steps: process.steps.map((step) => {
+                  const stepTypeData = getStepTypeData(step.type);
+                  return {
+                    status: {
+                      type: "",
+                      label: step.name,
+                    },
+                    id: step.name,
                     label: step.name,
-                  },
-                  id: step.name,
-                  label: step.name,
-                  visual: {
-                    imgSrc: "",
-                    name: "user-document",
-                    label: "review",
-                    category: "task",
-                    inverted: false,
-                  },
-                })),
+                    visual: {
+                      imgSrc: "",
+                      name: stepTypeData.name,
+                      label: stepTypeData.label,
+                      category:
+                        stepTypeData.category as IconTileProps["category"],
+                      inverted: stepTypeData.inverted,
+                    },
+                  };
+                }),
               })),
             },
           ],
