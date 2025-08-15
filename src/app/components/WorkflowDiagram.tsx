@@ -6,25 +6,14 @@ import {
   DropResult,
 } from "@hello-pangea/dnd";
 import { Stage, Field, FieldReference, Process, Step } from "../types";
-import { StepType } from "../utils/stepTypes";
+import { StepType, getStepTypeData } from "../utils/stepTypes";
 import AddStepModal from "./AddStepModal";
 import EditModal from "./EditModal";
-import {
-  FaClipboardList,
-  FaCheckCircle,
-  FaRobot,
-  FaFolder,
-  FaQuestionCircle,
-  FaTrash,
-  FaGripVertical,
-  FaPencilAlt,
-} from "react-icons/fa";
-import { IoDocumentText } from "react-icons/io5";
-import { RiBrainFill } from "react-icons/ri";
-import { MdNotifications } from "react-icons/md";
-import { BsGearFill } from "react-icons/bs";
+import { FaTrash, FaGripVertical, FaPencilAlt } from "react-icons/fa";
+import { Icon } from "@pega/cosmos-react-core";
 import StepConfigurationModal from "./StepConfigurationModal";
 import AddProcessModal from "./AddProcessModal";
+import { IconTile } from "@pega/cosmos-react-build";
 
 interface WorkflowDiagramProps {
   stages: Stage[];
@@ -182,29 +171,18 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
   }, [isConfigModalOpen, selectedStep?.viewId, views, fields]);
 
   const getStepIcon = (stepType: StepType) => {
-    // Map step types to appropriate icons
-    switch (stepType) {
-      case "Collect information":
-        return <FaClipboardList className="text-blue-500" />;
-      case "Approve/Reject":
-        return <FaCheckCircle className="text-green-500" />;
-      case "Automation":
-        return <BsGearFill className="text-purple-500" />;
-      case "Create Case":
-        return <FaFolder className="text-yellow-500" />;
-      case "Decision":
-        return <FaQuestionCircle className="text-orange-500" />;
-      case "Generate Document":
-        return <IoDocumentText className="text-gray-500" />;
-      case "Generative AI":
-        return <RiBrainFill className="text-pink-500" />;
-      case "Robotic Automation":
-        return <FaRobot className="text-indigo-500" />;
-      case "Send Notification":
-        return <MdNotifications className="text-red-500" />;
-      default:
-        return <BsGearFill className="text-gray-400" />;
-    }
+    // Get the icon name from stepTypes function to match Lifecycle component
+    const stepTypeData = getStepTypeData(stepType);
+
+    // Use Pega Icon component with the same icon names as Lifecycle
+    return (
+      <IconTile
+        name={stepTypeData.name}
+        category={stepTypeData.category}
+        size="m"
+        label={stepTypeData.label}
+      />
+    );
   };
 
   // Add Process Modal handler
@@ -669,7 +647,7 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                               className="flex items-center gap-2 text-blue-500 hover:text-blue-700"
                               data-testid={`add-process-${stage.id}`}
                             >
-                              <BsGearFill className="h-4 w-4" />
+                              <Icon name="gear-play" className="h-4 w-4" />
                               Add Process
                             </button>
                             <button
@@ -747,7 +725,10 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
                                                 className="flex items-center gap-2 text-blue-500 hover:text-blue-700"
                                                 data-testid={`add-step-${process.id}`}
                                               >
-                                                <BsGearFill className="h-4 w-4" />
+                                                <Icon
+                                                  name="gear-play"
+                                                  className="h-4 w-4"
+                                                />
                                                 Add Step
                                               </button>
                                               <button
