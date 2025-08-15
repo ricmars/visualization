@@ -92,7 +92,17 @@ export function useFreeFormSelection({
       document.querySelectorAll<HTMLElement>(
         "[data-fieldid], [data-viewid], [data-stageid], [data-processid], [data-stepid]",
       ),
-    );
+    ).filter((el) => {
+      // Exclude elements that are inside modal portals or modal overlays
+      const modalPortal = el.closest('[data-modal-portal="true"]');
+      const modalOverlay = el.closest(
+        '.modal-overlay, [class*="z-40"], [class*="z-50"], [class*="z-60"]',
+      );
+      const withinModal = el.closest(
+        '[role="dialog"], .modal, [class*="backdrop-blur"]',
+      );
+      return !modalPortal && !modalOverlay && !withinModal;
+    });
     const pickedFieldIds = new Set<number>();
     const pickedViewIds = new Set<number>();
     const pickedStageIds = new Set<number>();

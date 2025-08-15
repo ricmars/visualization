@@ -743,6 +743,12 @@ const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1", {
 - [ ] **All required fields are included in rule type definitions**
 - [ ] **TypeScript interface matches database schema naming**
 - [ ] **Validation schema covers all required validations**
+- [ ] **All modals use ModalPortal component for rendering**
+- [ ] **All modals use absolute positioning (not fixed)**
+- [ ] **All modal overlays include modal-overlay class**
+- [ ] **All modal content includes role="dialog" attribute**
+- [ ] **Main content area has correct ID and data attributes**
+- [ ] **AI Quick Action context isolation tested with modals**
 
 ## LLM Tool Usage Rules (Authoritative)
 
@@ -763,3 +769,164 @@ const response = await fetch("/api/dynamic?ruleType=my-rule-type&id=1", {
 ### Destructive Action Confirmation Template
 
 If deletion intent is ambiguous, ask: "Please confirm you want to permanently delete this item; this action cannot be undone." Then stop until the user responds.
+
+## Modal System and AI Quick Action Context Isolation (CRITICAL)
+
+### Modal Architecture Rules
+
+The modal system is designed to ensure proper isolation of AI Quick Action context. **These rules must be strictly followed** to prevent breaking this functionality:
+
+#### 1. Modal Portal System (MANDATORY)
+
+- **All modals MUST use the `ModalPortal` component** for rendering
+- **Portal target**: Modals are rendered into the `#main-content-area` container, NOT `document.body`
+- **Never bypass the portal system** - direct modal rendering breaks context isolation
+
+```typescript
+// CORRECT: Use ModalPortal for all modals
+<ModalPortal isOpen={isModalOpen}>
+  <SomeModal isOpen={isModalOpen} onClose={onClose} />
+</ModalPortal>
+
+// WRONG: Direct modal rendering
+<SomeModal isOpen={isModalOpen} onClose={onClose} />
+```
+
+#### 2. Modal Positioning Rules (CRITICAL)
+
+- **Use `absolute` positioning, NEVER `fixed`** - modals must be contained within main content area
+- **Background overlay**: `absolute inset-0 bg-black/50 backdrop-blur-sm z-[80] modal-overlay`
+- **Modal content**: `absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90]`
+- **Required classes**: All modal overlays MUST include `modal-overlay` class
+- **Required attributes**: All modal content MUST include `role="dialog"` attribute
+
+```typescript
+// CORRECT: Absolute positioning with required classes/attributes
+<div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-[80] modal-overlay" onClick={onClose} />
+<div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90]" role="dialog">
+  {children}
+</div>
+
+// WRONG: Fixed positioning
+<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80]" onClick={onClose} />
+<div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[90]">
+  {children}
+</div>
+```
+
+#### 3. Main Content Area Requirements
+
+- **Container ID**: Main content area MUST have `id="main-content-area"`
+- **Data attribute**: Main content area MUST have `data-main-content="true"`
+- **Positioning context**: Main content area MUST have `relative` positioning class
+- **Portal integration**: ModalPortal automatically targets this container
+
+```typescript
+// CORRECT: Main content container setup
+<main
+  id="main-content-area"
+  className="flex-1 overflow-auto relative"
+  data-main-content="true"
+>
+  {/* Main content */}
+</main>
+```
+
+#### 4. Context Filtering System (DO NOT MODIFY)
+
+The AI Quick Action context filtering in `useFreeFormSelection.ts` uses specific selectors to exclude modal content:
+
+```typescript
+// This filtering logic is CRITICAL - do not modify without understanding implications
+.filter((el) => {
+  const modalPortal = el.closest('[data-modal-portal="true"]');
+  const modalOverlay = el.closest('.modal-overlay, [class*="z-40"], [class*="z-50"], [class*="z-60"]');
+  const withinModal = el.closest('[role="dialog"], .modal, [class*="backdrop-blur"]');
+  return !modalPortal && !modalOverlay && !withinModal;
+});
+```
+
+#### 5. Modal Component Standards
+
+Every modal component must follow these patterns:
+
+- **Portal wrapping**: Always wrap in `ModalPortal`
+- **Portal data attribute**: Content wrapped in `<div data-modal-portal="true">`
+- **Overlay class**: Background overlay must include `modal-overlay` class
+- **Dialog role**: Modal content must have `role="dialog"` attribute
+- **Z-index hierarchy**: Use `z-[80]` for modal overlay, `z-[90]` for modal content
+- **Click outside**: Overlay click should close modal
+- **Note**: Free form selection overlay uses `z-[100]` to appear above modals
+
+#### 6. Z-Index Hierarchy (CRITICAL)
+
+The z-index values must be maintained in this specific order:
+
+- **Base content**: `z-0` to `z-10` (normal page content)
+- **Modal overlays**: `z-[80]` (modal background overlays)
+- **Modal content**: `z-[90]` (modal dialog content)
+- **Selection overlay**: `z-[100]` (free form selection overlay - must be above modals)
+- **Quick chat**: `z-[110]` (quick chat input - must be above selection overlay)
+
+**NEVER change these values without understanding the full hierarchy!**
+
+#### 7. Side Panel Integration
+
+- **Modal containment**: Modals are contained within main content area, never overlap side panel
+- **Responsive sizing**: Modals automatically adjust when side panel expands/collapses
+- **Accessibility**: Side panel remains fully accessible when modals are open
+
+#### 8. Prohibited Practices
+
+**NEVER do these things as they will break modal isolation:**
+
+- ❌ Render modals directly to `document.body`
+- ❌ Use `fixed` positioning for modal containers
+- ❌ Bypass the `ModalPortal` component
+- ❌ Remove `modal-overlay` class from overlays
+- ❌ Remove `role="dialog"` from modal content
+- ❌ Modify the context filtering logic without full understanding
+- ❌ Change the main content area's ID or data attributes
+
+#### 9. Testing Modal Isolation
+
+When modifying modal code, verify:
+
+1. **AI Quick Action works correctly**: Context only includes modal content when modal is open
+2. **Modal positioning**: Modals stay within main content area boundaries
+3. **Side panel accessibility**: Side panel remains usable when modals are open
+4. **Responsive behavior**: Modals resize properly with side panel state changes
+5. **Selection overlay**: Cursor changes to crosshair when hovering over modal content during selection mode
+
+#### 10. Common Modal Components
+
+All these components follow the correct pattern:
+
+- `AddFieldModal`, `EditFieldModal`
+- `AddStageModal`, `AddProcessModal`, `AddStepModal`
+- `StepConfigurationModal`, `EditWorkflowModal`
+- `DeleteWorkflowModal`
+
+#### 11. Modal Development Checklist
+
+When creating or modifying modals:
+
+- [ ] Wrapped in `ModalPortal` component
+- [ ] Uses `absolute` positioning (not `fixed`)
+- [ ] Includes `modal-overlay` class on background
+- [ ] Includes `role="dialog"` on modal content
+- [ ] Uses correct z-index hierarchy (`z-[80]`/`z-[90]`)
+- [ ] Renders into `#main-content-area` container
+- [ ] Tested with AI Quick Action for context isolation
+- [ ] Tested with side panel expansion/collapse
+
+### Why This Architecture Matters
+
+This modal system ensures that:
+
+1. **AI Quick Action context is properly isolated** - when a modal is open, only modal content is captured
+2. **Modals don't interfere with side panel** - users can still access chat and other side panel features
+3. **Responsive design works correctly** - modals automatically adapt to layout changes
+4. **Accessibility is maintained** - proper focus management and screen reader support
+
+**Breaking these rules will result in broken AI Quick Action functionality and poor user experience.**

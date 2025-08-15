@@ -13,6 +13,7 @@ import { FaTrash, FaGripVertical, FaPencilAlt } from "react-icons/fa";
 import { Icon } from "@pega/cosmos-react-core";
 import StepConfigurationModal from "./StepConfigurationModal";
 import AddProcessModal from "./AddProcessModal";
+import ModalPortal from "./ModalPortal";
 import { IconTile } from "@pega/cosmos-react-build";
 
 interface WorkflowDiagramProps {
@@ -923,19 +924,25 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
           onAddProcess={handleAddProcessSubmit}
         />
 
-        {isAddStepModalOpen && selectedStageId && selectedProcessId && (
-          <AddStepModal
-            isOpen={isAddStepModalOpen}
-            onClose={() => {
-              setIsAddStepModalOpen(false);
-              setSelectedStageId(null);
-              setSelectedProcessId(null);
-            }}
-            onAddStep={handleAddStep}
-            stageId={selectedStageId}
-            processId={selectedProcessId}
-          />
-        )}
+        <ModalPortal
+          isOpen={
+            isAddStepModalOpen && !!selectedStageId && !!selectedProcessId
+          }
+        >
+          {isAddStepModalOpen && selectedStageId && selectedProcessId && (
+            <AddStepModal
+              isOpen={isAddStepModalOpen}
+              onClose={() => {
+                setIsAddStepModalOpen(false);
+                setSelectedStageId(null);
+                setSelectedProcessId(null);
+              }}
+              onAddStep={handleAddStep}
+              stageId={selectedStageId}
+              processId={selectedProcessId}
+            />
+          )}
+        </ModalPortal>
 
         {editItem && (
           <EditModal
@@ -951,27 +958,29 @@ const WorkflowDiagram: React.FC<WorkflowDiagramProps> = ({
           />
         )}
 
-        {selectedStep && (
-          <StepConfigurationModal
-            isOpen={isConfigModalOpen}
-            onClose={() => {
-              setIsConfigModalOpen(false);
-              setSelectedStep(null);
-            }}
-            step={selectedStep}
-            fields={fields}
-            onFieldChange={(
-              fieldId: number,
-              value: string | number | boolean,
-            ) => {
-              _handleFieldChange(fieldId, value);
-            }}
-            onAddField={handleAddFieldToStep}
-            onAddExistingField={handleAddExistingFieldToStep}
-            onUpdateField={onUpdateField}
-            onDeleteField={onDeleteField}
-          />
-        )}
+        <ModalPortal isOpen={isConfigModalOpen && !!selectedStep}>
+          {selectedStep && (
+            <StepConfigurationModal
+              isOpen={isConfigModalOpen}
+              onClose={() => {
+                setIsConfigModalOpen(false);
+                setSelectedStep(null);
+              }}
+              step={selectedStep}
+              fields={fields}
+              onFieldChange={(
+                fieldId: number,
+                value: string | number | boolean,
+              ) => {
+                _handleFieldChange(fieldId, value);
+              }}
+              onAddField={handleAddFieldToStep}
+              onAddExistingField={handleAddExistingFieldToStep}
+              onUpdateField={onUpdateField}
+              onDeleteField={onDeleteField}
+            />
+          )}
+        </ModalPortal>
       </div>
     </div>
   );

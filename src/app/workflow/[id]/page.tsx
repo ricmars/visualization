@@ -75,6 +75,7 @@ import { DB_TABLES } from "../../types/database";
 import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
+import ModalPortal from "../../components/ModalPortal";
 
 // Add ToolResult type for tool result objects
 export type ToolResult = {
@@ -1093,7 +1094,11 @@ export default function WorkflowPage() {
         )}
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-auto">
+        <main
+          id="main-content-area"
+          className="flex-1 overflow-auto relative"
+          data-main-content="true"
+        >
           {isPreviewMode ? (
             <div className="w-full h-full" ref={previewContainerRef} />
           ) : (
@@ -1223,62 +1228,76 @@ export default function WorkflowPage() {
           )}
         </main>
 
-        {/* Modals - positioned relative to main content area */}
-        <AddFieldModal
-          isOpen={isAddFieldModalOpen}
-          onClose={() => setIsAddFieldModalOpen(false)}
-          onAddField={async (field) => {
-            await handleAddField(field);
-          }}
-          buttonRef={addFieldButtonRef as React.RefObject<HTMLButtonElement>}
-          allowExistingFields={false}
-        />
-        {editingField && (
-          <EditFieldModal
-            isOpen={!!editingField}
-            onClose={() => setEditingField(null)}
-            onSubmit={handleUpdateField}
-            field={editingField}
+        {/* Modals - rendered in portal to isolate from main content */}
+        <ModalPortal isOpen={isAddFieldModalOpen}>
+          <AddFieldModal
+            isOpen={isAddFieldModalOpen}
+            onClose={() => setIsAddFieldModalOpen(false)}
+            onAddField={async (field) => {
+              await handleAddField(field);
+            }}
+            buttonRef={addFieldButtonRef as React.RefObject<HTMLButtonElement>}
+            allowExistingFields={false}
           />
-        )}
-        <AddStageModal
-          isOpen={isAddStageModalOpen}
-          onClose={() => setIsAddStageModalOpen(false)}
-          onAddStage={handleAddStage}
-        />
-        <AddProcessModal
-          isOpen={isAddProcessModalOpen}
-          onClose={() => {
-            setIsAddProcessModalOpen(false);
-            setSelectedStageForProcess(null);
-          }}
-          onAddProcess={(processData: { name: string }) => {
-            if (selectedStageForProcess) {
-              handleAddProcess(
-                Number(selectedStageForProcess),
-                processData.name,
-              );
-            }
-          }}
-        >
-          <input
-            type="text"
-            value={newProcessName}
-            onChange={(e) => setNewProcessName(e.target.value)}
-            placeholder="Enter process name"
-            className="w-full px-3 py-2 border rounded-lg"
-            data-testid="process-name-input"
+        </ModalPortal>
+
+        <ModalPortal isOpen={!!editingField}>
+          {editingField && (
+            <EditFieldModal
+              isOpen={!!editingField}
+              onClose={() => setEditingField(null)}
+              onSubmit={handleUpdateField}
+              field={editingField}
+            />
+          )}
+        </ModalPortal>
+
+        <ModalPortal isOpen={isAddStageModalOpen}>
+          <AddStageModal
+            isOpen={isAddStageModalOpen}
+            onClose={() => setIsAddStageModalOpen(false)}
+            onAddStage={handleAddStage}
           />
-        </AddProcessModal>
-        <EditWorkflowModal
-          isOpen={isEditWorkflowModalOpen}
-          onClose={() => setIsEditWorkflowModalOpen(false)}
-          onSubmit={handleEditWorkflow}
-          initialData={{
-            name: selectedCase?.name || "",
-            description: selectedCase?.description || "",
-          }}
-        />
+        </ModalPortal>
+
+        <ModalPortal isOpen={isAddProcessModalOpen}>
+          <AddProcessModal
+            isOpen={isAddProcessModalOpen}
+            onClose={() => {
+              setIsAddProcessModalOpen(false);
+              setSelectedStageForProcess(null);
+            }}
+            onAddProcess={(processData: { name: string }) => {
+              if (selectedStageForProcess) {
+                handleAddProcess(
+                  Number(selectedStageForProcess),
+                  processData.name,
+                );
+              }
+            }}
+          >
+            <input
+              type="text"
+              value={newProcessName}
+              onChange={(e) => setNewProcessName(e.target.value)}
+              placeholder="Enter process name"
+              className="w-full px-3 py-2 border rounded-lg"
+              data-testid="process-name-input"
+            />
+          </AddProcessModal>
+        </ModalPortal>
+
+        <ModalPortal isOpen={isEditWorkflowModalOpen}>
+          <EditWorkflowModal
+            isOpen={isEditWorkflowModalOpen}
+            onClose={() => setIsEditWorkflowModalOpen(false)}
+            onSubmit={handleEditWorkflow}
+            initialData={{
+              name: selectedCase?.name || "",
+              description: selectedCase?.description || "",
+            }}
+          />
+        </ModalPortal>
       </div>
 
       {/* Separator & Chat Panel */}
