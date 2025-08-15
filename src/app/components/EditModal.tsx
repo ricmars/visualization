@@ -23,10 +23,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children }) => {
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm z-40"
         onClick={onClose}
       />
-      <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50">
         {children}
       </div>
     </>

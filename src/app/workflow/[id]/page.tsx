@@ -1074,7 +1074,7 @@ export default function WorkflowPage() {
   return (
     <div className="flex h-screen bg-white dark:bg-gray-900">
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative">
         {/* Header row with title and preview switch */}
         <WorkflowTopBar
           selectedCaseName={selectedCase?.name}
@@ -1222,6 +1222,63 @@ export default function WorkflowPage() {
             </>
           )}
         </main>
+
+        {/* Modals - positioned relative to main content area */}
+        <AddFieldModal
+          isOpen={isAddFieldModalOpen}
+          onClose={() => setIsAddFieldModalOpen(false)}
+          onAddField={async (field) => {
+            await handleAddField(field);
+          }}
+          buttonRef={addFieldButtonRef as React.RefObject<HTMLButtonElement>}
+          allowExistingFields={false}
+        />
+        {editingField && (
+          <EditFieldModal
+            isOpen={!!editingField}
+            onClose={() => setEditingField(null)}
+            onSubmit={handleUpdateField}
+            field={editingField}
+          />
+        )}
+        <AddStageModal
+          isOpen={isAddStageModalOpen}
+          onClose={() => setIsAddStageModalOpen(false)}
+          onAddStage={handleAddStage}
+        />
+        <AddProcessModal
+          isOpen={isAddProcessModalOpen}
+          onClose={() => {
+            setIsAddProcessModalOpen(false);
+            setSelectedStageForProcess(null);
+          }}
+          onAddProcess={(processData: { name: string }) => {
+            if (selectedStageForProcess) {
+              handleAddProcess(
+                Number(selectedStageForProcess),
+                processData.name,
+              );
+            }
+          }}
+        >
+          <input
+            type="text"
+            value={newProcessName}
+            onChange={(e) => setNewProcessName(e.target.value)}
+            placeholder="Enter process name"
+            className="w-full px-3 py-2 border rounded-lg"
+            data-testid="process-name-input"
+          />
+        </AddProcessModal>
+        <EditWorkflowModal
+          isOpen={isEditWorkflowModalOpen}
+          onClose={() => setIsEditWorkflowModalOpen(false)}
+          onSubmit={handleEditWorkflow}
+          initialData={{
+            name: selectedCase?.name || "",
+            description: selectedCase?.description || "",
+          }}
+        />
       </div>
 
       {/* Separator & Chat Panel */}
@@ -1265,60 +1322,6 @@ export default function WorkflowPage() {
           />
         </div>
       </motion.div>
-
-      {/* Modals */}
-      <AddFieldModal
-        isOpen={isAddFieldModalOpen}
-        onClose={() => setIsAddFieldModalOpen(false)}
-        onAddField={async (field) => {
-          await handleAddField(field);
-        }}
-        buttonRef={addFieldButtonRef as React.RefObject<HTMLButtonElement>}
-        allowExistingFields={false}
-      />
-      {editingField && (
-        <EditFieldModal
-          isOpen={!!editingField}
-          onClose={() => setEditingField(null)}
-          onSubmit={handleUpdateField}
-          field={editingField}
-        />
-      )}
-      <AddStageModal
-        isOpen={isAddStageModalOpen}
-        onClose={() => setIsAddStageModalOpen(false)}
-        onAddStage={handleAddStage}
-      />
-      <AddProcessModal
-        isOpen={isAddProcessModalOpen}
-        onClose={() => {
-          setIsAddProcessModalOpen(false);
-          setSelectedStageForProcess(null);
-        }}
-        onAddProcess={(processData: { name: string }) => {
-          if (selectedStageForProcess) {
-            handleAddProcess(Number(selectedStageForProcess), processData.name);
-          }
-        }}
-      >
-        <input
-          type="text"
-          value={newProcessName}
-          onChange={(e) => setNewProcessName(e.target.value)}
-          placeholder="Enter process name"
-          className="w-full px-3 py-2 border rounded-lg"
-          data-testid="process-name-input"
-        />
-      </AddProcessModal>
-      <EditWorkflowModal
-        isOpen={isEditWorkflowModalOpen}
-        onClose={() => setIsEditWorkflowModalOpen(false)}
-        onSubmit={handleEditWorkflow}
-        initialData={{
-          name: selectedCase?.name || "",
-          description: selectedCase?.description || "",
-        }}
-      />
 
       {/* Free Form selection overlay */}
       {isFreeFormSelecting && (

@@ -55,9 +55,17 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
   useEffect(() => {
     if (isOpen && buttonRef?.current) {
       const buttonRect = buttonRef.current.getBoundingClientRect();
+      // Find the main content container to calculate relative position
+      const mainContent = buttonRef.current.closest(".relative");
+      let mainContentRect = { top: 0, left: 0 };
+
+      if (mainContent) {
+        mainContentRect = mainContent.getBoundingClientRect();
+      }
+
       setPosition({
-        top: buttonRect.bottom + 8,
-        left: buttonRect.left,
+        top: buttonRect.bottom - mainContentRect.top + 8,
+        left: buttonRect.left - mainContentRect.left,
       });
 
       // Set focus on label input when overlay opens
@@ -156,10 +164,10 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.2 }}
           style={{
-            position: "fixed",
+            position: "absolute",
             top: position.top,
             left: position.left,
-            zIndex: 1000,
+            zIndex: 50,
           }}
           className="w-96 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
           onKeyDown={handleKeyDown}
