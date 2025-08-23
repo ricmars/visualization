@@ -104,11 +104,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
 
   return (
     <div
-      className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[80] modal-overlay"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] modal-overlay"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-4 z-[90]"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-w-[95vw] w-full mx-4 z-[110] flex flex-col max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         ref={modalRef}
         role="dialog"
@@ -137,7 +137,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 min-h-0 overflow-y-auto">
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
