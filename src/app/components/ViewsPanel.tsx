@@ -377,9 +377,12 @@ const ViewsPanel: React.FC<ViewsPanelProps> = ({
       <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 overflow-y-auto">
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
-              Views
-            </h3>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
+              Views {""}
+              <span className="ml-2 font-normal text-gray-500 dark:text-gray-400">
+                ({_views.length})
+              </span>
+            </h2>
           </div>
           <div className="space-y-2">
             {allViews.map((view) => (

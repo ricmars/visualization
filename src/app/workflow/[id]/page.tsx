@@ -968,6 +968,7 @@ export default function WorkflowPage() {
               {activeTab === "fields" && (
                 <div className="p-6">
                   <FieldsHeader
+                    count={fields.length}
                     onAddField={() => setIsAddFieldModalOpen(true)}
                     buttonRef={
                       addFieldButtonRef as React.RefObject<HTMLButtonElement>

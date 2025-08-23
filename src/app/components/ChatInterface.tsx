@@ -275,14 +275,14 @@ export default function ChatInterface({
       const text = String(React.Children.toArray(children).join(" ")).trim();
       if (!text) return null;
       return (
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
+        <h2 className="text-lg md:text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
           {children}
         </h2>
       );
     },
     h2({ children }) {
       return (
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
+        <h2 className="text-lg md:text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 mt-3">
           {children}
         </h2>
       );

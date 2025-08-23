@@ -210,7 +210,13 @@ export async function POST(request: Request) {
 
 Use ONLY the provided tools. Tool descriptions are authoritative. Destructive tools must be called ONLY when the user is explicit; if unsure, ask for confirmation.
 ${getToolsContext(filteredTools)}
-${contextLine}`;
+${contextLine}
+
+Bulk operations policy:
+- When the request implies updating or deleting ALL items (e.g., "all fields", "every view"), first call list tools to get the full set and its count.
+- Apply changes to the entire set. If there are many items, use save tools in batches (e.g., 25-50 items per call) until all are processed.
+- After mutations, re-list to verify the total processed equals the source count; if not, continue processing the remainder.
+- Avoid summarizing plans; prefer calling tools directly until the requested bulk change is fully completed.`;
 
     console.log("Building enhanced system prompt...");
     console.log("Enhanced system prompt length:", enhancedSystemPrompt.length);
@@ -219,6 +225,22 @@ ${contextLine}`;
     console.log("Creating streaming response...");
     const { writer, encoder, response } = createStreamResponse();
     const processor = createStreamProcessor(writer, encoder, filteredTools);
+    const DEBUG_LLM = process.env.LOG_LLM_DEBUG === "true";
+    const debugLog = (label: string, data?: unknown) => {
+      if (!DEBUG_LLM) return;
+      try {
+        if (data !== undefined) {
+          console.log(
+            `[LLM-DEBUG] ${label}:`,
+            typeof data === "string" ? data : JSON.stringify(data, null, 2),
+          );
+        } else {
+          console.log(`[LLM-DEBUG] ${label}`);
+        }
+      } catch (_e) {
+        console.log(`[LLM-DEBUG] ${label}`);
+      }
+    };
 
     (async () => {
       try {
@@ -539,28 +561,53 @@ ${contextLine}`;
               )}s)`,
             );
             console.log(`Finish reason: ${finishReason}`);
+            debugLog("finishReason & toolCalls", {
+              finishReason,
+              toolCallCount: toolCalls.length,
+              toolNames: toolCalls.map((t) => t.function.name),
+            });
 
             // Handle cases where the model doesn't make tool calls
             if (finishReason !== "tool_calls") {
               console.log(
                 `Model finished without tool calls (reason: ${finishReason})`,
               );
+              debugLog("no tool_calls path", {
+                awaitingPostCheckConfirmation,
+                nudgedToUseTools,
+              });
+              const hasCompletedMarker =
+                typeof fullContent === "string" &&
+                fullContent.includes("[[COMPLETED]]");
+
               // If we were expecting a short confirmation after a post-condition check,
               // treat this as the final answer and stop without nudging.
               if (awaitingPostCheckConfirmation) {
-                // Only send the full content if we haven't already streamed it
-                if (fullContent && !didStreamContent) {
-                  await processor.sendText(fullContent);
+                if (hasCompletedMarker) {
+                  if (fullContent && !didStreamContent) {
+                    await processor.sendText(fullContent);
+                  }
+                  awaitingPostCheckConfirmation = false;
+                  done = true;
+                  break;
                 }
-                awaitingPostCheckConfirmation = false;
-                done = true;
-                break;
+                // Not completed: nudge again to continue with tools, avoid summaries
+                messages.push({
+                  role: "user" as const,
+                  content:
+                    "Continue using the available tools to complete the requested changes. Avoid summaries; call tools directly. Output the exact two-line confirmation only when fully done.",
+                });
+                nudgedToUseTools = true;
+                continue;
               }
               if (!nudgedToUseTools) {
                 messages.push({
                   role: "user" as const,
                   content:
                     "Continue using the available tools to complete the requested changes. Avoid summaries; call tools directly.",
+                });
+                debugLog("nudging to use tools", {
+                  message: "Continue using the available tools...",
                 });
                 nudgedToUseTools = true;
                 continue;
@@ -577,6 +624,12 @@ ${contextLine}`;
             // If the model wants to call a function
             if (finishReason === "tool_calls" && toolCalls.length > 0) {
               console.log(`Tool calls detected: ${toolCalls.length} tools`);
+              debugLog("tool_calls detected", {
+                toolCalls: toolCalls.map((t) => ({
+                  name: t.function.name,
+                  argsPreview: (t.function.arguments || "").slice(0, 200),
+                })),
+              });
 
               // Create assistant message with tool calls
               const assistantMessage = {
@@ -612,6 +665,11 @@ ${contextLine}`;
                 }
                 dedupedToolCalls.push(tc);
               }
+              debugLog("dedup tool calls", {
+                originalCount: toolCalls.length,
+                dedupedCount: dedupedToolCalls.length,
+                names: dedupedToolCalls.map((t) => t.function.name),
+              });
 
               // Execute all tool calls in parallel for better performance
               let createdCaseId: number | null = null;
@@ -623,12 +681,11 @@ ${contextLine}`;
                   );
                   const toolCallStartTime = Date.now();
 
-                  /*  console.log(`=== Executing tool: ${toolName} ===`);
-                console.log(
-                  `Tool arguments:`,
-                  JSON.stringify(toolArgs, null, 2),
-                );
-*/
+                  console.log(`=== Executing tool: ${toolName} ===`);
+                  console.log(
+                    `Tool arguments:`,
+                    JSON.stringify(toolArgs, null, 2),
+                  );
                   // Track tool call history
                   toolCallHistory.push({
                     tool: toolName,
@@ -699,6 +756,14 @@ ${contextLine}`;
                       `Tool result:`,
                       JSON.stringify(result, null, 2),
                     );
+                    debugLog("tool result summary", {
+                      tool: toolName,
+                      durationMs: toolExecutionDuration,
+                      keys:
+                        result && typeof result === "object"
+                          ? Object.keys(result as any)
+                          : [],
+                    });
 
                     // Capture newly created case ID to prevent duplicate createCase calls
                     if (
@@ -875,6 +940,10 @@ ${contextLine}`;
 
               // Wait for all tool calls to complete
               await Promise.all(toolCallPromises);
+              debugLog("after tool execution", {
+                totalToolExecutions,
+                lastCalls: toolCallHistory.slice(-5),
+              });
 
               if (stoppedDueToToolCap) {
                 // End the loop early due to tool cap; do not solicit more tool calls
@@ -937,13 +1006,21 @@ ${contextLine}`;
                   content:
                     "Post-condition check: Verify the user's goal is truly satisfied based on the latest state. If anything is missing or inconsistent, call the appropriate tools to fix it. If everything is correct, output EXACTLY the following two lines and nothing else:\n\n[[COMPLETED]]\nTask completed successfully.",
                 });
-                messages.push({ role: "user", content: enhancedPrompt });
                 messages.push({
                   role: "user",
                   content: `Latest tool results JSON: ${lastToolResults}`,
                 });
+                messages.push({
+                  role: "system",
+                  content:
+                    "If the user requested changes to 'all' items, confirm full coverage by comparing the current list count with how many items were updated. If coverage is incomplete, continue batching until counts match.",
+                });
                 // We're now expecting a short confirmation, so avoid nudging on the next turn
                 awaitingPostCheckConfirmation = true;
+                debugLog("post-check added", {
+                  anyMutations,
+                  expectingShortConfirmation: awaitingPostCheckConfirmation,
+                });
                 // Loop continues; next iteration will either call more tools or end with a short confirmation
               }
 
@@ -1022,9 +1099,6 @@ ${contextLine}`;
         try {
           await writer.close();
         } catch {}
-
-        await processor.sendDone();
-        await writer.close();
       } catch (error) {
         // Rollback checkpoint session on error
         try {
