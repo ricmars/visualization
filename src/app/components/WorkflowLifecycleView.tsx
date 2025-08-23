@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense } from "react";
-import { Stage } from "../types";
+import { Stage, Field } from "../types";
 
 // Separate the props interface so it can be used by both components
 interface WorkflowLifecycleViewProps {
@@ -10,6 +10,27 @@ interface WorkflowLifecycleViewProps {
   activeStage?: string;
   activeProcess?: string;
   activeStep?: string;
+  // Step action handlers
+  onEditStep?: (stageId: number, processId: number, stepId: number) => void;
+  onDeleteStep?: (stageId: number, processId: number, stepId: number) => void;
+  fields?: Field[];
+  readOnly?: boolean;
+  // Field handlers for modal functionality
+  onAddField?: (field: {
+    label: string;
+    type: Field["type"];
+    options?: string[];
+    required?: boolean;
+    primary?: boolean;
+  }) => Promise<string>;
+  onUpdateField?: (updates: Partial<Field>) => void;
+  onDeleteField?: (field: Field) => void;
+  onAddExistingField?: (stepId: number, fieldIds: number[]) => void;
+  onFieldChange?: (fieldId: number, value: string | number | boolean) => void;
+  // Views used to resolve fields by viewId for collect steps
+  views?: Array<{ id: number; model: any }>;
+  // Add new field names to a view
+  onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
 }
 
 // Lazy load the actual implementation

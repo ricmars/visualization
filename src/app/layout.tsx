@@ -13,12 +13,10 @@ export const metadata: Metadata = {
 };
 
 interface RootLayoutProps {
-  children: React.ReactElement;
+  children: React.ReactNode;
 }
 
-export default function RootLayout({
-  children,
-}: RootLayoutProps): React.ReactElement {
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body className={`${inter.variable} antialiased`}>{children}</body>

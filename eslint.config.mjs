@@ -9,6 +9,8 @@ import reactPlugin from "eslint-plugin-react";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default [
+  // Include Next.js recommended rules so Next can detect the plugin
+  nextPlugin.flatConfig.coreWebVitals,
   {
     files: ["**/*.ts", "**/*.tsx"],
     ignores: [
@@ -30,7 +32,6 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
-      "@next/next": nextPlugin,
       "react-hooks": reactHooksPlugin,
       react: reactPlugin,
     },

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState } from "react";
 import {
   DragDropContext,
@@ -10,11 +12,25 @@ import { StepType, getStepTypeData } from "../utils/stepTypes";
 import AddStepModal from "./AddStepModal";
 import EditModal from "./EditModal";
 import { FaTrash, FaGripVertical, FaPencilAlt } from "react-icons/fa";
-import { Icon } from "@pega/cosmos-react-core";
 import StepConfigurationModal from "./StepConfigurationModal";
 import AddProcessModal from "./AddProcessModal";
 import ModalPortal from "./ModalPortal";
-import { IconTile } from "@pega/cosmos-react-build";
+
+// Dynamic imports for Pega components to avoid SSR issues
+import dynamic from "next/dynamic";
+
+const Icon = dynamic(
+  () =>
+    import("@pega/cosmos-react-core").then((mod) => ({ default: mod.Icon })),
+  { ssr: false },
+);
+const IconTile = dynamic(
+  () =>
+    import("@pega/cosmos-react-build").then((mod) => ({
+      default: mod.IconTile,
+    })),
+  { ssr: false },
+);
 
 interface WorkflowDiagramProps {
   stages: Stage[];

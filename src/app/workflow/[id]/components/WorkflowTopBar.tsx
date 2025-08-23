@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { FaPencilAlt } from "react-icons/fa";
 
 type WorkflowTopBarProps = {
@@ -21,7 +22,7 @@ export default function WorkflowTopBar({
   return (
     <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
       <div className="flex items-center">
-        <a
+        <Link
           href="/"
           className="flex items-center mr-4 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         >
@@ -39,7 +40,7 @@ export default function WorkflowTopBar({
             />
           </svg>
           Back
-        </a>
+        </Link>
         <div className="flex items-center">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
             {selectedCaseName || "Loading..."}

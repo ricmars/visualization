@@ -146,7 +146,12 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
               {step.type === "Collect information" ? (
                 <button
                   ref={addFieldButtonRef}
-                  onClick={() => setIsAddFieldOpen(true)}
+                  onClick={() => {
+                    console.log(
+                      "🟦 StepConfigurationModal: open AddFieldModal",
+                    );
+                    setIsAddFieldOpen(true);
+                  }}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Add Field
@@ -196,6 +201,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           isOpen={isAddFieldOpen}
           onClose={() => setIsAddFieldOpen(false)}
           onAddField={async (field) => {
+            console.log("🟩 StepConfigurationModal: onAddField wrapper", field);
             await onAddField({
               ...field,
               primary: field.primary ?? false,
@@ -206,6 +212,10 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
           stepFieldIds={stepFieldIds.map(String)}
           onAddExistingField={(fieldIds) => {
             // Convert string field IDs back to numbers
+            console.log(
+              "🟨 StepConfigurationModal: onAddExistingField wrapper",
+              fieldIds,
+            );
             const numericFieldIds = fieldIds
               .map((id) => parseInt(id, 10))
               .filter((id) => !isNaN(id));

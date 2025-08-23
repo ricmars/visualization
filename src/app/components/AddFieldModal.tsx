@@ -98,6 +98,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
 
   const handleSubmit = async () => {
     if (mode === "existing") {
+      console.log("🟦 AddFieldModal submit: existing", { selectedFieldIds });
       if (selectedFieldIds.length === 0) {
         setError("Please select at least one field");
         return;
@@ -106,6 +107,14 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
         onAddExistingField(selectedFieldIds);
       }
     } else {
+      console.log("🟩 AddFieldModal submit: new", {
+        label,
+        type,
+        required,
+        isPrimary,
+        options,
+        sampleValue,
+      });
       if (!label.trim()) {
         setError("Label is required");
         return;

@@ -2,8 +2,17 @@
 
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
-import WorkflowDiagram from "../../components/WorkflowDiagram";
-import WorkflowLifecycleView from "../../components/WorkflowLifecycleView";
+import dynamic from "next/dynamic";
+
+// Dynamic imports to prevent SSR issues with Pega components
+const WorkflowDiagram = dynamic(
+  () => import("../../components/WorkflowDiagram"),
+  { ssr: false },
+);
+const WorkflowLifecycleView = dynamic(
+  () => import("../../components/WorkflowLifecycleView"),
+  { ssr: false },
+);
 import { ChatMessage } from "../../components/ChatInterface";
 import FreeFormSelectionOverlay from "./components/FreeFormSelectionOverlay";
 import QuickChatOverlay from "./components/QuickChatOverlay";
@@ -103,12 +112,6 @@ interface ComposedModel {
   stages: Stage[];
 }
 
-// Local View interface no longer needed here (provided by useWorkflowData)
-
-// validateModelIds extracted to ./utils/validateModelIds
-
-// _fetchCaseData provided by useWorkflowData; local helper removed
-
 export default function WorkflowPage() {
   // 1. Router and params hooks
   const params = useParams();
@@ -150,7 +153,7 @@ export default function WorkflowPage() {
   });
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [workflowView, setWorkflowView] = useState<"flat" | "lifecycle">(
-    "flat",
+    "lifecycle",
   );
   const [activeTab, setActiveTab] = usePersistentTab<
     "workflow" | "fields" | "views" | "chat" | "history"
@@ -325,17 +328,6 @@ export default function WorkflowPage() {
     }
   }, [checkpoints, id]);
 
-  // Iframe lifecycle handled by usePreviewIframe
-
-  // Define fetchCase before using it in useEffect
-  // fetchCase handled by useWorkflowData
-
-  // Load workflow data function
-  // loadWorkflow handled by useWorkflowData
-
-  // Light refresh function for chat completion - updates data without showing loading state
-  // refreshWorkflowData handled by useWorkflowData
-
   // Checkpoint helper must be defined before hooks that depend on it
   const addCheckpoint = (description: string, model: WorkflowModel) => {
     const newCheckpoint: WorkflowCheckpoint = {
@@ -445,11 +437,6 @@ export default function WorkflowPage() {
     setActiveStepAction: setActiveStep,
   });
 
-  // Load workflow data
-  // initial load handled inside useWorkflowData
-
-  // Legacy preview iframe creation handled by usePreviewIframe
-
   if (loading) {
     return <LoadingScreen />;
   }
@@ -537,10 +524,6 @@ export default function WorkflowPage() {
     }
   };
 
-  // moved into useWorkflowMutations as handleAddProcess
-
-  // handleSendMessage already initialized above to maintain hook order
-
   const handleClearChat = () => {
     setMessages([]);
   };
@@ -621,233 +604,6 @@ export default function WorkflowPage() {
       throw error;
     }
   };
-
-  // Handlers provided by useReorderHandlers
-
-  /* const handleAddFieldsToView = async (
-    viewId: number,
-    fieldNames: string[],
-  ) => {
-    if (!selectedCase) return;
-
-    try {
-      // Find the view in the views array
-      const view = views.find((v) => v.id === viewId);
-      if (!view) {
-        throw new Error("View not found");
-      }
-
-      // Parse the existing view model
-      let viewModel;
-      try {
-        viewModel =
-          typeof view.model === "string" ? JSON.parse(view.model) : view.model;
-      } catch (_error) {
-        viewModel = { fields: [] };
-      }
-
-      // Resolve field IDs for the provided names, using local cache first, then DB fallback
-      const resolvedFieldIds: number[] = [];
-      const unresolvedNames: string[] = [];
-      for (const fieldName of fieldNames) {
-        const localField = fields.find((f) => f.name === fieldName);
-        if (localField && typeof localField.id === "number") {
-          resolvedFieldIds.push(localField.id);
-        } else {
-          unresolvedNames.push(fieldName);
-        }
-      }
-
-      // DB fallback for unresolved names
-      if (unresolvedNames.length > 0) {
-        const lookups = await Promise.all(
-          unresolvedNames.map(async (fname) => {
-            try {
-              const resp = await fetchWithBaseUrl(
-                `/api/database?table=${DB_TABLES.FIELDS}&${
-                  DB_COLUMNS.CASE_ID
-                }=${selectedCase.id}&name=${encodeURIComponent(fname)}`,
-              );
-              if (resp.ok) {
-                const data = await resp.json();
-                const rec = Array.isArray(data.data)
-                  ? data.data.find((r: any) => r.name === fname)
-                  : data.data?.name === fname
-                  ? data.data
-                  : null;
-                return rec?.id as number | undefined;
-              }
-            } catch (_e) {
-              // ignore
-            }
-            return undefined;
-          }),
-        );
-        for (const id of lookups) {
-          if (typeof id === "number") resolvedFieldIds.push(id);
-        }
-      }
-
-      // Add new fields that aren't already in the view using shared util
-      let updatedViewModel = { ...viewModel };
-      for (const fid of resolvedFieldIds) {
-        const res = addFieldToViewModel(updatedViewModel, fid, {
-          required: false,
-        });
-        updatedViewModel = res.viewModel;
-      }
-
-      // Update the view in the database
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.VIEWS}&id=${viewId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: view.name,
-            caseid: selectedCase.id,
-            model: {
-              fields: updatedViewModel.fields,
-              layout: {
-                type: "form",
-                columns: 1,
-              },
-            },
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to update view");
-      }
-
-      const { data: updatedView } = await response.json();
-
-      // Normalize model shape to always be a string for downstream JSON.parse usage
-      const normalizedUpdatedView = {
-        ...updatedView,
-        model:
-          typeof updatedView.model === "string"
-            ? updatedView.model
-            : JSON.stringify(updatedView.model ?? {}),
-      };
-
-      // Update the local views state
-      setViews((prevViews) =>
-        prevViews.map((v) => (v.id === viewId ? normalizedUpdatedView : v)),
-      );
-
-      addCheckpoint(`Updated database view: ${view.name}`, workflowModel);
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error updating view fields:", error);
-      alert("Failed to update view fields. Please try again.");
-    }
-  }; */
-
-  /* const handleAddFieldsToStep = async (
-    stepId: number,
-    fieldNames: string[],
-  ) => {
-    if (!selectedCase) return;
-
-    try {
-      // Handle workflow step
-      const updatedStages = workflowModel.stages.map((stage: Stage) => ({
-        ...stage,
-        processes: stage.processes.map((process: Process) => ({
-          ...process,
-          steps: process.steps.map((step: Step) => {
-            // Check if this is the step we're looking for
-            if (step.id === stepId && step.type === "Collect information") {
-              // Get existing fields
-              const existingFields = step.fields || [];
-
-              // Create a map of existing fields to preserve their properties
-              const existingFieldsMap = new Map(
-                existingFields.map((field) => [field.fieldId, field]),
-              );
-
-              // Add new fields while preserving existing ones
-              fieldNames.forEach((fieldName) => {
-                // Find the field by name to get its ID
-                const field = fields.find((f) => f.name === fieldName);
-                if (field && field.id && !existingFieldsMap.has(field.id)) {
-                  existingFieldsMap.set(field.id, {
-                    fieldId: field.id,
-                    required: false,
-                  });
-                }
-              });
-
-              // Convert map back to array - this will include both existing and new fields
-              const updatedFields = Array.from(existingFieldsMap.values());
-
-              return {
-                ...step,
-                fields: updatedFields,
-              };
-            }
-            return step;
-          }),
-        })),
-      }));
-
-      const updatedModel: ComposedModel = {
-        name: selectedCase.name,
-        description: selectedCase.description,
-        stages: updatedStages,
-      };
-
-      addCheckpoint(`Updated step fields: ${stepId}`, updatedModel);
-
-      const response = await fetch(
-        `/api/database?table=${DB_TABLES.CASES}&id=${selectedCase.id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            table: DB_TABLES.CASES,
-            data: {
-              id: selectedCase.id,
-              name: selectedCase.name,
-              description: selectedCase.description,
-              model: updatedModel,
-            },
-          }),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to update step fields");
-      }
-
-      const { data: updatedCase } = await response.json();
-      setSelectedCase(updatedCase);
-
-      // Update the local model state to refresh the UI
-      setModel((prev) =>
-        prev
-          ? {
-              ...prev,
-              stages: updatedStages,
-            }
-          : null,
-      );
-
-      // Dispatch model updated event for preview
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
-    } catch (error) {
-      console.error("Error updating step fields:", error);
-      alert("Failed to update step fields. Please try again.");
-    }
-  }; */
 
   const handleFieldsReorder = async (
     selectedViewId: string,
@@ -1170,6 +926,41 @@ export default function WorkflowPage() {
                       activeStage={activeStage}
                       activeProcess={activeProcess}
                       activeStep={activeStep}
+                      onEditStep={(stageId, processId, stepId) => {
+                        // For lifecycle view editing, just select the step to show configuration
+                        handleStepSelect(
+                          stageId.toString(),
+                          processId.toString(),
+                          stepId.toString(),
+                        );
+                      }}
+                      onDeleteStep={handleDeleteStep}
+                      fields={fields}
+                      readOnly={false}
+                      onAddField={handleAddField}
+                      onUpdateField={handleUpdateField}
+                      onDeleteField={handleDeleteField}
+                      onAddExistingField={(stepId, fieldIds) => {
+                        // Convert field IDs to field names for the existing handler
+                        const fieldNames = fieldIds
+                          .map((id) => fields.find((f) => f.id === id)?.name)
+                          .filter((name): name is string => !!name);
+                        void handleAddFieldsToStep(
+                          stepId,
+                          fieldNames,
+                          workflowModel.stages,
+                        );
+                      }}
+                      onFieldChange={(fieldId, value) => {
+                        // For now, this is read-only in lifecycle view
+                        console.log(
+                          "Field change in lifecycle view:",
+                          fieldId,
+                          value,
+                        );
+                      }}
+                      views={views}
+                      onAddFieldsToView={handleAddFieldsToView}
                     />
                   )}
                 </>
