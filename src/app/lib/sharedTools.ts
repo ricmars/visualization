@@ -387,7 +387,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (sampleValue, primary, required, label, order, options, type). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (sampleValue, primary, required, label, order, options, type). For bulk updates, strongly prefer batching 25–50 fields per call (this tool can handle large arrays). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {

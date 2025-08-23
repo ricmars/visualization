@@ -214,9 +214,9 @@ ${contextLine}
 
 Bulk operations policy:
 - When the request implies updating or deleting ALL items (e.g., "all fields", "every view"), first call list tools to get the full set and its count.
-- Apply changes to the entire set. If there are many items, use save tools in batches (e.g., 25-50 items per call) until all are processed.
-- After mutations, re-list to verify the total processed equals the source count; if not, continue processing the remainder.
-- Avoid summarizing plans; prefer calling tools directly until the requested bulk change is fully completed.`;
+- Apply changes to the entire set. For many items, group saves into large batches: strongly prefer batches of 25–50 items per save call. Do not limit batches to 3.
+- After mutations, re-list to verify the total processed equals the source count; if not, continue processing the remainder in the same 25–50 size batches.
+- Avoid summarizing plans; call tools directly until the requested bulk change is fully completed.`;
 
     console.log("Building enhanced system prompt...");
     console.log("Enhanced system prompt length:", enhancedSystemPrompt.length);
@@ -284,7 +284,7 @@ Bulk operations policy:
         let totalToolExecutions = 0;
         const MAX_TOOL_EXECUTIONS = isContinueOnly
           ? Number.POSITIVE_INFINITY
-          : 20;
+          : 60;
         let stoppedDueToToolCap = false;
         // When we ask the model for a post-condition confirmation, we set this
         // so the next assistant message (without tool calls) is treated as final
