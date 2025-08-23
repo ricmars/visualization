@@ -261,7 +261,10 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
   const containerStyle: React.CSSProperties = {
     minHeight: 0,
     height: "auto",
-    overflow: "hidden",
+    // Allow horizontal scrolling for wide lifecycle diagrams while
+    // preventing vertical scrollbars from appearing
+    overflowX: "auto",
+    overflowY: "hidden",
   };
 
   // Memoize the stages mapping to prevent unnecessary recalculations
@@ -364,10 +367,22 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
           box-sizing: border-box;
         }
 
+        /* Make the lifecycle layout left-aligned and horizontally scrollable */
+        .shadow-container {
+          overflow-x: auto;
+          overflow-y: hidden;
+          width: 100%;
+        }
+
         .shadow-container > div > div:first-child {
           position: static;
           background: #FFF;
-          justify-content: center;
+          justify-content: flex-start;
+        }
+
+        /* Ensure inner content can extend horizontally */
+        .shadow-container > div {
+          min-width: max-content;
         }
       `;
 
@@ -390,6 +405,9 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
       shadowContainer.style.background = "transparent";
       shadowContainer.style.border = "none";
       shadowContainer.style.position = "static";
+      shadowContainer.style.overflowX = "auto";
+      shadowContainer.style.overflowY = "hidden";
+      shadowContainer.style.width = "100%";
 
       // Error boundary wrapper component
       class ErrorBoundary extends React.Component<

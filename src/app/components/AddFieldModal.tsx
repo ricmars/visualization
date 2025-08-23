@@ -54,7 +54,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
     (field) => !stepFieldIds.includes(field.id?.toString() || ""),
   );
 
-  // Calculate position anchored to the trigger button, flip if needed, and clamp to viewport
+  // Calculate position anchored to the trigger button, flip if needed, and clamp to main content area
   useEffect(() => {
     const computePosition = () => {
       if (!isOpen || !buttonRef?.current) return;
@@ -62,43 +62,61 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
       const estimatedWidth = 384; // Tailwind w-96
       const viewportPadding = 8;
 
-      // Adaptive max height based on viewport
+      // Determine bounds using the main content container
+      const container =
+        document.getElementById("main-content-area") ||
+        (document.querySelector("[data-main-content]") as HTMLElement | null);
+      const containerRect = container
+        ? container.getBoundingClientRect()
+        : ({
+            left: 0,
+            top: 0,
+            width: window.innerWidth,
+            height: window.innerHeight,
+          } as any);
+
+      // Adaptive max height based on container height
       const allowedMaxHeight = Math.max(
         240,
-        window.innerHeight - viewportPadding * 2,
+        containerRect.height - viewportPadding * 2,
       );
       setMaxHeightPx(allowedMaxHeight);
 
-      // Horizontal placement: keep within viewport
+      // Horizontal placement relative to container
       const nextLeft = Math.min(
-        Math.max(viewportPadding, buttonRect.left),
+        Math.max(viewportPadding, buttonRect.left - containerRect.left),
         Math.max(
           viewportPadding,
-          window.innerWidth - estimatedWidth - viewportPadding,
+          containerRect.width - estimatedWidth - viewportPadding,
         ),
       );
 
-      // Vertical placement: prefer below; flip above if not enough space
+      // Vertical placement relative to container: prefer below; flip above if not enough space
       const overlayHeight =
         overlayRef.current?.offsetHeight || allowedMaxHeight;
       const spaceBelow =
-        window.innerHeight - (buttonRect.bottom + viewportPadding);
+        containerRect.height -
+        (buttonRect.bottom - containerRect.top) -
+        viewportPadding;
       let nextTop: number;
-      if (overlayHeight > spaceBelow && buttonRect.top > spaceBelow) {
+      if (
+        overlayHeight > spaceBelow &&
+        buttonRect.top - containerRect.top > spaceBelow
+      ) {
         // Place above
         nextTop = Math.max(
           viewportPadding,
-          buttonRect.top - overlayHeight - viewportPadding,
+          buttonRect.top - containerRect.top - overlayHeight - viewportPadding,
         );
       } else {
         // Place below
-        nextTop = buttonRect.bottom + viewportPadding;
+        nextTop = buttonRect.bottom - containerRect.top + viewportPadding;
       }
 
-      // Clamp to ensure it stays within viewport bounds
+      // Clamp to container bounds
       nextTop = Math.min(
         Math.max(viewportPadding, nextTop),
-        window.innerHeight - viewportPadding - overlayHeight,
+        containerRect.height - viewportPadding - overlayHeight,
       );
 
       setPosition({ top: nextTop, left: nextLeft });
@@ -126,24 +144,11 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
     };
   }, [isOpen, buttonRef, mode]);
 
+  // Intentionally do NOT close on outside click. The popover should only
+  // close via explicit actions (Cancel, Add, Close).
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        overlayRef.current &&
-        !overlayRef.current.contains(event.target as Node)
-      ) {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen, onClose]);
+    return () => {};
+  }, [isOpen]);
 
   const handleSubmit = async () => {
     if (mode === "existing") {
@@ -204,9 +209,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      onClose();
-    } else if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       await handleSubmit();
     }
@@ -223,7 +226,7 @@ const AddFieldModal: React.FC<AddFieldModalProps> = ({
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
             style={{
-              position: "fixed",
+              position: "absolute",
               top: position.top,
               left: position.left,
               zIndex: 1000,

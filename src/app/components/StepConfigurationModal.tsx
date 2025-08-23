@@ -103,13 +103,9 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
   const stepFieldIds = stepFields.map((field) => field.id!);
 
   return (
-    <div
-      className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] modal-overlay"
-      onClick={onClose}
-    >
+    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] modal-overlay">
       <div
         className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-w-[95vw] w-full mx-4 my-4 z-[110] flex flex-col max-h-[calc(100%-2rem)] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
         ref={modalRef}
         role="dialog"
       >
