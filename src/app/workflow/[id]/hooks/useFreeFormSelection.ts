@@ -93,7 +93,11 @@ export function useFreeFormSelection({
         "[data-fieldid], [data-viewid], [data-stageid], [data-processid], [data-stepid]",
       ),
     ).filter((el) => {
-      // Exclude elements that are inside modal portals or modal overlays
+      // Allow selection if explicitly opted-in via attribute on any ancestor
+      const allowInModal = el.closest('[data-allow-freeform-select="true"]');
+      if (allowInModal) return true;
+
+      // Otherwise, exclude elements that are inside modal portals or modal overlays
       const modalPortal = el.closest('[data-modal-portal="true"]');
       const modalOverlay = el.closest(
         '.modal-overlay, [class*="z-40"], [class*="z-50"], [class*="z-60"]',

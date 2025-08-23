@@ -402,7 +402,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
     if (shadowRootRef.current && reactRootRef.current) {
       console.log("🔧 Rendering Pega LifeCycle in Shadow DOM");
       // Ensure container does not block modals rendered outside
-      shadowContainer.style.background = "transparent";
+      shadowContainer.style.background = "#FFF";
       shadowContainer.style.border = "none";
       shadowContainer.style.position = "static";
       shadowContainer.style.overflowX = "auto";

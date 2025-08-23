@@ -108,6 +108,7 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
         className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-w-[95vw] w-full mx-4 my-4 z-[110] flex flex-col max-h-[calc(100%-2rem)] overflow-hidden"
         ref={modalRef}
         role="dialog"
+        data-allow-freeform-select="true"
       >
         <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
@@ -138,6 +139,9 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
                 Fields
+                <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+                  ({stepFields.length})
+                </span>
               </h3>
               {step.type === "Collect information" ? (
                 <button

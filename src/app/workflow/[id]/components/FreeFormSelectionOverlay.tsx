@@ -24,7 +24,7 @@ export default function FreeFormSelectionOverlay({
 }: FreeFormSelectionOverlayProps) {
   return (
     <div
-      className="fixed inset-0 z-[100] cursor-crosshair"
+      className="fixed inset-0 z-[120] cursor-crosshair"
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
