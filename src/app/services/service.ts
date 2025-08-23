@@ -26,9 +26,15 @@ export class Service {
     prompt: string,
     systemContext: string,
     history?: ChatMessage[],
+    signal?: AbortSignal,
   ) {
     console.log(`Generating response with provider: ${this.currentProvider}`);
-    return await this.generateOpenAIResponse(prompt, systemContext, history);
+    return await this.generateOpenAIResponse(
+      prompt,
+      systemContext,
+      history,
+      signal,
+    );
   }
 
   static async generateResponseWithContext(
@@ -39,6 +45,7 @@ export class Service {
       fieldNames?: string[];
       viewId?: number;
     },
+    signal?: AbortSignal,
   ) {
     const contextPayload = selectionContext ? { selectionContext } : undefined;
     console.log("Calling OpenAI API with selection context...", contextPayload);
@@ -52,6 +59,7 @@ export class Service {
         systemContext,
         selectionContext,
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -65,6 +73,7 @@ export class Service {
     prompt: string,
     systemContext: string,
     history?: ChatMessage[],
+    signal?: AbortSignal,
   ) {
     console.log("Calling OpenAI API...");
     const response = await fetch("/api/openai", {
@@ -77,6 +86,7 @@ export class Service {
         systemContext,
         history,
       }),
+      signal,
     });
 
     if (!response.ok) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaUndo, FaCheck, FaClock, FaArrowUp } from "react-icons/fa";
+import { FaUndo, FaCheck, FaClock, FaArrowUp, FaStop } from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -57,6 +57,7 @@ interface CheckpointStatus {
 
 interface ChatInterfaceProps {
   onSendMessage: (message: string) => void;
+  onAbort?: () => void;
   messages: ChatMessage[];
   isLoading: boolean;
   isProcessing: boolean;
@@ -148,6 +149,7 @@ function shouldFilterContent(content: string): boolean {
 
 export default function ChatInterface({
   onSendMessage,
+  onAbort,
   messages,
   isLoading,
   isProcessing,
@@ -448,7 +450,7 @@ export default function ChatInterface({
 
       {/* Message input */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-3">
-        <div className="flex items-end space-x-2 flex-row items-center">
+        <div className="flex flex-row items-center gap-2">
           <div className="flex-1 min-w-0">
             <textarea
               ref={textareaRef}
@@ -461,18 +463,28 @@ export default function ChatInterface({
               disabled={isLoading || isProcessing}
             />
           </div>
-          <button
-            onClick={handleSendMessage}
-            disabled={isLoading || !message.trim() || isProcessing}
-            className="flex items-center justify-center w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
-            title="Send message"
-          >
-            {isLoading || isProcessing ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <FaArrowUp className="w-4 h-4" />
-            )}
-          </button>
+          {isProcessing ? (
+            <button
+              onClick={() => onAbort?.()}
+              className="flex items-center justify-center px-3 h-10 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-1 transition-all duration-200 ease-in-out"
+              title="Stop"
+            >
+              <FaStop className="w-4 h-4 mr-1" /> Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleSendMessage}
+              disabled={isLoading || !message.trim()}
+              className="flex items-center justify-center w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
+              title="Send message"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <FaArrowUp className="w-4 h-4" />
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

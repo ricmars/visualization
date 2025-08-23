@@ -133,6 +133,14 @@ type ToolResult = {
 export async function POST(request: Request) {
   console.log("=== OpenAI POST request started ===");
   const startTime = Date.now();
+  const abortSignal = (request as any).signal as AbortSignal | undefined;
+  let _clientAborted = false;
+  if (abortSignal) {
+    abortSignal.addEventListener("abort", () => {
+      _clientAborted = true;
+      console.log("Client aborted request: stopping backend processing");
+    });
+  }
 
   try {
     const { prompt, systemContext, history } = await request.json();
@@ -162,6 +170,9 @@ export async function POST(request: Request) {
 
     // Keep the original user prompt as-is; rely on tool descriptions, not prompt grafting
     const enhancedPrompt = prompt;
+    const isContinueOnly =
+      typeof enhancedPrompt === "string" &&
+      /^\s*continue\b/i.test(enhancedPrompt);
 
     // Get checkpoint-aware database tools (unified approach)
     console.log("Getting checkpoint-aware database tools...");
@@ -248,6 +259,11 @@ ${contextLine}`;
           timestamp: number;
           duration?: number;
         }> = [];
+        let totalToolExecutions = 0;
+        const MAX_TOOL_EXECUTIONS = isContinueOnly
+          ? Number.POSITIVE_INFINITY
+          : 20;
+        let stoppedDueToToolCap = false;
         // When we ask the model for a post-condition confirmation, we set this
         // so the next assistant message (without tool calls) is treated as final
         // instead of being nudged to use tools again.
@@ -353,6 +369,16 @@ ${contextLine}`;
         }
 
         while (!done && loopCount < 30) {
+          if (abortSignal?.aborted) {
+            console.log(
+              "Abort detected before iteration; sending done and stopping",
+            );
+            try {
+              await processor.sendText("\nStopped by user.");
+              await processor.sendDone();
+            } catch {}
+            break;
+          }
           // Force completion if we're at max iterations
           if (loopCount >= 30) {
             console.log("Reached maximum iterations, forcing completion");
@@ -394,13 +420,16 @@ ${contextLine}`;
             );
             // console.log("messages XXXX:", messages);
 
-            const completionPromise = openai.chat.completions.create({
-              model: process.env.AZURE_OPENAI_DEPLOYMENT!,
-              messages,
-              max_completion_tokens: 6000, // Reduced for faster generation
-              stream: true, // Enable streaming for faster responses
-              tools: openaiToolSchemas,
-            });
+            const completionPromise = openai.chat.completions.create(
+              {
+                model: process.env.AZURE_OPENAI_DEPLOYMENT!,
+                messages,
+                max_completion_tokens: 6000, // Reduced for faster generation
+                stream: true, // Enable streaming for faster responses
+                tools: openaiToolSchemas,
+              } as any,
+              (abortSignal ? { signal: abortSignal } : undefined) as any,
+            );
 
             const completion = (await Promise.race([
               completionPromise,
@@ -423,8 +452,12 @@ ${contextLine}`;
             let didStreamContent = false;
 
             try {
-              for await (const chunk of completion) {
-                const choice = chunk.choices[0];
+              for await (const chunk of completion as any) {
+                if (abortSignal?.aborted) {
+                  console.log("Abort detected mid-stream; breaking");
+                  break;
+                }
+                const choice = (chunk as any).choices[0];
                 if (choice?.delta?.content) {
                   const contentChunk = choice.delta.content;
                   fullContent += contentChunk;
@@ -478,6 +511,14 @@ ${contextLine}`;
                 }
               }
             } catch (streamError) {
+              if (
+                (streamError as any)?.name === "AbortError" ||
+                String(streamError).toLowerCase().includes("abort")
+              ) {
+                console.log("Streaming aborted by client; exiting loop");
+                done = true;
+                break;
+              }
               console.error(
                 "Error processing streaming response:",
                 streamError,
@@ -595,6 +636,20 @@ ${contextLine}`;
                   });
 
                   try {
+                    if (totalToolExecutions >= MAX_TOOL_EXECUTIONS) {
+                      if (!stoppedDueToToolCap) {
+                        stoppedDueToToolCap = true;
+                        await processor.sendText(
+                          `\nPaused: reached the tool execution limit (${
+                            Number.isFinite(MAX_TOOL_EXECUTIONS)
+                              ? MAX_TOOL_EXECUTIONS
+                              : 0
+                          }) for this turn. Reply 'continue' to proceed or refine your request.`,
+                        );
+                      }
+                      return { success: false, error: "tool cap reached" };
+                    }
+
                     // No heuristic blocking: rely on tool descriptions for safety and confirmation
 
                     // If this is a skipped duplicate createCase, emit a synthetic error tool message and return
@@ -622,6 +677,7 @@ ${contextLine}`;
                     console.log(`Executing tool ${toolName}...`);
                     // Stream a status update to the client immediately when execution starts
                     await processor.sendText(`\nExecuting ${toolName}...`);
+                    totalToolExecutions += 1;
                     const toolExecutionStartTime = Date.now();
                     const result = await tool.execute(toolArgs);
                     const toolExecutionDuration =
@@ -820,6 +876,23 @@ ${contextLine}`;
               // Wait for all tool calls to complete
               await Promise.all(toolCallPromises);
 
+              if (stoppedDueToToolCap) {
+                // End the loop early due to tool cap; do not solicit more tool calls
+                done = true;
+                break;
+              }
+
+              if (abortSignal?.aborted) {
+                console.log(
+                  "Abort after tools; sending done and stopping loop",
+                );
+                try {
+                  await processor.sendText("\nStopped by user.");
+                  await processor.sendDone();
+                } catch {}
+                break;
+              }
+
               // If a new case was created in this iteration, update context to EXISTING and disable createCase for subsequent iterations
               if (createdCaseId && Number.isInteger(createdCaseId)) {
                 currentCaseId = createdCaseId;
@@ -926,16 +999,29 @@ ${contextLine}`;
 
         // Finalization is handled by the model output and tool results; no heuristic completion checks
 
-        // Commit checkpoint session on successful completion
+        // Commit/rollback checkpoint session depending on abort state
         try {
-          await checkpointSessionManager.commitSession();
-          console.log("Checkpoint session committed successfully");
+          if (abortSignal?.aborted || _clientAborted) {
+            await checkpointSessionManager.rollbackSession();
+            console.log("Checkpoint session rolled back due to abort");
+          } else {
+            await checkpointSessionManager.commitSession();
+            console.log("Checkpoint session committed successfully");
+          }
         } catch (checkpointError) {
           console.error(
-            "Failed to commit checkpoint session:",
+            "Failed to finalize checkpoint session:",
             checkpointError,
           );
         }
+
+        // Try to gracefully end the stream; ignore if already closed
+        try {
+          await processor.sendDone();
+        } catch {}
+        try {
+          await writer.close();
+        } catch {}
 
         await processor.sendDone();
         await writer.close();
@@ -951,6 +1037,18 @@ ${contextLine}`;
           );
         }
         const totalDuration = Date.now() - startTime;
+        if (
+          (error as any)?.name === "AbortError" ||
+          String(error).toLowerCase().includes("abort") ||
+          abortSignal?.aborted ||
+          _clientAborted
+        ) {
+          console.warn(
+            `=== OpenAI POST request aborted by client after ${totalDuration}ms ===`,
+          );
+          // 499 Client Closed Request (Nginx convention)
+          return new NextResponse(null, { status: 499 as any });
+        }
         console.error(
           `=== OpenAI POST request failed after ${totalDuration}ms ===`,
         );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { Service } from "../../../services/service";
 import processToolResponse from "../utils/processToolResponse";
 import { Stage } from "../../../types";
@@ -37,6 +37,7 @@ export default function useChatMessaging({
   setActiveProcessAction,
   setActiveStepAction,
 }: UseChatMessagingArgs) {
+  const abortRef = useRef<AbortController | null>(null);
   const handleSendMessage = useCallback(
     async (message: string) => {
       let aiMessageId: string;
@@ -77,6 +78,8 @@ export default function useChatMessaging({
             content: m.content,
           }));
 
+        abortRef.current = new AbortController();
+
         const response = await Service.generateResponse(
           message,
           selectedCase
@@ -90,6 +93,7 @@ export default function useChatMessaging({
               })
             : "",
           history,
+          abortRef.current.signal,
         );
 
         if (!response.ok) {
@@ -107,10 +111,12 @@ export default function useChatMessaging({
         const decoder = new TextDecoder();
         let shouldReloadWorkflow = false;
         let currentThinkingContent = "";
+        // Keep a ref to reader for cancellation on abort
+        const readerRef = { current: reader };
 
         try {
           while (true) {
-            const { done, value } = await reader.read();
+            const { done, value } = await readerRef.current.read();
             if (done) break;
 
             const chunk = decoder.decode(value);
@@ -248,16 +254,40 @@ export default function useChatMessaging({
             }
           }
         } finally {
-          reader.releaseLock();
+          try {
+            // Cancel the stream before releasing to avoid BodyStreamBuffer errors
+            try {
+              await readerRef.current.cancel();
+            } catch {}
+            readerRef.current.releaseLock();
+          } catch {}
         }
       } catch (error) {
-        // Clear thinking indicator on error
+        if ((error as any)?.name === "AbortError") {
+          // Mark thinking false for the placeholder AI message and inform the user quietly
+          setMessagesAction((prev) =>
+            prev.map((msg) =>
+              msg.isThinking ? { ...msg, isThinking: false } : msg,
+            ),
+          );
+          setMessagesAction((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              content: "Stopped by user.",
+              sender: "assistant",
+              timestamp: new Date(),
+            },
+          ]);
+          // Suppress logging for intentional aborts
+          return;
+        }
+        // Non-abort errors: clear thinking and show a generic message
         setMessagesAction((prev) =>
           prev.map((msg) =>
-            msg.id === (undefined as any) ? { ...msg, isThinking: false } : msg,
+            msg.isThinking ? { ...msg, isThinking: false } : msg,
           ),
         );
-
         setMessagesAction((prev) => [
           ...prev,
           {
@@ -270,6 +300,7 @@ export default function useChatMessaging({
         console.error("Error sending message:", error);
       } finally {
         setIsProcessingAction(false);
+        abortRef.current = null;
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -288,5 +319,15 @@ export default function useChatMessaging({
     ],
   );
 
-  return { handleSendMessage } as const;
+  const handleAbort = useCallback(() => {
+    if (abortRef.current) {
+      try {
+        abortRef.current.abort();
+      } catch {
+        // ignore abort errors
+      }
+    }
+  }, []);
+
+  return { handleSendMessage, handleAbort } as const;
 }

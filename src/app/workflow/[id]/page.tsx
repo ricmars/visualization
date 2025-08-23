@@ -403,7 +403,7 @@ export default function WorkflowPage() {
     eventName: MODEL_UPDATED_EVENT,
   });
 
-  const { handleSendMessage } = useChatMessaging({
+  const { handleSendMessage, handleAbort } = useChatMessaging({
     messages,
     setMessagesAction: setMessages,
     setIsProcessingAction: setIsProcessing,
@@ -1125,6 +1125,7 @@ export default function WorkflowPage() {
             activeTab={activePanelTab}
             messages={messages}
             onSendMessage={(message) => void handleSendMessage(message)}
+            onAbort={() => handleAbort()}
             isProcessing={isProcessing}
             caseId={parseInt(id)}
             onQuickAction={beginFreeFormSelection}

@@ -9,6 +9,7 @@ type ChatPanelContentProps = {
   activeTab: "chat" | "history";
   messages: ChatMessage[];
   onSendMessage: (message: string) => Promise<void> | void;
+  onAbort: () => void;
   isProcessing: boolean;
   caseId: number;
   onQuickAction: () => void;
@@ -19,6 +20,7 @@ export default function ChatPanelContent({
   activeTab,
   messages,
   onSendMessage,
+  onAbort,
   isProcessing,
   caseId,
   onQuickAction,
@@ -36,6 +38,7 @@ export default function ChatPanelContent({
             <ChatInterface
               messages={messages}
               onSendMessage={onSendMessage}
+              onAbort={onAbort}
               isProcessing={isProcessing}
               isLoading={false}
               caseid={caseId}

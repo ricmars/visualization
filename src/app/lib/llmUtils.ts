@@ -31,12 +31,21 @@ export function createStreamProcessor(
   encoder: TextEncoder,
   databaseTools: Tool[],
 ): StreamProcessor {
+  const safeWrite = async (obj: unknown) => {
+    try {
+      await writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+    } catch (err) {
+      // Swallow stream write errors when client has disconnected/aborted
+      console.warn(
+        "Stream write failed (possibly aborted):",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  };
   return {
     async processChunk(chunk: string) {
       console.log("StreamProcessor: Processing text chunk:", chunk);
-      await writer.write(
-        encoder.encode(`data: ${JSON.stringify({ text: chunk })}\n\n`),
-      );
+      await safeWrite({ text: chunk });
       console.log("StreamProcessor: Text chunk sent to client");
     },
 
@@ -62,13 +71,7 @@ export function createStreamProcessor(
 
         // Send execution message
         console.log("StreamProcessor: Sending execution message to client");
-        await writer.write(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              text: `\nExecuting ${tool.name}...\n`,
-            })}\n\n`,
-          ),
-        );
+        await safeWrite({ text: `\nExecuting ${tool.name}...\n` });
 
         console.log(
           "StreamProcessor: Calling tool.execute with params:",
@@ -170,13 +173,7 @@ export function createStreamProcessor(
         const safeMessage = userMessage.startsWith("\n")
           ? userMessage
           : `\n${userMessage}`;
-        await writer.write(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              text: safeMessage,
-            })}\n\n`,
-          ),
-        );
+        await safeWrite({ text: safeMessage });
         console.log("StreamProcessor: Tool result sent to client");
       } catch (error: unknown) {
         console.error("StreamProcessor: Error executing tool:", error);
@@ -188,41 +185,27 @@ export function createStreamProcessor(
           error instanceof Error ? error.message : String(error);
 
         console.log("StreamProcessor: Sending error message to client");
-        await writer.write(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              text: `\nError executing ${toolName}: ${errorMessage}\n`,
-              error: errorMessage,
-            })}\n\n`,
-          ),
-        );
+        await safeWrite({
+          text: `\nError executing ${toolName}: ${errorMessage}\n`,
+          error: errorMessage,
+        });
         console.log("StreamProcessor: Error message sent to client");
       }
     },
 
     async sendText(text: string) {
       console.log("StreamProcessor: Sending text:", text);
-      await writer.write(
-        encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
-      );
+      await safeWrite({ text });
     },
 
     async sendError(error: string) {
       console.log("StreamProcessor: Sending error:", error);
-      await writer.write(
-        encoder.encode(
-          `data: ${JSON.stringify({
-            error: error,
-          })}\n\n`,
-        ),
-      );
+      await safeWrite({ error });
     },
 
     async sendDone() {
       console.log("StreamProcessor: Sending done signal");
-      await writer.write(
-        encoder.encode(`data: ${JSON.stringify({ done: true })}\n\n`),
-      );
+      await safeWrite({ done: true });
       console.log("StreamProcessor: Done signal sent");
     },
   };
