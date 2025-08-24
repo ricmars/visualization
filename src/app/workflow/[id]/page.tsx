@@ -961,6 +961,21 @@ export default function WorkflowPage() {
                       }}
                       views={views}
                       onAddFieldsToView={handleAddFieldsToView}
+                      onStepsUpdate={handleStepsUpdate}
+                      onAddProcess={(stageId, processName) =>
+                        handleAddProcess(Number(stageId), processName)
+                      }
+                      onAddStep={(stageId, processId, stepName, stepType) =>
+                        handleAddStep(
+                          Number(stageId),
+                          Number(processId),
+                          stepName,
+                          stepType,
+                        )
+                      }
+                      onDeleteProcess={(stageId, processId) =>
+                        handleDeleteProcess(Number(stageId), Number(processId))
+                      }
                     />
                   )}
                 </>

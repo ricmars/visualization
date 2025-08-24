@@ -31,6 +31,16 @@ interface WorkflowLifecycleViewProps {
   views?: Array<{ id: number; model: any }>;
   // Add new field names to a view
   onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
+  // Lifecycle stage/process handlers
+  onStepsUpdate?: (updatedStages: Stage[]) => void;
+  onAddProcess?: (stageId: number, processName: string) => void;
+  onAddStep?: (
+    stageId: number,
+    processId: number,
+    stepName: string,
+    stepType: string,
+  ) => void;
+  onDeleteProcess?: (stageId: number, processId: number) => void;
 }
 
 // Lazy load the actual implementation

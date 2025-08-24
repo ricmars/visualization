@@ -10,6 +10,7 @@ import React, {
 import { createRoot } from "react-dom/client";
 
 import { Stage, Field } from "../types";
+import type { StepType } from "../utils/stepTypes";
 import { getStepTypeData } from "../utils/stepTypes";
 import StepConfigurationModal from "./StepConfigurationModal";
 import ModalPortal from "./ModalPortal";
@@ -70,6 +71,9 @@ const PegaIcon = dynamic(
 
 // Import types separately since they don't need dynamic loading
 import type { IconTileProps, StageItemProps } from "@pega/cosmos-react-build";
+import EditModal from "./EditModal";
+import AddProcessModal from "./AddProcessModal";
+import AddStepModal from "./AddStepModal";
 
 interface WorkflowLifecycleViewProps {
   stages: Stage[];
@@ -96,6 +100,15 @@ interface WorkflowLifecycleViewProps {
   onFieldChange?: (fieldId: number, value: string | number | boolean) => void;
   views?: Array<{ id: number; model: any }>;
   onAddFieldsToView?: (viewId: number, fieldNames: string[]) => void;
+  onStepsUpdate?: (updatedStages: Stage[]) => void;
+  onAddProcess?: (stageId: number, processName: string) => void;
+  onAddStep?: (
+    stageId: number,
+    processId: number,
+    stepName: string,
+    stepType: StepType,
+  ) => void;
+  onDeleteProcess?: (stageId: number, processId: number) => void;
 }
 
 const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
@@ -115,6 +128,10 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
   onFieldChange,
   views = [],
   onAddFieldsToView,
+  onStepsUpdate,
+  onAddProcess,
+  onAddStep,
+  onDeleteProcess,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const shadowRootRef = useRef<ShadowRoot | null>(null);
@@ -133,6 +150,35 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
     fields: any[];
     type: string;
     viewId?: number;
+  } | null>(null);
+
+  const [stageEdit, setStageEdit] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
+  const [processModal, setProcessModal] = useState<{
+    stageId: number | null;
+    isOpen: boolean;
+  }>({ stageId: null, isOpen: false });
+
+  const [processEdit, setProcessEdit] = useState<{
+    stageId: number;
+    id: number;
+    name: string;
+  } | null>(null);
+
+  const [addStepModal, setAddStepModal] = useState<{
+    stageId: number | null;
+    processId: number | null;
+    isOpen: boolean;
+  }>({ stageId: null, processId: null, isOpen: false });
+
+  const [stepEdit, setStepEdit] = useState<{
+    stageId: number;
+    processId: number;
+    id: number;
+    name: string;
+    stepType: StepType;
   } | null>(null);
 
   // When views update, recompute editingStep.fields from the linked view model
@@ -179,7 +225,11 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
       // Find the stage, process and step based on step data
       for (const stage of stages) {
         for (const process of stage.processes) {
-          const step = process.steps.find((s) => s.name === stepData.step.id);
+          const candidateId = stepData?.step?.id || stepData?.id;
+          const step = process.steps.find(
+            (s) =>
+              String(s.id) === String(candidateId) || s.name === candidateId,
+          );
           if (step) {
             console.log("🔍 Found step:", step);
             let stepFields: any[] = [];
@@ -247,7 +297,11 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
       // Find the stage, process and step based on step data
       for (const stage of stages) {
         for (const process of stage.processes) {
-          const step = process.steps.find((s) => s.name === stepData.step.id);
+          const candidateId = stepData?.step?.id || stepData?.id;
+          const step = process.steps.find(
+            (s) =>
+              String(s.id) === String(candidateId) || s.name === candidateId,
+          );
           if (step && onDeleteStep) {
             onDeleteStep(stage.id, process.id, step.id);
             return;
@@ -272,16 +326,16 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
     () =>
       stages.map(
         (stage: Stage): StageItemProps => ({
-          id: stage.name,
+          id: String(stage.id),
           label: stage.name,
           type: "default",
           error: "",
           categories: [
             {
-              id: stage.name,
-              categoryId: stage.name,
+              id: String(stage.id),
+              categoryId: String(stage.id),
               tasks: stage.processes.map((process) => ({
-                id: process.name,
+                id: String(process.id),
                 label: process.name,
                 visual: { imgSrc: "" },
                 steps: process.steps.map((step) => {
@@ -291,7 +345,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
                       type: "",
                       label: step.name,
                     },
-                    id: step.name,
+                    id: String(step.id),
                     label: step.name,
                     visual: {
                       imgSrc: "",
@@ -384,6 +438,10 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
         .shadow-container > div {
           min-width: max-content;
         }
+
+        .shadow-container article {
+          border: 1px solid rgba(0, 0, 0, .2);
+        }
       `;
 
       shadowRoot.insertBefore(globalStyle, shadowRoot.firstChild);
@@ -464,6 +522,206 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
                           activeStage={activeStage}
                           activeProcess={activeProcess}
                           activeStep={activeStep}
+                          readOnly={_readOnly}
+                          stage={{
+                            label: "Primary Stages",
+                            actions: [
+                              {
+                                id: "add-process",
+                                text: "Add process",
+                                visual: <PegaIcon name="gear-play" />,
+                                onClick: (data: any) => {
+                                  const stageKey = data?.id || data?.stage?.id;
+                                  const stage = stages.find(
+                                    (s) =>
+                                      String(s.id) === String(stageKey) ||
+                                      s.name === stageKey,
+                                  );
+                                  if (stage) {
+                                    setProcessModal({
+                                      stageId: stage.id,
+                                      isOpen: true,
+                                    });
+                                  }
+                                },
+                              },
+                              {
+                                id: "edit-stage",
+                                text: "Rename stage",
+                                visual: <PegaIcon name="pencil" />,
+                                onClick: (data: any) => {
+                                  const stageKey = data?.id || data?.stage?.id;
+                                  const stage = stages.find(
+                                    (s) =>
+                                      String(s.id) === String(stageKey) ||
+                                      s.name === stageKey,
+                                  );
+                                  if (stage)
+                                    setStageEdit({
+                                      id: stage.id,
+                                      name: stage.name,
+                                    });
+                                },
+                              },
+                            ],
+                            onClick: (data: any) => {
+                              const stageKey = data?.id || data?.stage?.id;
+                              const stage = stages.find(
+                                (s) =>
+                                  String(s.id) === String(stageKey) ||
+                                  s.name === stageKey,
+                              );
+                              if (stage)
+                                setStageEdit({
+                                  id: stage.id,
+                                  name: stage.name,
+                                });
+                            },
+                          }}
+                          task={[
+                            {
+                              actions: [
+                                {
+                                  id: "add-step",
+                                  text: "Add step",
+                                  visual: <PegaIcon name="plus" />,
+                                  onClick: (data: any) => {
+                                    console.log(
+                                      "[LifeCycle] add-step action",
+                                      data,
+                                    );
+                                    const stageKey =
+                                      data?.category?.id ||
+                                      data?.categoryId ||
+                                      data?.category?.name ||
+                                      data?.stage?.id;
+                                    const processKey =
+                                      data?.task?.id || data?.id || data?.name;
+                                    const stage = stages.find(
+                                      (s) =>
+                                        String(s.id) === String(stageKey) ||
+                                        s.name === stageKey,
+                                    );
+                                    const process = stage?.processes.find(
+                                      (p) =>
+                                        String(p.id) === String(processKey) ||
+                                        p.name === processKey,
+                                    );
+                                    if (stage && process) {
+                                      console.log(
+                                        "[LifeCycle] opening AddStepModal",
+                                        {
+                                          stageId: stage.id,
+                                          processId: process.id,
+                                        },
+                                      );
+                                      setAddStepModal({
+                                        stageId: stage.id,
+                                        processId: process.id,
+                                        isOpen: true,
+                                      });
+                                    }
+                                  },
+                                },
+                                {
+                                  id: "edit-process",
+                                  text: "Rename process",
+                                  visual: <PegaIcon name="pencil" />,
+                                  onClick: (data: any) => {
+                                    console.log(
+                                      "[LifeCycle] edit-process action",
+                                      data,
+                                    );
+                                    const stageKey =
+                                      data?.category?.id ||
+                                      data?.categoryId ||
+                                      data?.category?.name ||
+                                      data?.stage?.id;
+                                    const processKey =
+                                      data?.task?.id || data?.id || data?.name;
+                                    const stage = stages.find(
+                                      (s) =>
+                                        String(s.id) === String(stageKey) ||
+                                        s.name === stageKey,
+                                    );
+                                    const process = stage?.processes.find(
+                                      (p) =>
+                                        String(p.id) === String(processKey) ||
+                                        p.name === processKey,
+                                    );
+                                    if (stage && process) {
+                                      setProcessEdit({
+                                        stageId: stage.id,
+                                        id: process.id,
+                                        name: process.name,
+                                      });
+                                    }
+                                  },
+                                },
+                                {
+                                  id: "delete-process",
+                                  text: "Delete process",
+                                  visual: <PegaIcon name="trash" />,
+                                  onClick: (data: any) => {
+                                    console.log(
+                                      "[LifeCycle] delete-process action",
+                                      data,
+                                    );
+                                    const stageKey =
+                                      data?.category?.id ||
+                                      data?.categoryId ||
+                                      data?.category?.name ||
+                                      data?.stage?.id;
+                                    const processKey =
+                                      data?.task?.id || data?.id || data?.name;
+                                    const stage = stages.find(
+                                      (s) =>
+                                        String(s.id) === String(stageKey) ||
+                                        s.name === stageKey,
+                                    );
+                                    const process = stage?.processes.find(
+                                      (p) =>
+                                        String(p.id) === String(processKey) ||
+                                        p.name === processKey,
+                                    );
+                                    if (stage && process && onDeleteProcess) {
+                                      onDeleteProcess(stage.id, process.id);
+                                    }
+                                  },
+                                },
+                              ],
+                              onClick: (data: any) => {
+                                console.log(
+                                  "[LifeCycle] process onClick",
+                                  data,
+                                );
+                                const stageKey =
+                                  data?.category?.id ||
+                                  data?.categoryId ||
+                                  data?.category?.name ||
+                                  data?.stage?.id;
+                                const processKey =
+                                  data?.task?.id || data?.id || data?.name;
+                                const stage = stages.find(
+                                  (s) =>
+                                    String(s.id) === String(stageKey) ||
+                                    s.name === stageKey,
+                                );
+                                const process = stage?.processes.find(
+                                  (p) =>
+                                    String(p.id) === String(processKey) ||
+                                    p.name === processKey,
+                                );
+                                if (stage && process) {
+                                  setProcessEdit({
+                                    stageId: stage.id,
+                                    id: process.id,
+                                    name: process.name,
+                                  });
+                                }
+                              },
+                            },
+                          ]}
                           step={[
                             {
                               wrap: true,
@@ -475,6 +733,34 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
                                   onClick: handleEditStep,
                                 },
                                 {
+                                  id: "rename",
+                                  text: "Rename step",
+                                  visual: <PegaIcon name="pencil" />,
+                                  onClick: (data: any) => {
+                                    for (const stage of stages) {
+                                      for (const process of stage.processes) {
+                                        const stepKey =
+                                          data?.step?.id || data?.id;
+                                        const step = process.steps.find(
+                                          (s) =>
+                                            String(s.id) === String(stepKey) ||
+                                            s.name === stepKey,
+                                        );
+                                        if (step) {
+                                          setStepEdit({
+                                            stageId: stage.id,
+                                            processId: process.id,
+                                            id: step.id,
+                                            name: step.name,
+                                            stepType: step.type as StepType,
+                                          });
+                                          return;
+                                        }
+                                      }
+                                    }
+                                  },
+                                },
+                                {
                                   id: "delete",
                                   text: "Delete",
                                   visual: <PegaIcon name="trash" />,
@@ -484,14 +770,18 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
                               onClick: (stepData: any) => {
                                 for (const stage of stages) {
                                   for (const process of stage.processes) {
+                                    const stepKey =
+                                      stepData?.step?.id || stepData?.id;
                                     const step = process.steps.find(
-                                      (s) => s.name === stepData.id,
+                                      (s) =>
+                                        String(s.id) === String(stepKey) ||
+                                        s.name === stepKey,
                                     );
                                     if (step) {
                                       onStepSelect(
-                                        stage.name,
-                                        process.name,
-                                        step.name,
+                                        String(stage.id),
+                                        String(process.id),
+                                        String(step.id),
                                       );
                                       return;
                                     }
@@ -529,6 +819,8 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
     handleEditStep,
     handleDeleteStep,
     views,
+    _readOnly,
+    onDeleteProcess,
   ]);
 
   return (
@@ -681,6 +973,142 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
               />
             );
           })()}
+      </ModalPortal>
+
+      {/* Edit Stage Modal */}
+      <ModalPortal isOpen={!!stageEdit}>
+        {stageEdit && (
+          <EditModal
+            isOpen={!!stageEdit}
+            onClose={() => setStageEdit(null)}
+            type="stage"
+            name={stageEdit.name}
+            onSubmit={(data: { name: string }) => {
+              if (!onStepsUpdate) return;
+              const updatedStages = stages.map((s) =>
+                s.id === stageEdit.id ? { ...s, name: data.name } : s,
+              );
+              onStepsUpdate(updatedStages);
+            }}
+          />
+        )}
+      </ModalPortal>
+
+      {/* Add Process Modal */}
+      <ModalPortal isOpen={processModal.isOpen}>
+        {processModal.isOpen && processModal.stageId !== null && (
+          <AddProcessModal
+            isOpen={processModal.isOpen}
+            onClose={() => setProcessModal({ stageId: null, isOpen: false })}
+            onAddProcess={({ name }) => {
+              if (onAddProcess && processModal.stageId !== null) {
+                onAddProcess(processModal.stageId, name);
+              }
+              setProcessModal({ stageId: null, isOpen: false });
+            }}
+          />
+        )}
+      </ModalPortal>
+
+      {/* Edit Process Modal */}
+      <ModalPortal isOpen={!!processEdit}>
+        {processEdit && (
+          <EditModal
+            isOpen={!!processEdit}
+            onClose={() => setProcessEdit(null)}
+            type="process"
+            name={processEdit.name}
+            onSubmit={(data: { name: string }) => {
+              if (!onStepsUpdate) return;
+              const updatedStages = stages.map((s) =>
+                s.id === processEdit.stageId
+                  ? {
+                      ...s,
+                      processes: s.processes.map((p) =>
+                        p.id === processEdit.id ? { ...p, name: data.name } : p,
+                      ),
+                    }
+                  : s,
+              );
+              onStepsUpdate(updatedStages);
+            }}
+          />
+        )}
+      </ModalPortal>
+
+      {/* Rename Step Modal */}
+      <ModalPortal isOpen={!!stepEdit}>
+        {stepEdit && (
+          <EditModal
+            isOpen={!!stepEdit}
+            onClose={() => setStepEdit(null)}
+            type="step"
+            name={stepEdit.name}
+            stepType={stepEdit.stepType}
+            onSubmit={(data: {
+              name: string;
+              type?: StepType;
+              fields?: never[];
+            }) => {
+              if (!onStepsUpdate) return;
+              const updatedStages = stages.map((s) =>
+                s.id === stepEdit.stageId
+                  ? {
+                      ...s,
+                      processes: s.processes.map((p) =>
+                        p.id === stepEdit.processId
+                          ? {
+                              ...p,
+                              steps: p.steps.map((st) =>
+                                st.id === stepEdit.id
+                                  ? {
+                                      ...st,
+                                      name: data.name,
+                                      type: (data.type || st.type) as StepType,
+                                      ...(data.fields ? { fields: [] } : {}),
+                                    }
+                                  : st,
+                              ),
+                            }
+                          : p,
+                      ),
+                    }
+                  : s,
+              );
+              onStepsUpdate(updatedStages);
+            }}
+          />
+        )}
+      </ModalPortal>
+
+      {/* Add Step Modal */}
+      <ModalPortal isOpen={addStepModal.isOpen}>
+        {addStepModal.isOpen &&
+          addStepModal.stageId !== null &&
+          addStepModal.processId !== null && (
+            <AddStepModal
+              isOpen={addStepModal.isOpen}
+              onClose={() =>
+                setAddStepModal({
+                  stageId: null,
+                  processId: null,
+                  isOpen: false,
+                })
+              }
+              onAddStep={(stageId, processId, stepName, stepType) => {
+                if (onAddStep) {
+                  onAddStep(stageId, processId, stepName, stepType);
+                }
+                setAddStepModal({
+                  stageId: null,
+                  processId: null,
+                  isOpen: false,
+                });
+              }}
+              stageId={addStepModal.stageId}
+              processId={addStepModal.processId}
+            />
+          )}
       </ModalPortal>
     </>
   );
