@@ -85,6 +85,7 @@ import AddStageModal from "../../components/AddStageModal";
 import AddProcessModal from "../../components/AddProcessModal";
 import EditWorkflowModal from "../../components/EditWorkflowModal";
 import ModalPortal from "../../components/ModalPortal";
+import { StepType } from "@/app/utils/stepTypes";
 
 // Add ToolResult type for tool result objects
 export type ToolResult = {
@@ -970,7 +971,7 @@ export default function WorkflowPage() {
                           Number(stageId),
                           Number(processId),
                           stepName,
-                          stepType,
+                          stepType as StepType,
                         )
                       }
                       onDeleteProcess={(stageId, processId) =>
