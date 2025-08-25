@@ -113,6 +113,19 @@ export function useFreeFormSelection({
     const selectors =
       "[data-fieldid], [data-viewid], [data-stageid], [data-processid], [data-stepid], [data-testid$=':stage:'], [data-testid$=':process:'], [data-testid$=':step:']";
 
+    // If any container explicitly opts-in to freeform selection (e.g. a modal
+    // with data-allow-freeform-select="true"), then we should restrict the
+    // selection to only elements inside those containers. This ensures that
+    // when a modal is open with a backdrop, background elements are NOT
+    // selectable by the quick action tool.
+    const allowContainers = roots.flatMap((r) =>
+      Array.from(
+        (r as Document | ShadowRoot).querySelectorAll(
+          '[data-allow-freeform-select="true"]',
+        ),
+      ),
+    );
+
     const nodes = roots
       .flatMap((r) =>
         Array.from(
@@ -120,11 +133,14 @@ export function useFreeFormSelection({
         ),
       )
       .filter((el) => {
-        // Allow selection if explicitly opted-in via attribute on any ancestor
-        const allowInModal = el.closest('[data-allow-freeform-select="true"]');
-        if (allowInModal) return true;
+        if (allowContainers.length > 0) {
+          // Only allow if the element is within one of the allowed containers
+          return allowContainers.some((container) => container.contains(el));
+        }
 
-        // Otherwise, exclude elements that are inside modal portals or modal overlays
+        // Otherwise (no explicit allowed containers), exclude elements that are
+        // inside modal portals or overlays so regular page content can be
+        // selected while ignoring modal internals.
         const modalPortal = el.closest('[data-modal-portal="true"]');
         const modalOverlay = el.closest(
           '.modal-overlay, [class*="z-40"], [class*="z-50"], [class*="z-60"]',
