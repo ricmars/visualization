@@ -111,6 +111,65 @@ interface WorkflowLifecycleViewProps {
   onDeleteProcess?: (stageId: number, processId: number) => void;
 }
 
+// Stable error boundary to avoid remounting the subtree on each render
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error("🚨 LifeCycle component error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "20px", backgroundColor: "lightcoral" }}>
+          <h3>LifeCycle Component Error</h3>
+          <p>Error: {this.state.error?.message}</p>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Stable provider composition to prevent duplicate style tags on re-renders
+const PegaProviders = React.memo(
+  ({
+    container,
+    children,
+  }: {
+    container: HTMLElement;
+    children: React.ReactNode;
+  }) => (
+    <StyleSheetManager target={container}>
+      <PegaConfiguration
+        disableDefaultFontLoading
+        styleSheetTarget={container}
+        portalTarget={container}
+      >
+        <PegaLiveLog maxLength={50}>
+          <PegaPopoverManager>
+            <PegaToaster dismissAfter={5000}>
+              <PegaModalManager>{children as unknown as any}</PegaModalManager>
+            </PegaToaster>
+          </PegaPopoverManager>
+        </PegaLiveLog>
+      </PegaConfiguration>
+    </StyleSheetManager>
+  ),
+);
+
 const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
   stages,
   onStepSelect,
@@ -432,6 +491,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
           position: static;
           background: #FFF;
           justify-content: center;
+          margin:0;
         }
 
         /* Ensure inner content can extend horizontally */
@@ -467,336 +527,275 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
       shadowContainer.style.overflowY = "hidden";
       shadowContainer.style.width = "100%";
 
-      // Error boundary wrapper component
-      class ErrorBoundary extends React.Component<
-        { children: React.ReactNode },
-        { hasError: boolean; error?: Error }
-      > {
-        constructor(props: { children: React.ReactNode }) {
-          super(props);
-          this.state = { hasError: false };
-        }
-
-        static getDerivedStateFromError(error: Error) {
-          return { hasError: true, error };
-        }
-
-        componentDidCatch(error: Error, errorInfo: any) {
-          console.error("🚨 LifeCycle component error:", error, errorInfo);
-        }
-
-        render() {
-          if (this.state.hasError) {
-            return (
-              <div style={{ padding: "20px", backgroundColor: "lightcoral" }}>
-                <h3>LifeCycle Component Error</h3>
-                <p>Error: {this.state.error?.message}</p>
-                <p>Stages available: {mappedStages.length}</p>
-              </div>
-            );
-          }
-
-          return this.props.children;
-        }
-      }
-
       let content = null;
       if (shadowRootRef.current) {
         // Render content
         content = (
           <ErrorBoundary>
-            <StyleSheetManager target={shadowContainer}>
-              <PegaConfiguration
-                disableDefaultFontLoading
-                styleSheetTarget={shadowContainer}
-                portalTarget={shadowContainer}
-              >
-                <PegaLiveLog maxLength={50}>
-                  <PegaPopoverManager>
-                    <PegaToaster dismissAfter={5000}>
-                      <PegaModalManager>
-                        <PegaLifeCycle
-                          items={mappedStages}
-                          stages={stages}
-                          onStepSelect={onStepSelect}
-                          activeStage={activeStage}
-                          activeProcess={activeProcess}
-                          activeStep={activeStep}
-                          readOnly={_readOnly}
-                          stage={{
-                            label: "Primary Stages",
-                            actions: [
-                              {
-                                id: "add-process",
-                                text: "Add process",
-                                visual: <PegaIcon name="gear-play" />,
-                                onClick: (data: any) => {
-                                  const stageKey = data?.id || data?.stage?.id;
-                                  const stage = stages.find(
-                                    (s) =>
-                                      String(s.id) === String(stageKey) ||
-                                      s.name === stageKey,
-                                  );
-                                  if (stage) {
-                                    setProcessModal({
-                                      stageId: stage.id,
-                                      isOpen: true,
-                                    });
-                                  }
-                                },
-                              },
-                              {
-                                id: "edit-stage",
-                                text: "Rename stage",
-                                visual: <PegaIcon name="pencil" />,
-                                onClick: (data: any) => {
-                                  const stageKey = data?.id || data?.stage?.id;
-                                  const stage = stages.find(
-                                    (s) =>
-                                      String(s.id) === String(stageKey) ||
-                                      s.name === stageKey,
-                                  );
-                                  if (stage)
-                                    setStageEdit({
-                                      id: stage.id,
-                                      name: stage.name,
-                                    });
-                                },
-                              },
-                            ],
-                            onClick: (data: any) => {
-                              const stageKey = data?.id || data?.stage?.id;
-                              const stage = stages.find(
+            <PegaProviders container={shadowContainer}>
+              <PegaLifeCycle
+                items={mappedStages}
+                stages={stages}
+                onStepSelect={onStepSelect}
+                activeStage={activeStage}
+                activeProcess={activeProcess}
+                activeStep={activeStep}
+                readOnly={_readOnly}
+                stage={{
+                  label: "Primary Stages",
+                  actions: [
+                    {
+                      id: "add-process",
+                      text: "Add process",
+                      visual: <PegaIcon name="gear-play" />,
+                      onClick: (data: any) => {
+                        const stageKey = data?.id || data?.stage?.id;
+                        const stage = stages.find(
+                          (s) =>
+                            String(s.id) === String(stageKey) ||
+                            s.name === stageKey,
+                        );
+                        if (stage) {
+                          setProcessModal({
+                            stageId: stage.id,
+                            isOpen: true,
+                          });
+                        }
+                      },
+                    },
+                    {
+                      id: "edit-stage",
+                      text: "Rename stage",
+                      visual: <PegaIcon name="pencil" />,
+                      onClick: (data: any) => {
+                        const stageKey = data?.id || data?.stage?.id;
+                        const stage = stages.find(
+                          (s) =>
+                            String(s.id) === String(stageKey) ||
+                            s.name === stageKey,
+                        );
+                        if (stage)
+                          setStageEdit({
+                            id: stage.id,
+                            name: stage.name,
+                          });
+                      },
+                    },
+                  ],
+                  onClick: (data: any) => {
+                    const stageKey = data?.id || data?.stage?.id;
+                    const stage = stages.find(
+                      (s) =>
+                        String(s.id) === String(stageKey) ||
+                        s.name === stageKey,
+                    );
+                    if (stage)
+                      setStageEdit({
+                        id: stage.id,
+                        name: stage.name,
+                      });
+                  },
+                }}
+                task={[
+                  {
+                    actions: [
+                      {
+                        id: "add-step",
+                        text: "Add step",
+                        visual: <PegaIcon name="plus" />,
+                        onClick: (data: any) => {
+                          console.log("[LifeCycle] add-step action", data);
+                          const stageKey =
+                            data?.category?.id ||
+                            data?.categoryId ||
+                            data?.category?.name ||
+                            data?.stage?.id;
+                          const processKey =
+                            data?.task?.id || data?.id || data?.name;
+                          const stage = stages.find(
+                            (s) =>
+                              String(s.id) === String(stageKey) ||
+                              s.name === stageKey,
+                          );
+                          const process = stage?.processes.find(
+                            (p) =>
+                              String(p.id) === String(processKey) ||
+                              p.name === processKey,
+                          );
+                          if (stage && process) {
+                            console.log("[LifeCycle] opening AddStepModal", {
+                              stageId: stage.id,
+                              processId: process.id,
+                            });
+                            setAddStepModal({
+                              stageId: stage.id,
+                              processId: process.id,
+                              isOpen: true,
+                            });
+                          }
+                        },
+                      },
+                      {
+                        id: "edit-process",
+                        text: "Rename process",
+                        visual: <PegaIcon name="pencil" />,
+                        onClick: (data: any) => {
+                          console.log("[LifeCycle] edit-process action", data);
+                          const stageKey =
+                            data?.category?.id ||
+                            data?.categoryId ||
+                            data?.category?.name ||
+                            data?.stage?.id;
+                          const processKey =
+                            data?.task?.id || data?.id || data?.name;
+                          const stage = stages.find(
+                            (s) =>
+                              String(s.id) === String(stageKey) ||
+                              s.name === stageKey,
+                          );
+                          const process = stage?.processes.find(
+                            (p) =>
+                              String(p.id) === String(processKey) ||
+                              p.name === processKey,
+                          );
+                          if (stage && process) {
+                            setProcessEdit({
+                              stageId: stage.id,
+                              id: process.id,
+                              name: process.name,
+                            });
+                          }
+                        },
+                      },
+                      {
+                        id: "delete-process",
+                        text: "Delete process",
+                        visual: <PegaIcon name="trash" />,
+                        onClick: (data: any) => {
+                          console.log(
+                            "[LifeCycle] delete-process action",
+                            data,
+                          );
+                          const stageKey =
+                            data?.category?.id ||
+                            data?.categoryId ||
+                            data?.category?.name ||
+                            data?.stage?.id;
+                          const processKey =
+                            data?.task?.id || data?.id || data?.name;
+                          const stage = stages.find(
+                            (s) =>
+                              String(s.id) === String(stageKey) ||
+                              s.name === stageKey,
+                          );
+                          const process = stage?.processes.find(
+                            (p) =>
+                              String(p.id) === String(processKey) ||
+                              p.name === processKey,
+                          );
+                          if (stage && process && onDeleteProcess) {
+                            onDeleteProcess(stage.id, process.id);
+                          }
+                        },
+                      },
+                    ],
+                    onClick: (data: any) => {
+                      console.log("[LifeCycle] process onClick", data);
+                      const stageKey =
+                        data?.category?.id ||
+                        data?.categoryId ||
+                        data?.category?.name ||
+                        data?.stage?.id;
+                      const processKey =
+                        data?.task?.id || data?.id || data?.name;
+                      const stage = stages.find(
+                        (s) =>
+                          String(s.id) === String(stageKey) ||
+                          s.name === stageKey,
+                      );
+                      const process = stage?.processes.find(
+                        (p) =>
+                          String(p.id) === String(processKey) ||
+                          p.name === processKey,
+                      );
+                      if (stage && process) {
+                        setProcessEdit({
+                          stageId: stage.id,
+                          id: process.id,
+                          name: process.name,
+                        });
+                      }
+                    },
+                  },
+                ]}
+                step={[
+                  {
+                    wrap: true,
+                    actions: [
+                      {
+                        id: "edit",
+                        text: "Edit",
+                        visual: <PegaIcon name="pencil" />,
+                        onClick: handleEditStep,
+                      },
+                      {
+                        id: "rename",
+                        text: "Rename step",
+                        visual: <PegaIcon name="pencil" />,
+                        onClick: (data: any) => {
+                          for (const stage of stages) {
+                            for (const process of stage.processes) {
+                              const stepKey = data?.step?.id || data?.id;
+                              const step = process.steps.find(
                                 (s) =>
-                                  String(s.id) === String(stageKey) ||
-                                  s.name === stageKey,
+                                  String(s.id) === String(stepKey) ||
+                                  s.name === stepKey,
                               );
-                              if (stage)
-                                setStageEdit({
-                                  id: stage.id,
-                                  name: stage.name,
+                              if (step) {
+                                setStepEdit({
+                                  stageId: stage.id,
+                                  processId: process.id,
+                                  id: step.id,
+                                  name: step.name,
+                                  stepType: step.type as StepType,
                                 });
-                            },
-                          }}
-                          task={[
-                            {
-                              actions: [
-                                {
-                                  id: "add-step",
-                                  text: "Add step",
-                                  visual: <PegaIcon name="plus" />,
-                                  onClick: (data: any) => {
-                                    console.log(
-                                      "[LifeCycle] add-step action",
-                                      data,
-                                    );
-                                    const stageKey =
-                                      data?.category?.id ||
-                                      data?.categoryId ||
-                                      data?.category?.name ||
-                                      data?.stage?.id;
-                                    const processKey =
-                                      data?.task?.id || data?.id || data?.name;
-                                    const stage = stages.find(
-                                      (s) =>
-                                        String(s.id) === String(stageKey) ||
-                                        s.name === stageKey,
-                                    );
-                                    const process = stage?.processes.find(
-                                      (p) =>
-                                        String(p.id) === String(processKey) ||
-                                        p.name === processKey,
-                                    );
-                                    if (stage && process) {
-                                      console.log(
-                                        "[LifeCycle] opening AddStepModal",
-                                        {
-                                          stageId: stage.id,
-                                          processId: process.id,
-                                        },
-                                      );
-                                      setAddStepModal({
-                                        stageId: stage.id,
-                                        processId: process.id,
-                                        isOpen: true,
-                                      });
-                                    }
-                                  },
-                                },
-                                {
-                                  id: "edit-process",
-                                  text: "Rename process",
-                                  visual: <PegaIcon name="pencil" />,
-                                  onClick: (data: any) => {
-                                    console.log(
-                                      "[LifeCycle] edit-process action",
-                                      data,
-                                    );
-                                    const stageKey =
-                                      data?.category?.id ||
-                                      data?.categoryId ||
-                                      data?.category?.name ||
-                                      data?.stage?.id;
-                                    const processKey =
-                                      data?.task?.id || data?.id || data?.name;
-                                    const stage = stages.find(
-                                      (s) =>
-                                        String(s.id) === String(stageKey) ||
-                                        s.name === stageKey,
-                                    );
-                                    const process = stage?.processes.find(
-                                      (p) =>
-                                        String(p.id) === String(processKey) ||
-                                        p.name === processKey,
-                                    );
-                                    if (stage && process) {
-                                      setProcessEdit({
-                                        stageId: stage.id,
-                                        id: process.id,
-                                        name: process.name,
-                                      });
-                                    }
-                                  },
-                                },
-                                {
-                                  id: "delete-process",
-                                  text: "Delete process",
-                                  visual: <PegaIcon name="trash" />,
-                                  onClick: (data: any) => {
-                                    console.log(
-                                      "[LifeCycle] delete-process action",
-                                      data,
-                                    );
-                                    const stageKey =
-                                      data?.category?.id ||
-                                      data?.categoryId ||
-                                      data?.category?.name ||
-                                      data?.stage?.id;
-                                    const processKey =
-                                      data?.task?.id || data?.id || data?.name;
-                                    const stage = stages.find(
-                                      (s) =>
-                                        String(s.id) === String(stageKey) ||
-                                        s.name === stageKey,
-                                    );
-                                    const process = stage?.processes.find(
-                                      (p) =>
-                                        String(p.id) === String(processKey) ||
-                                        p.name === processKey,
-                                    );
-                                    if (stage && process && onDeleteProcess) {
-                                      onDeleteProcess(stage.id, process.id);
-                                    }
-                                  },
-                                },
-                              ],
-                              onClick: (data: any) => {
-                                console.log(
-                                  "[LifeCycle] process onClick",
-                                  data,
-                                );
-                                const stageKey =
-                                  data?.category?.id ||
-                                  data?.categoryId ||
-                                  data?.category?.name ||
-                                  data?.stage?.id;
-                                const processKey =
-                                  data?.task?.id || data?.id || data?.name;
-                                const stage = stages.find(
-                                  (s) =>
-                                    String(s.id) === String(stageKey) ||
-                                    s.name === stageKey,
-                                );
-                                const process = stage?.processes.find(
-                                  (p) =>
-                                    String(p.id) === String(processKey) ||
-                                    p.name === processKey,
-                                );
-                                if (stage && process) {
-                                  setProcessEdit({
-                                    stageId: stage.id,
-                                    id: process.id,
-                                    name: process.name,
-                                  });
-                                }
-                              },
-                            },
-                          ]}
-                          step={[
-                            {
-                              wrap: true,
-                              actions: [
-                                {
-                                  id: "edit",
-                                  text: "Edit",
-                                  visual: <PegaIcon name="pencil" />,
-                                  onClick: handleEditStep,
-                                },
-                                {
-                                  id: "rename",
-                                  text: "Rename step",
-                                  visual: <PegaIcon name="pencil" />,
-                                  onClick: (data: any) => {
-                                    for (const stage of stages) {
-                                      for (const process of stage.processes) {
-                                        const stepKey =
-                                          data?.step?.id || data?.id;
-                                        const step = process.steps.find(
-                                          (s) =>
-                                            String(s.id) === String(stepKey) ||
-                                            s.name === stepKey,
-                                        );
-                                        if (step) {
-                                          setStepEdit({
-                                            stageId: stage.id,
-                                            processId: process.id,
-                                            id: step.id,
-                                            name: step.name,
-                                            stepType: step.type as StepType,
-                                          });
-                                          return;
-                                        }
-                                      }
-                                    }
-                                  },
-                                },
-                                {
-                                  id: "delete",
-                                  text: "Delete",
-                                  visual: <PegaIcon name="trash" />,
-                                  onClick: handleDeleteStep,
-                                },
-                              ],
-                              onClick: (stepData: any) => {
-                                for (const stage of stages) {
-                                  for (const process of stage.processes) {
-                                    const stepKey =
-                                      stepData?.step?.id || stepData?.id;
-                                    const step = process.steps.find(
-                                      (s) =>
-                                        String(s.id) === String(stepKey) ||
-                                        s.name === stepKey,
-                                    );
-                                    if (step) {
-                                      onStepSelect(
-                                        String(stage.id),
-                                        String(process.id),
-                                        String(step.id),
-                                      );
-                                      return;
-                                    }
-                                  }
-                                }
-                              },
-                            },
-                          ]}
-                        />
-                      </PegaModalManager>
-                    </PegaToaster>
-                  </PegaPopoverManager>
-                </PegaLiveLog>
-              </PegaConfiguration>
-            </StyleSheetManager>
+                                return;
+                              }
+                            }
+                          }
+                        },
+                      },
+                      {
+                        id: "delete",
+                        text: "Delete",
+                        visual: <PegaIcon name="trash" />,
+                        onClick: handleDeleteStep,
+                      },
+                    ],
+                    onClick: (stepData: any) => {
+                      for (const stage of stages) {
+                        for (const process of stage.processes) {
+                          const stepKey = stepData?.step?.id || stepData?.id;
+                          const step = process.steps.find(
+                            (s) =>
+                              String(s.id) === String(stepKey) ||
+                              s.name === stepKey,
+                          );
+                          if (step) {
+                            onStepSelect(
+                              String(stage.id),
+                              String(process.id),
+                              String(step.id),
+                            );
+                            return;
+                          }
+                        }
+                      }
+                    },
+                  },
+                ]}
+              />
+            </PegaProviders>
           </ErrorBoundary>
         );
       }

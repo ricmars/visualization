@@ -109,6 +109,11 @@ const StepConfigurationModal: React.FC<StepConfigurationModalProps> = ({
         ref={modalRef}
         role="dialog"
         data-allow-freeform-select="true"
+        data-viewid={
+          typeof (step as any)?.viewId === "number"
+            ? ((step as any).viewId as number)
+            : undefined
+        }
       >
         <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
