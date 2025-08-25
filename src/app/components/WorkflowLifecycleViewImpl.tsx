@@ -431,7 +431,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
         .shadow-container > div > div:first-child {
           position: static;
           background: #FFF;
-          justify-content: flex-start;
+          justify-content: center;
         }
 
         /* Ensure inner content can extend horizontally */
