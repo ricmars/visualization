@@ -26,6 +26,11 @@ Tool choice rules (critical):
 - Structural workflow model (create new, or add/remove stages/processes/steps, or finalize) → saveCase only.
 Do not call saveCase for simple edits.
 
+Selection-based edits (from UI context):
+- When the Context provides selected viewIds and fieldIds and the instruction is to add or remove those fields from that view, call saveView directly using the given IDs.
+- Prefer not to call list/get tools if the intent is simply adding/removing the selected fields; preserve the existing layout if unknown.
+- For removals: set model.fields to the current view fields excluding the provided fieldIds. If the current composition is unknown and the intent is "remove these", it is acceptable to set model.fields to [] only when the user intends to clear all fields.
+
 New workflow scaffolding (applies when Context says mode=NEW):
 - Always create a complete starter workflow, not just fields with at least 4 stages, each with 1–3 steps; use a mix of step types. Any "Collect information" step must set viewId to one of the created views. Use integer IDs and consistent ordering for stages/processes/steps.
 - Required sequence:

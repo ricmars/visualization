@@ -20,12 +20,26 @@ type UseFreeFormSelectionArgs = {
   activeTab: "workflow" | "fields" | "views" | "chat" | "history";
   selectedView: string | null;
   onOpenQuickChat: () => void;
+  resolveExternalFieldIds?: (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<number[]>;
+  resolveExternalIds?: (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<{ fieldIds: number[]; viewIds: number[] }>;
 };
 
 export function useFreeFormSelection({
   activeTab,
   selectedView,
   onOpenQuickChat,
+  resolveExternalFieldIds,
+  resolveExternalIds,
 }: UseFreeFormSelectionArgs) {
   const [isFreeFormSelecting, setIsFreeFormSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<Point>(null);
@@ -83,7 +97,7 @@ export function useFreeFormSelection({
     );
   };
 
-  const onSelectionMouseUp = useCallback(() => {
+  const onSelectionMouseUp = useCallback(async () => {
     if (!selectionRect) {
       setIsFreeFormSelecting(false);
       return;
@@ -215,6 +229,38 @@ export function useFreeFormSelection({
         maxY = Math.max(maxY, r.y + r.height);
       }
     });
+    // If an external resolver is provided (e.g., live preview iframe), query it too
+    if (typeof resolveExternalIds === "function") {
+      try {
+        const ext = await resolveExternalIds({
+          x: selectionRect.x,
+          y: selectionRect.y,
+          width: selectionRect.width,
+          height: selectionRect.height,
+        });
+        const extFieldIds = Array.isArray(ext?.fieldIds) ? ext.fieldIds : [];
+        const extViewIds = Array.isArray(ext?.viewIds) ? ext.viewIds : [];
+        for (const fid of extFieldIds) {
+          if (Number.isFinite(fid)) pickedFieldIds.add(fid as number);
+        }
+        for (const vid of extViewIds) {
+          if (Number.isFinite(vid)) pickedViewIds.add(vid as number);
+        }
+      } catch {}
+    } else if (typeof resolveExternalFieldIds === "function") {
+      // Backward-compat: older API that only returns field IDs
+      try {
+        const extIds = await resolveExternalFieldIds({
+          x: selectionRect.x,
+          y: selectionRect.y,
+          width: selectionRect.width,
+          height: selectionRect.height,
+        });
+        for (const fid of Array.isArray(extIds) ? extIds : []) {
+          if (Number.isFinite(fid)) pickedFieldIds.add(fid as number);
+        }
+      } catch {}
+    }
     const ids = Array.from(pickedFieldIds.values());
     const vIds = Array.from(pickedViewIds.values());
     const stIds = Array.from(pickedStageIds.values());
@@ -273,7 +319,14 @@ export function useFreeFormSelection({
     setSelectionStart(null);
     setSelectionRect(null);
     onOpenQuickChat();
-  }, [activeTab, selectedView, selectionRect, onOpenQuickChat]);
+  }, [
+    activeTab,
+    selectedView,
+    selectionRect,
+    onOpenQuickChat,
+    resolveExternalFieldIds,
+    resolveExternalIds,
+  ]);
 
   return {
     isFreeFormSelecting,

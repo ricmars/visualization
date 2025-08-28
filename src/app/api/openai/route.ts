@@ -576,29 +576,15 @@ Bulk operations policy:
                 awaitingPostCheckConfirmation,
                 nudgedToUseTools,
               });
-              const hasCompletedMarker =
-                typeof fullContent === "string" &&
-                fullContent.includes("[[COMPLETED]]");
-
               // If we were expecting a short confirmation after a post-condition check,
-              // treat this as the final answer and stop without nudging.
+              // treat ANY non-tool response as final and stop without nudging.
               if (awaitingPostCheckConfirmation) {
-                if (hasCompletedMarker) {
-                  if (fullContent && !didStreamContent) {
-                    await processor.sendText(fullContent);
-                  }
-                  awaitingPostCheckConfirmation = false;
-                  done = true;
-                  break;
+                if (fullContent && !didStreamContent) {
+                  await processor.sendText(fullContent);
                 }
-                // Not completed: nudge again to continue with tools, avoid summaries
-                messages.push({
-                  role: "user" as const,
-                  content:
-                    "Continue using the available tools to complete the requested changes. Avoid summaries; call tools directly. Output the exact two-line confirmation only when fully done.",
-                });
-                nudgedToUseTools = true;
-                continue;
+                awaitingPostCheckConfirmation = false;
+                done = true;
+                break;
               }
               if (!nudgedToUseTools) {
                 messages.push({
@@ -993,7 +979,60 @@ Bulk operations policy:
                 mutatingTools.includes(tc.function.name || ""),
               );
 
-              if (anyMutations) {
+              // Optimization: if the only mutation in this iteration is a single saveView,
+              // finalize immediately without entering a post-check confirmation turn.
+              const onlyOneSaveView =
+                toolCalls.filter((tc) => tc.function.name === "saveView")
+                  .length === 1 &&
+                toolCalls.every((tc) => tc.function.name === "saveView");
+
+              // Heuristic: detect selection-based view-only edit from the user's prompt
+              // We consider it view-only when the prompt contains selected viewIds and fieldIds,
+              // with no selected stages/processes/steps, and the instruction indicates add/remove
+              // without mentioning stages/processes/steps.
+              const extractIds = (label: string): number[] => {
+                try {
+                  const re = new RegExp(`Selected ${label}=\\\[([^\\\]]*)\\\]`);
+                  const m = (enhancedPrompt || "").match(re);
+                  if (!m) return [];
+                  const json = `[${m[1]}]`;
+                  const arr = JSON.parse(json);
+                  return Array.isArray(arr)
+                    ? arr.filter((n: any) => Number.isFinite(n))
+                    : [];
+                } catch {
+                  return [];
+                }
+              };
+              const selectedViewIdsFromPrompt = extractIds("viewIds");
+              const selectedFieldIdsFromPrompt = extractIds("fieldIds");
+              const selectedStageIdsFromPrompt = extractIds("stageIds");
+              const selectedProcessIdsFromPrompt = extractIds("processIds");
+              const selectedStepIdsFromPrompt = extractIds("stepIds");
+              const instructionLine = (() => {
+                const m = (enhancedPrompt || "").match(
+                  /Instruction:\s*([^\n]+)/i,
+                );
+                return (m && m[1]) || "";
+              })();
+              const mentionsStageLike =
+                /\b(stage|process|step|workflow)\b/i.test(instructionLine);
+              const mentionsViewChangeVerb =
+                /\b(add|remove|include|exclude|delete)\b/i.test(
+                  instructionLine,
+                );
+              const isSelectionViewOnlyIntent =
+                selectedViewIdsFromPrompt.length > 0 &&
+                selectedFieldIdsFromPrompt.length > 0 &&
+                selectedStageIdsFromPrompt.length === 0 &&
+                selectedProcessIdsFromPrompt.length === 0 &&
+                selectedStepIdsFromPrompt.length === 0 &&
+                mentionsViewChangeVerb &&
+                !mentionsStageLike;
+              const shouldFinalizeAfterSingleSaveView =
+                onlyOneSaveView && isSelectionViewOnlyIntent;
+
+              if (anyMutations && !shouldFinalizeAfterSingleSaveView) {
                 // Summarize last tool results for context
                 const lastToolResults = messages
                   .filter((m) => m.role === "tool")
@@ -1022,6 +1061,12 @@ Bulk operations policy:
                   expectingShortConfirmation: awaitingPostCheckConfirmation,
                 });
                 // Loop continues; next iteration will either call more tools or end with a short confirmation
+              }
+
+              // If we skipped post-check due to a single saveView, mark as done after emitting messages
+              if (shouldFinalizeAfterSingleSaveView) {
+                done = true;
+                // We deliberately avoid nudging or additional confirmations here
               }
 
               const loopDuration = Date.now() - loopStartTime;

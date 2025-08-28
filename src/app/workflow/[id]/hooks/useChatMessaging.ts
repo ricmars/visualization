@@ -239,6 +239,9 @@ export default function useChatMessaging({
                     );
 
                     if (shouldReloadWorkflow) {
+                      console.debug(
+                        "[chat] done=true; refreshing workflow data before preview update",
+                      );
                       await refreshWorkflowDataAction();
                       setSelectedViewAction(null);
                       setActiveStageAction(undefined);

@@ -148,7 +148,25 @@ export function useWorkflowData(caseId: string) {
         setViews(viewsData.data);
       }
 
-      window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+      // Fire after state commits so listeners (iframe) receive the latest model
+      try {
+        console.debug(
+          "[data] refreshWorkflowData completed; dispatching model-updated via raf",
+        );
+      } catch {}
+      try {
+        requestAnimationFrame(() => {
+          try {
+            console.debug("[data] dispatch model-updated now");
+            window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+          } catch {}
+        });
+      } catch {
+        try {
+          console.debug("[data] dispatch model-updated (no raf)");
+          window.dispatchEvent(new CustomEvent(MODEL_UPDATED_EVENT));
+        } catch {}
+      }
     } catch (err) {
       console.error("Error refreshing workflow data:", err);
     }

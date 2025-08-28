@@ -66,25 +66,25 @@ export function composeQuickChatMessage({
     }
   }
 
-  const contextPrefix = `Context:\nSelected fieldIds=${JSON.stringify(
-    selectedFieldIds,
-  )}\nSelected fieldNames=${JSON.stringify(
-    fieldNames,
-  )}\nSelected viewIds=${JSON.stringify(
-    selectedViewIds,
-  )}\nSelected viewNames=${JSON.stringify(
-    viewNames,
-  )}\nSelected stageIds=${JSON.stringify(
-    selectedStageIds,
-  )}\nSelected stageNames=${JSON.stringify(
-    stageNames,
-  )}\nSelected processIds=${JSON.stringify(
-    processMap.ids,
-  )}\nSelected processNames=${JSON.stringify(
-    processMap.names,
-  )}\nSelected stepIds=${JSON.stringify(
-    stepMap.ids,
-  )}\nSelected stepNames=${JSON.stringify(stepMap.names)}\n`;
+  const contextLines: string[] = ["Context:"];
+  const addIfNonEmpty = (label: string, arr: unknown[]) => {
+    if (Array.isArray(arr) && arr.length > 0) {
+      contextLines.push(`${label}=${JSON.stringify(arr)}`);
+    }
+  };
+
+  addIfNonEmpty("Selected fieldIds", selectedFieldIds);
+  addIfNonEmpty("Selected fieldNames", fieldNames);
+  addIfNonEmpty("Selected viewIds", selectedViewIds);
+  addIfNonEmpty("Selected viewNames", viewNames);
+  addIfNonEmpty("Selected stageIds", selectedStageIds);
+  addIfNonEmpty("Selected stageNames", stageNames);
+  addIfNonEmpty("Selected processIds", processMap.ids);
+  addIfNonEmpty("Selected processNames", processMap.names);
+  addIfNonEmpty("Selected stepIds", stepMap.ids);
+  addIfNonEmpty("Selected stepNames", stepMap.names);
+
+  const contextPrefix = contextLines.join("\n");
 
   const composedMessage = `${contextPrefix}\nInstruction: ${quickChatText.trim()}`;
   return composedMessage;

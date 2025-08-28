@@ -1,6 +1,62 @@
 import { FieldWithType } from "../page";
 
 export default function processToolResponse(text: string): string {
+  // First, detect and prettify tool call blocks for display:
+  // Convert occurrences of
+  //   TOOL: <name> PARAMS: { ... }
+  // (including when wrapped in ```tool_code fences) into:
+  //   Tool: <name>\n```json\n<pretty json>\n```
+  try {
+    // Handle fenced code variant first
+    const fencedPattern =
+      /```(?:tool_code)?\s*\n(TOOL:\s*\w+\s+PARAMS:\s*{[\s\S]*?})\s*\n```/g;
+    if (fencedPattern.test(text)) {
+      text = text.replace(fencedPattern, (_m, inner: string) => {
+        const m = inner.match(/TOOL:\s*(\w+)\s+PARAMS:\s*({[\s\S]*?})/);
+        if (!m) return inner;
+        const toolName = m[1];
+        const paramsStr = m[2];
+        try {
+          const parsed = JSON.parse(paramsStr);
+          const pretty = JSON.stringify(parsed, null, 2);
+          return `Tool: ${toolName}\n\n\
+\`\`\`json\n${pretty}\n\`\`\``;
+        } catch {
+          // If JSON is incomplete or invalid, just convert label casing
+          return inner
+            .replace(/^TOOL:/, "Tool:")
+            .replace(/\sPARAMS:/, " Params:");
+        }
+      });
+    }
+
+    // Handle inline/plain occurrences, potentially multiple in one string
+    // We replace iteratively to avoid overly-greedy matching across blocks
+    const plainPattern = /TOOL:\s*(\w+)\s+PARAMS:\s*({[\s\S]*?})/m;
+    let safetyCounter = 0;
+    while (plainPattern.test(text) && safetyCounter < 10) {
+      safetyCounter++;
+      text = text.replace(
+        plainPattern,
+        (match, toolName: string, paramsStr: string) => {
+          try {
+            const parsed = JSON.parse(paramsStr);
+            const pretty = JSON.stringify(parsed, null, 2);
+            return `Tool: ${toolName}\n\n\
+\`\`\`json\n${pretty}\n\`\`\``;
+          } catch {
+            // If JSON not parseable, keep original but adjust label casing
+            return match
+              .replace(/^TOOL:/, "Tool:")
+              .replace(/\sPARAMS:/, " Params:");
+          }
+        },
+      );
+    }
+  } catch {
+    // Non-fatal; fall through to existing behavior below
+  }
+
   try {
     const jsonData = JSON.parse(text);
     if (typeof jsonData === "object" && jsonData !== null) {

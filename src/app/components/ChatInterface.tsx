@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaUndo, FaCheck, FaClock, FaArrowUp, FaStop } from "react-icons/fa";
+import {
+  FaUndo,
+  FaCheck,
+  FaClock,
+  FaArrowUp,
+  FaStop,
+  FaMicrophone,
+} from "react-icons/fa";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -161,6 +168,26 @@ export default function ChatInterface({
   const [checkpointStatus, setCheckpointStatus] =
     useState<CheckpointStatus | null>(null);
   const [_isCheckpointLoading, setIsCheckpointLoading] = useState(false);
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [selectedLang, setSelectedLang] = useState<string>(
+    typeof navigator !== "undefined" && (navigator as any).language
+      ? (navigator as any).language
+      : "en-US",
+  );
+  const [recognition, setRecognition] = useState<any | null>(null);
+  const [disableRecord, setDisableRecord] = useState(false);
+  const [recordedValue, setRecordedValue] = useState<string>("");
+  const [audioOutputDevice, setAudioOutputDevice] =
+    useState<MediaDeviceInfo | null>(null);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<
+    MediaDeviceInfo[]
+  >([]);
+  const [preferredOutputDeviceId, setPreferredOutputDeviceId] = useState<
+    string | null
+  >(null);
+  const [hasVoiceConfig, setHasVoiceConfig] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,6 +211,145 @@ export default function ChatInterface({
   // Load checkpoint status on component mount
   useEffect(() => {
     fetchCheckpointStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load saved voice config on mount
+  useEffect(() => {
+    try {
+      const savedLang = localStorage.getItem("voice.lang");
+      if (savedLang) setSelectedLang(savedLang);
+      const savedDevId = localStorage.getItem("voice.audioOutputDeviceId");
+      if (savedDevId) setPreferredOutputDeviceId(savedDevId);
+      setHasVoiceConfig(localStorage.getItem("voice.configured") === "true");
+    } catch {}
+  }, []);
+
+  // Initialize webkitSpeechRecognition / SpeechRecognition
+  useEffect(() => {
+    const W: any = typeof window !== "undefined" ? window : {};
+    const SR = W.webkitSpeechRecognition || W.SpeechRecognition;
+    if (!SR) return;
+    const tmpRecognition = new SR();
+    tmpRecognition.interimResults = false;
+    tmpRecognition.continuous = false;
+    tmpRecognition.onresult = (event: any) => {
+      const lastIndex = event.results?.length ? event.results.length - 1 : 0;
+      const result = event.results?.[lastIndex]?.[0]?.transcript;
+      if (!result || String(result).trim() === "") return;
+      setRecordedValue(result);
+    };
+    tmpRecognition.onend = () => {
+      setDisableRecord(false);
+      setIsRecording(false);
+    };
+    tmpRecognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event?.error);
+      setDisableRecord(false);
+    };
+    tmpRecognition.onnomatch = () => {};
+    setRecognition(tmpRecognition);
+    return () => {
+      try {
+        tmpRecognition.stop();
+      } catch {}
+    };
+  }, []);
+
+  // When we have a recorded value, populate the textarea (do not auto-send)
+  useEffect(() => {
+    if (!recordedValue || recordedValue.trim() === "") return;
+    setMessage(recordedValue);
+  }, [recordedValue]);
+
+  const startRecording = () => {
+    if (!recognition) return;
+    try {
+      setDisableRecord(true);
+      setIsRecording(true);
+      recognition.lang = selectedLang;
+      recognition.start();
+    } catch (e) {
+      console.error("Failed to start recognition", e);
+      setDisableRecord(false);
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    try {
+      recognition?.stop();
+    } catch {}
+  };
+
+  const _openRecordModal = () => {
+    setIsRecordModalOpen(true);
+  };
+
+  const closeRecordModal = () => {
+    setIsRecordModalOpen(false);
+  };
+
+  const _handleChooseAudioOutput = async () => {
+    try {
+      const md: any = (navigator as any).mediaDevices;
+      if (!md || !md.selectAudioOutput) {
+        console.warn("selectAudioOutput() not supported in this browser.");
+        return;
+      }
+      const device: MediaDeviceInfo = await md.selectAudioOutput();
+      setAudioOutputDevice(device);
+      setPreferredOutputDeviceId(device.deviceId);
+      try {
+        localStorage.setItem("voice.audioOutputDeviceId", device.deviceId);
+      } catch {}
+      if (audioRef.current && (audioRef.current as any).setSinkId) {
+        try {
+          await (audioRef.current as any).setSinkId(device.deviceId);
+        } catch (err) {
+          console.warn("Failed to set sinkId on audio element", err);
+        }
+      }
+      await refreshOutputDevices();
+    } catch (err) {
+      console.error("Error selecting audio output:", err);
+    }
+  };
+
+  const refreshOutputDevices = async () => {
+    try {
+      if (!navigator?.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const outputs = devices.filter((d) => d.kind === "audiooutput");
+      setAudioOutputDevices(outputs);
+      if (audioOutputDevice) {
+        const stillExists = outputs.find(
+          (d) => d.deviceId === audioOutputDevice.deviceId,
+        );
+        if (!stillExists) setAudioOutputDevice(outputs[0] || null);
+      } else if (outputs.length > 0) {
+        setAudioOutputDevice(outputs[0]);
+      }
+    } catch (e) {
+      console.warn("Could not enumerate devices", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isRecordModalOpen) {
+      void refreshOutputDevices();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecordModalOpen]);
+
+  useEffect(() => {
+    const md = navigator?.mediaDevices;
+    if (!md) return;
+    const handler = () => void refreshOutputDevices();
+    md.addEventListener?.("devicechange", handler);
+    return () => {
+      md.removeEventListener?.("devicechange", handler);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -463,6 +629,37 @@ export default function ChatInterface({
               disabled={isLoading || isProcessing}
             />
           </div>
+          <button
+            onClick={() => {
+              if (!recognition) return;
+              // First time, open config modal
+              if (!hasVoiceConfig) {
+                setIsRecordModalOpen(true);
+                return;
+              }
+              // Toggle record/stop
+              if (isRecording) {
+                stopRecording();
+              } else {
+                startRecording();
+              }
+            }}
+            disabled={isLoading || isProcessing || !recognition}
+            className="flex items-center justify-center w-10 h-10 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 ease-in-out"
+            title={
+              recognition
+                ? isRecording
+                  ? "Stop recording"
+                  : "Start recording"
+                : "Speech recognition not supported"
+            }
+          >
+            {isRecording ? (
+              <FaStop className="w-4 h-4" />
+            ) : (
+              <FaMicrophone className="w-4 h-4" />
+            )}
+          </button>
           {isProcessing ? (
             <button
               onClick={() => onAbort?.()}
@@ -487,6 +684,127 @@ export default function ChatInterface({
           )}
         </div>
       </div>
+      {isRecordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={closeRecordModal}
+          ></div>
+          <div className="relative bg-white dark:bg-gray-900 rounded-lg shadow-lg w-full max-w-md mx-3 p-4 border border-gray-200 dark:border-gray-700">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+              Voice input
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">
+                  Language
+                </label>
+                <select
+                  className="w-full text-sm p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  value={selectedLang}
+                  onChange={(e) => setSelectedLang(e.target.value)}
+                >
+                  <option value="en-US">English (US)</option>
+                  <option value="en-GB">English (UK)</option>
+                  <option value="es-ES">Español (ES)</option>
+                  <option value="fr-FR">Français (FR)</option>
+                  <option value="de-DE">Deutsch (DE)</option>
+                  <option value="pt-BR">Português (BR)</option>
+                  <option value="it-IT">Italiano (IT)</option>
+                  <option value="ja-JP">日本語 (JP)</option>
+                  <option value="ko-KR">한국어 (KR)</option>
+                  <option value="zh-CN">中文 (简体)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 dark:text-gray-300 mb-1">
+                  Audio output device
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="flex-1 text-sm p-2 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    value={
+                      audioOutputDevice?.deviceId ||
+                      preferredOutputDeviceId ||
+                      ""
+                    }
+                    onChange={async (e) => {
+                      const selected = audioOutputDevices.find(
+                        (d) => d.deviceId === e.target.value,
+                      );
+                      setAudioOutputDevice(selected || null);
+                      setPreferredOutputDeviceId(selected?.deviceId || null);
+                      try {
+                        if (selected?.deviceId) {
+                          localStorage.setItem(
+                            "voice.audioOutputDeviceId",
+                            selected.deviceId,
+                          );
+                        }
+                      } catch {}
+                      if (
+                        selected &&
+                        audioRef.current &&
+                        (audioRef.current as any).setSinkId
+                      ) {
+                        try {
+                          await (audioRef.current as any).setSinkId(
+                            selected.deviceId,
+                          );
+                        } catch (err) {
+                          console.warn("Failed to set sinkId", err);
+                        }
+                      }
+                    }}
+                  >
+                    <option value="" disabled>
+                      {audioOutputDevices.length > 0
+                        ? "Choose device"
+                        : "No outputs found"}
+                    </option>
+                    {audioOutputDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || d.deviceId}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <audio ref={audioRef} className="hidden" />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={closeRecordModal}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.setItem("voice.lang", selectedLang);
+                    if (audioOutputDevice) {
+                      localStorage.setItem(
+                        "voice.audioOutputDeviceId",
+                        audioOutputDevice.deviceId,
+                      );
+                      setPreferredOutputDeviceId(audioOutputDevice.deviceId);
+                    }
+                    localStorage.setItem("voice.configured", "true");
+                  } catch {}
+                  setHasVoiceConfig(true);
+                  closeRecordModal();
+                  startRecording();
+                }}
+                disabled={disableRecord || !recognition}
+                className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {disableRecord ? "Recording…" : "Start Recording"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

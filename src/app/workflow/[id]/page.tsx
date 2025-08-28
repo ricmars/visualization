@@ -99,6 +99,23 @@ export type FieldWithType = {
   type: string;
 };
 
+// Field shape expected by live preview (distinct from app database Field)
+type PreviewField = {
+  ID?: string;
+  name: string;
+  label: string;
+  type: string;
+  refType?: string;
+  refName?: string;
+  source?: "" | "User input" | "System" | "Integration" | "Calculated";
+  highlighted?: boolean;
+  primary?: boolean;
+  fillAvailableSpace?: boolean;
+  value?: string | number | boolean | Array<string>;
+  displayValue?: string | Array<string>;
+  options?: string[];
+};
+
 // moved to ./utils/constants
 
 // DatabaseCase type provided by useWorkflowData
@@ -194,6 +211,10 @@ export default function WorkflowPage() {
     activeTab,
     selectedView,
     onOpenQuickChat: () => setIsQuickChatOpen(true),
+    resolveExternalIds: (rect) =>
+      isPreviewMode
+        ? requestSelectedIdsInRect(rect)
+        : Promise.resolve({ fieldIds: [], viewIds: [] }),
   });
   // Workflow model memo used across UI
   const workflowModel: WorkflowState = useMemo(() => {
@@ -239,7 +260,8 @@ export default function WorkflowPage() {
                       })
                       .filter((f: any) => f !== null);
                     tmpSteps.push({
-                      ...step,
+                      id: step.viewId,
+                      name: step.name,
                       fields: stepFields as Array<{
                         name: string;
                         required: boolean;
@@ -255,9 +277,14 @@ export default function WorkflowPage() {
             tmpSteps.push(step);
           }
         }
-        tmpStages.push({ ...stage, steps: tmpSteps });
+        // For live preview, omit processes and provide flattened steps directly under the stage
+        tmpStages.push({
+          id: stage.id,
+          name: stage.name,
+          steps: tmpSteps,
+        });
       }
-      const fieldsWithValues: Field[] = currentFields.map((f: any) => {
+      const fieldsWithValues: PreviewField[] = currentFields.map((f: any) => {
         const dv = f?.sampleValue;
         let value: any = undefined;
         if (dv !== undefined && dv !== null) {
@@ -271,7 +298,15 @@ export default function WorkflowPage() {
             value = dv;
           }
         }
-        return { ...f, value } as Field;
+        return {
+          ID: f?.id !== undefined && f?.id !== null ? String(f.id) : undefined,
+          name: f.name,
+          label: f.label,
+          type: f.type,
+          primary: f.primary,
+          options: f.options,
+          value,
+        } as PreviewField;
       });
 
       return {
@@ -300,10 +335,16 @@ export default function WorkflowPage() {
 
   // 3. All useRef hooks
   const addFieldButtonRef = useRef<HTMLButtonElement>(null);
-  const { containerRef: previewContainerRef } = usePreviewIframe({
-    isPreviewMode,
-    generateModel: () => generateModelData(fields, workflowModel.stages),
-  });
+  const generatePreviewModelAction = useCallback(
+    () => generateModelData(fields, workflowModel.stages),
+    [fields, workflowModel.stages, generateModelData],
+  );
+
+  const { containerRef: previewContainerRef, requestSelectedIdsInRect } =
+    usePreviewIframe({
+      isPreviewMode,
+      generateModelAction: generatePreviewModelAction,
+    });
 
   // replaced by useQuickChat
 
