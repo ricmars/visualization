@@ -38,6 +38,11 @@ export interface ChatMessage {
   sender: "user" | "assistant";
   timestamp: Date;
   isThinking?: boolean; // Add flag to indicate if the message is actively being updated
+  // Total time taken by the assistant to complete the response, in milliseconds
+  durationMs?: number;
+  // Approximate number of prompt tokens sent to the LLM for this response
+  tokenCount?: number;
+  tokenExact?: boolean;
 }
 
 interface CheckpointSession {
@@ -152,6 +157,31 @@ function shouldFilterContent(content: string): boolean {
   }
 
   return false;
+}
+
+// Format duration into a human-friendly string per requirements
+// - >= 60s: show minutes and seconds (e.g., 1m30s)
+// - 10s..59.999s: show seconds only (rounded to nearest second)
+// - 1s..9.999s: show seconds and milliseconds (e.g., 8s340ms)
+// - < 1s: show milliseconds only (e.g., 450ms)
+function formatDuration(durationMs: number): string {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "";
+  const totalMs = Math.round(durationMs);
+  const totalSeconds = Math.floor(totalMs / 1000);
+  const ms = totalMs % 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes >= 1) {
+    return `${minutes}m ${seconds}s`;
+  }
+  if (totalSeconds >= 10) {
+    return `${totalSeconds}s`;
+  }
+  if (totalSeconds >= 1) {
+    return `${totalSeconds}s ${ms}ms`;
+  }
+  return `${ms}ms`;
 }
 
 export default function ChatInterface({
@@ -599,6 +629,17 @@ export default function ChatInterface({
                 }`}
               >
                 {msg.timestamp.toLocaleTimeString()}
+                {!msg.isThinking && typeof msg.durationMs === "number" && (
+                  <span className="ml-2">
+                    • {formatDuration(msg.durationMs)}
+                  </span>
+                )}
+                {typeof msg.tokenCount === "number" && (
+                  <span className="ml-2">
+                    • {msg.tokenExact ? "" : "~"}
+                    {msg.tokenCount} tokens
+                  </span>
+                )}
                 {msg.isThinking && (
                   <span className="ml-2 flex items-center">
                     <span className="mr-1 text-blue-600 dark:text-blue-400">

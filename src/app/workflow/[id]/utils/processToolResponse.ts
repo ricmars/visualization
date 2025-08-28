@@ -19,7 +19,7 @@ export default function processToolResponse(text: string): string {
         try {
           const parsed = JSON.parse(paramsStr);
           const pretty = JSON.stringify(parsed, null, 2);
-          return `Tool: ${toolName}\n\n\
+          return `Tool: ${toolName}\n\nParams:\n\n\
 \`\`\`json\n${pretty}\n\`\`\``;
         } catch {
           // If JSON is incomplete or invalid, just convert label casing
@@ -42,7 +42,7 @@ export default function processToolResponse(text: string): string {
           try {
             const parsed = JSON.parse(paramsStr);
             const pretty = JSON.stringify(parsed, null, 2);
-            return `Tool: ${toolName}\n\n\
+            return `Tool: ${toolName}\n\nParams:\n\n\
 \`\`\`json\n${pretty}\n\`\`\``;
           } catch {
             // If JSON not parseable, keep original but adjust label casing

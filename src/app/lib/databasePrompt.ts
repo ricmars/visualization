@@ -26,6 +26,11 @@ Tool choice rules (critical):
 - Structural workflow model (create new, or add/remove stages/processes/steps, or finalize) → saveCase only.
 Do not call saveCase for simple edits.
 
+Field updates protocol (critical for speed and reliability):
+- When toggling flags (primary/required) or changing options/order/labels on existing fields, you MUST include for each field: id, name, type, caseid, label, and sampleValue. If any of these are missing from context, call listFields(caseid) ONCE to retrieve them, then perform a single saveFields call for all targets.
+- Avoid iterative retries that add one missing property at a time. Do the retrieval first, then batch all updates in one call.
+- Prefer large batches (25–50 fields per call) rather than many small calls.
+
 Selection-based edits (from UI context):
 - When the Context provides selected viewIds and fieldIds and the instruction is to add or remove those fields from that view, call saveView directly using the given IDs.
 - Prefer not to call list/get tools if the intent is simply adding/removing the selected fields; preserve the existing layout if unknown.

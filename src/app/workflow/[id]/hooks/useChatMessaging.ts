@@ -127,6 +127,44 @@ export default function useChatMessaging({
                 try {
                   const data = JSON.parse(line.slice(6));
 
+                  // Capture usage for this response (prefer total tokens when available)
+                  if (data.usage) {
+                    const usage = data.usage as {
+                      prompt_tokens?: number;
+                      completion_tokens?: number;
+                      total_tokens?: number;
+                      prompt_tokens_approx?: number;
+                    };
+                    let tokenCount: number | undefined = undefined;
+                    let tokenExact = false;
+                    // 1) Exact total from API if present
+                    if (typeof usage.total_tokens === "number") {
+                      tokenCount = usage.total_tokens;
+                      tokenExact = true;
+                    } else if (
+                      typeof usage.prompt_tokens === "number" &&
+                      typeof usage.completion_tokens === "number"
+                    ) {
+                      // 2) Derive total from exact prompt + completion
+                      tokenCount =
+                        usage.prompt_tokens + usage.completion_tokens;
+                      tokenExact = true;
+                    } else if (typeof usage.prompt_tokens_approx === "number") {
+                      // 3) Fallback to approximate (prompt only)
+                      tokenCount = usage.prompt_tokens_approx;
+                      tokenExact = false;
+                    }
+                    if (typeof tokenCount === "number") {
+                      setMessagesAction((prev) =>
+                        prev.map((msg) =>
+                          msg.id === aiMessageId
+                            ? { ...msg, tokenCount, tokenExact }
+                            : msg,
+                        ),
+                      );
+                    }
+                  }
+
                   if (data.text) {
                     // Filter noisy tool outputs
                     const lowerText = String(data.text).toLowerCase();
@@ -229,11 +267,17 @@ export default function useChatMessaging({
                   }
 
                   if (data.done) {
-                    // Clear thinking indicator
+                    // Clear thinking indicator and set total duration
+                    const completedAt = Date.now();
                     setMessagesAction((prev) =>
                       prev.map((msg) =>
                         msg.id === aiMessageId
-                          ? { ...msg, isThinking: false }
+                          ? {
+                              ...msg,
+                              isThinking: false,
+                              durationMs:
+                                completedAt - new Date(msg.timestamp).getTime(),
+                            }
                           : msg,
                       ),
                     );

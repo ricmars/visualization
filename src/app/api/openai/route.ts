@@ -440,6 +440,18 @@ Bulk operations policy:
             console.log(
               `Message count: ${messageCount}, Approximate tokens: ${approximateTokens}`,
             );
+            // Stream approximate prompt token usage to client (for UI display)
+            try {
+              await writer.write(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    usage: { prompt_tokens_approx: approximateTokens },
+                  })}\n\n`,
+                ),
+              );
+            } catch (e) {
+              // Ignore write errors (likely client aborted)
+            }
             // console.log("messages XXXX:", messages);
 
             const completionPromise = openai.chat.completions.create(
@@ -448,6 +460,7 @@ Bulk operations policy:
                 messages,
                 max_completion_tokens: 6000, // Reduced for faster generation
                 stream: true, // Enable streaming for faster responses
+                stream_options: { include_usage: true },
                 tools: openaiToolSchemas,
               } as any,
               (abortSignal ? { signal: abortSignal } : undefined) as any,
@@ -473,6 +486,13 @@ Bulk operations policy:
             // Track whether we've already sent any streamed text to the client
             let didStreamContent = false;
 
+            // Track exact token usage if provided by the API in the final chunk
+            let exactUsage: {
+              prompt_tokens?: number;
+              completion_tokens?: number;
+              total_tokens?: number;
+            } | null = null;
+
             try {
               for await (const chunk of completion as any) {
                 if (abortSignal?.aborted) {
@@ -480,6 +500,24 @@ Bulk operations policy:
                   break;
                 }
                 const choice = (chunk as any).choices[0];
+                // Capture exact usage if present (typically on the final chunk)
+                if ((chunk as any)?.usage) {
+                  const u = (chunk as any).usage;
+                  exactUsage = {
+                    prompt_tokens:
+                      typeof u.prompt_tokens === "number"
+                        ? u.prompt_tokens
+                        : undefined,
+                    completion_tokens:
+                      typeof u.completion_tokens === "number"
+                        ? u.completion_tokens
+                        : undefined,
+                    total_tokens:
+                      typeof u.total_tokens === "number"
+                        ? u.total_tokens
+                        : undefined,
+                  };
+                }
                 if (choice?.delta?.content) {
                   const contentChunk = choice.delta.content;
                   fullContent += contentChunk;
@@ -552,6 +590,20 @@ Bulk operations policy:
             if (accumulatedStreamText.trim()) {
               await processor.sendText(accumulatedStreamText);
               didStreamContent = true;
+            }
+
+            // Emit exact usage to client if available
+            if (
+              exactUsage &&
+              (exactUsage.prompt_tokens || exactUsage.total_tokens)
+            ) {
+              try {
+                await writer.write(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ usage: exactUsage })}\n\n`,
+                  ),
+                );
+              } catch {}
             }
 
             const streamingDuration = Date.now() - streamingStartTime;

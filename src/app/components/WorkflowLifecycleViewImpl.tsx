@@ -490,7 +490,7 @@ const WorkflowLifecycleViewImpl: React.FC<WorkflowLifecycleViewProps> = ({
         .shadow-container > div > div:first-child {
           position: static;
           background: #FFF;
-          justify-content: center;
+          padding; 0;
           margin:0;
         }
 

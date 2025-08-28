@@ -387,7 +387,7 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
     {
       name: "saveFields",
       description:
-        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (sampleValue, primary, required, label, order, options, type). For bulk updates, strongly prefer batching 25–50 fields per call (this tool can handle large arrays). Do NOT call saveView or saveCase after field-only changes. Views define layout and membership; saveCase updates the workflow structure (stages/processes/steps).",
+        "Creates or updates one or more fields for a case. Use this tool for ALL field-level changes (sampleValue, primary, required, label, order, options, type). PERFORMANCE: Batch changes in a single call whenever possible (25–50 fields per call is ideal). REQUIRED PER FIELD: name, type, caseid, label, sampleValue. If you only need to toggle boolean flags like primary/required, you STILL MUST provide type, label, and sampleValue for each field (fetch them once via listFields if not in context). NEVER call saveView or saveCase after field-only changes; those are unrelated. Views define layout/membership; saveCase updates workflow structure (stages/processes/steps).",
       parameters: {
         type: "object",
         properties: {
@@ -406,15 +406,16 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                   type: "string",
                   enum: [...fieldTypes],
                   description:
-                    "Field type. Must be one of the allowed field types.",
+                    "Field type (REQUIRED). Must be one of the allowed field types. Always include this even when only changing primary/required.",
                 },
                 caseid: {
                   type: "integer",
-                  description: "Case ID this field belongs to",
+                  description: "Case ID this field belongs to (REQUIRED)",
                 },
                 label: {
                   type: "string",
-                  description: "Display label for the field",
+                  description:
+                    "Display label for the field (REQUIRED; use existing value if updating)",
                 },
                 description: {
                   type: "string",
@@ -436,7 +437,8 @@ export function createSharedTools(pool: Pool): Array<SharedTool<any, any>> {
                 },
                 sampleValue: {
                   type: "string",
-                  description: "Sample value for live preview.",
+                  description:
+                    "Sample value for live preview (REQUIRED; reuse existing value if updating).",
                 },
               },
               required: ["name", "type", "caseid", "label", "sampleValue"],
