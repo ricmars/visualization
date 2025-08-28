@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { Service } from "../../../services/service";
 import processToolResponse from "../utils/processToolResponse";
 import { Stage } from "../../../types";
@@ -49,7 +50,7 @@ export default function useChatMessaging({
         setMessagesAction((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: uuidv4(),
             content: message,
             sender: "user",
             timestamp: new Date(),
@@ -57,7 +58,7 @@ export default function useChatMessaging({
         ]);
 
         // Add a placeholder AI message that will be updated with the response
-        aiMessageId = crypto.randomUUID();
+        aiMessageId = uuidv4();
         setMessagesAction((prev) => [
           ...prev,
           {
@@ -258,7 +259,7 @@ export default function useChatMessaging({
                     setMessagesAction((prev) => [
                       ...prev,
                       {
-                        id: crypto.randomUUID(),
+                        id: uuidv4(),
                         content: `Error: ${data.error}`,
                         sender: "assistant",
                         timestamp: new Date(),
@@ -320,7 +321,7 @@ export default function useChatMessaging({
           setMessagesAction((prev) => [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: uuidv4(),
               content: "Stopped by user.",
               sender: "assistant",
               timestamp: new Date(),
@@ -338,7 +339,7 @@ export default function useChatMessaging({
         setMessagesAction((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: uuidv4(),
             content: "Sorry, there was an error processing your request.",
             sender: "assistant",
             timestamp: new Date(),

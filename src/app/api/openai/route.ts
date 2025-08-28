@@ -449,10 +449,9 @@ Bulk operations policy:
                   })}\n\n`,
                 ),
               );
-            } catch (e) {
+            } catch {
               // Ignore write errors (likely client aborted)
             }
-            // console.log("messages XXXX:", messages);
 
             const completionPromise = openai.chat.completions.create(
               {
@@ -703,7 +702,7 @@ Bulk operations policy:
                 }
                 dedupedToolCalls.push(tc);
               }
-              debugLog("dedup tool calls", {
+              debugLog("deduping tool calls", {
                 originalCount: toolCalls.length,
                 dedupedCount: dedupedToolCalls.length,
                 names: dedupedToolCalls.map((t) => t.function.name),
